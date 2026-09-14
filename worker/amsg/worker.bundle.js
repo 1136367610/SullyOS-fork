@@ -3,7 +3,7 @@
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_ea16286aaa16251b49227e44a96f6568/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.27_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1136,7 +1136,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_ea16286aaa16251b49227e44a96f6568/node_modules/@rei-standard/amsg-server/dist/chunk-FPVXATA4.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.27_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-FPVXATA4.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -7015,6 +7015,51 @@ var LLM_MESSAGES_ERROR2 = Object.freeze({
   CONTENT_INVALID_TYPE: "CONTENT_INVALID_TYPE"
 });
 var UPSTREAM_ERROR_BODY_MAX_BYTES2 = 16 * 1024;
+var CREDENTIAL_LIKE_TOKEN2 = /\b[A-Za-z]{2,6}-[A-Za-z0-9_-]{16,}/g;
+var LONG_OPAQUE_RUN2 = /[A-Za-z0-9+/_.-]{48,}/g;
+var MODEL_ID_LIKE2 = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]{1,12})+$/;
+var MODEL_ID_MAX_CHARS2 = 64;
+var CREDENTIAL_PREFIX_SEGMENTS2 = /* @__PURE__ */ new Set([
+  "sk",
+  "pk",
+  "ak",
+  "api",
+  "apikey",
+  "key",
+  "token",
+  "secret",
+  "auth",
+  "bearer",
+  "session",
+  "sess",
+  "pat",
+  "xai",
+  "gsk"
+]);
+var UUID_SHAPE2 = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/;
+function alternationCount2(segment) {
+  return (segment.match(/[a-z]+|[0-9]+/g) || []).length;
+}
+function looksLikeModelId2(token) {
+  if (token.length > MODEL_ID_MAX_CHARS2) return false;
+  if (!MODEL_ID_LIKE2.test(token)) return false;
+  if (UUID_SHAPE2.test(token)) return false;
+  const segments = token.split(/[.-]/);
+  if (CREDENTIAL_PREFIX_SEGMENTS2.has(segments[0])) return false;
+  const randomLooking = segments.filter((segment) => alternationCount2(segment) >= 3);
+  if (randomLooking.length === 0) return true;
+  return randomLooking.length === 1 && randomLooking[0].length <= 5;
+}
+function redactCredentials2(text) {
+  let s = text;
+  s = s.replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [redacted]");
+  s = s.replace(CREDENTIAL_LIKE_TOKEN2, (token) => looksLikeModelId2(token) ? token : "[redacted]");
+  s = s.replace(LONG_OPAQUE_RUN2, (run) => {
+    const token = run.replace(/^[._+/-]+/, "").replace(/[._+/-]+$/, "");
+    return looksLikeModelId2(token) ? run : "[redacted]";
+  });
+  return s;
+}
 var KEY_INFO_PREFIX2 = utf83("WebPush: info\0");
 var CEK_INFO2 = utf83("Content-Encoding: aes128gcm\0");
 var NONCE_INFO2 = utf83("Content-Encoding: nonce\0");
@@ -7091,7 +7136,7 @@ function stripReasoningTags2(content) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-09-02";
+var AMSG_BUNDLE_VERSION = "2026-09-14";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -7827,6 +7872,123 @@ var parseFirePack = (value) => {
   return null;
 };
 
+// worker/amsg/src/skipDiagnostics.ts
+var BODY_ERROR_MAX_CHARS = 200;
+var CONTENT_EXCERPT_CHARS = 300;
+var REASONING_TAIL_CHARS = 200;
+var BODY_EXCERPT_CHARS = 500;
+var asRecord = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null;
+var numberOrNull = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+var clip = (text, max) => text.length > max ? `${text.slice(0, max)}\u2026` : text;
+var safeStringify = (value) => {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+};
+var readFirstMessage = (body) => {
+  const choices = Array.isArray(body?.choices) ? body.choices : [];
+  const choice = asRecord(choices[0]);
+  return { choice, message: asRecord(choice?.message) };
+};
+var readReasoning = (message) => {
+  const value = message?.reasoning_content ?? message?.reasoning ?? message?.thinking;
+  return typeof value === "string" ? value : "";
+};
+var readBodyError = (body, hasChoices) => {
+  if (!body) return null;
+  let text = "";
+  const error = body.error;
+  if (typeof error === "string") {
+    text = error;
+  } else {
+    const record = asRecord(error);
+    if (record) {
+      const code = typeof record.code === "string" || typeof record.code === "number" ? String(record.code) : typeof record.type === "string" ? record.type : "";
+      const message = typeof record.message === "string" ? record.message : "";
+      text = [code && `[${code}]`, message].filter(Boolean).join(" ") || safeStringify(record);
+    }
+  }
+  if (!text && !hasChoices) {
+    const topLevel = body.message ?? body.msg;
+    if (typeof topLevel === "string") text = topLevel;
+  }
+  return text ? clip(redactCredentials2(text), BODY_ERROR_MAX_CHARS) : null;
+};
+var describeLlmResponseShape = (llmResponse, llmOutputText) => {
+  const body = asRecord(llmResponse);
+  const hasChoices = Array.isArray(body?.choices) && body.choices.length > 0;
+  const { choice, message } = readFirstMessage(body);
+  const content = message?.content;
+  const contentType = content === void 0 ? "missing" : content === null ? "null" : typeof content === "string" ? "string" : Array.isArray(content) ? "array" : "other";
+  const contentChars = typeof content === "string" ? content.length : Array.isArray(content) ? content.reduce((sum, part) => {
+    const text = asRecord(part)?.text;
+    return sum + (typeof text === "string" ? text.length : 0);
+  }, 0) : 0;
+  const usage = asRecord(body?.usage);
+  const usageDetails = asRecord(usage?.completion_tokens_details);
+  return {
+    model: typeof body?.model === "string" ? body.model : null,
+    hasChoices,
+    finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null,
+    contentType,
+    contentChars,
+    ...Array.isArray(content) ? { contentParts: content.length } : {},
+    visibleChars: stripReasoningTags2(llmOutputText || "").trim().length,
+    reasoningChars: readReasoning(message).length,
+    toolCalls: Array.isArray(message?.tool_calls) ? message.tool_calls.length : 0,
+    usage: usage ? {
+      promptTokens: numberOrNull(usage.prompt_tokens),
+      completionTokens: numberOrNull(usage.completion_tokens),
+      reasoningTokens: numberOrNull(usageDetails?.reasoning_tokens)
+    } : null,
+    bodyError: readBodyError(body, hasChoices)
+  };
+};
+var excerptLlmResponse = (llmResponse) => {
+  const body = asRecord(llmResponse);
+  const hasChoices = Array.isArray(body?.choices) && body.choices.length > 0;
+  if (!hasChoices) {
+    return { body: clip(redactCredentials2(safeStringify(llmResponse)), BODY_EXCERPT_CHARS) };
+  }
+  const { message } = readFirstMessage(body);
+  const excerpt = {};
+  const content = message?.content;
+  if (typeof content === "string") {
+    if (content) excerpt.content = clip(redactCredentials2(content), CONTENT_EXCERPT_CHARS);
+  } else if (content != null) {
+    excerpt.content = clip(redactCredentials2(safeStringify(content)), CONTENT_EXCERPT_CHARS);
+  }
+  const reasoning = readReasoning(message);
+  if (reasoning) {
+    const tail = reasoning.length > REASONING_TAIL_CHARS ? `\u2026${reasoning.slice(-REASONING_TAIL_CHARS)}` : reasoning;
+    excerpt.reasoningTail = redactCredentials2(tail);
+  }
+  if (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0) {
+    excerpt.toolCalls = clip(redactCredentials2(safeStringify(message.tool_calls)), CONTENT_EXCERPT_CHARS);
+  }
+  return excerpt;
+};
+var rawExcerptEnabled = false;
+var configureSkipDiagnostics = (options) => {
+  rawExcerptEnabled = options.rawExcerpt;
+};
+var isDebugFlagOn = (value) => typeof value === "string" && ["1", "true"].includes(value.trim().toLowerCase());
+var logSkipDiagnostic = (input) => {
+  try {
+    console.warn("[amsg:skip-diag]", {
+      sessionId: input.sessionId ?? null,
+      reason: input.reason,
+      iteration: input.iteration ?? null,
+      ...describeLlmResponseShape(input.llmResponse, input.llmOutputText ?? ""),
+      ...rawExcerptEnabled ? { raw: excerptLlmResponse(input.llmResponse) } : {}
+    });
+  } catch (error) {
+    console.warn("[amsg:skip-diag] \u8BCA\u65AD\u65E5\u5FD7\u6CA1\u8BB0\u4E0B\u6765\uFF08\u8DF3\u8FC7\u7167\u5E38\u751F\u6548\uFF09", error);
+  }
+};
+
 // worker/amsg/src/plateFire.ts
 var discardJob = async (writeState, jobId) => {
   if (!writeState) return;
@@ -7880,6 +8042,13 @@ var plateConsolidateHandler = {
     const items = parsePlateLlmReply(ctx.llmOutputText || "");
     if (items.length === 0) {
       console.warn("[amsg:plate] LLM \u6CA1\u8FD4\u56DE\u6709\u6548\u6761\u76EE\uFF0C\u95E8\u724C\u4FDD\u6301\u4E0D\u52A8", jobId);
+      logSkipDiagnostic({
+        sessionId: ctx.sessionId,
+        reason: "plate-empty-generation",
+        iteration: ctx.iteration,
+        llmResponse: ctx.llmResponse,
+        llmOutputText: ctx.llmOutputText
+      });
       await discardJob(ctx.writeState, jobId);
       return { decision: "skip-push", reason: "plate-empty-generation" };
     }
@@ -13865,6 +14034,13 @@ var amsgHooks = {
       });
     }
     if (decision.decision === "skip-push") {
+      logSkipDiagnostic({
+        sessionId: ctx.sessionId,
+        reason: decision.reason,
+        iteration: ctx.iteration,
+        llmResponse: ctx.llmResponse,
+        llmOutputText: ctx.llmOutputText
+      });
       if (decision.scheduleChanges?.length) {
         if (typeof ctx.emitResult === "function") {
           try {
@@ -14059,6 +14235,7 @@ var buildWorkerConfig = (env) => {
   const effectiveVapid = nativeFcmReady && (!vapid.publicKey?.trim() || !vapid.privateKey?.trim()) ? { email: vapid.email, publicKey: "native-fcm", privateKey: "native-fcm" } : vapid;
   const webpush = createHybridPushTransport(env, createWebCryptoWebPush(effectiveVapid));
   configureInstantErrorPush(env.DB && env.AMSG_MASTER_KEY ? { webpush, db: env.DB, masterKey: env.AMSG_MASTER_KEY } : null);
+  configureSkipDiagnostics({ rawExcerpt: isDebugFlagOn(env.AMSG_DEBUG_LLM_RAW) });
   return {
     // db 缺省时 factory 自动用 createD1Adapter(env.DB)
     masterKey: env.AMSG_MASTER_KEY,
