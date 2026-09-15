@@ -31,7 +31,6 @@ import { buildChatRequestPayload } from '../utils/chatRequestPayload';
 import { acquireChatReply, isChatReplyActive, subscribeChatReplies } from '../utils/chatReplyLock';
 import { withChatContinuation } from '../utils/chatContinuation';
 import { assertChatHasDialogue } from '../utils/chatRequestGuard';
-import { recoverPendingChatTurn } from '../utils/chatContextRecovery';
 import {
     isInstantConfigReady,
     sendInstantPushAndAwaitReply,
@@ -831,15 +830,7 @@ export const useChatAI = ({
                 updateCharacter(char.id, { contextUserStartMessageId: undefined });
             }
             const fullHistory = contextRange?.messages || null;
-            let contextMsgs = fullHistory || currentMsgs;
-            let requestCharacter = charForGen;
-            if (contextRange?.mode === 'adaptive'
-                && !contextMsgs.some(message => message.role === 'user' || message.role === 'assistant')) {
-                const recovery = recoverPendingChatTurn(contextMsgs,
-                    await DB.getRecentMessagesByCharId(char.id, 500, true), charForGen);
-                contextMsgs = recovery.messages;
-                requestCharacter = recovery.character;
-            }
+            const contextMsgs = fullHistory || currentMsgs;
             // 空范围先报可操作的本地错误，避免继续识图/召回和发送 system-only 请求。
             // 原始消息可能是无文字图片或卡片，此处只判角色；正文有效性在格式化后校验。
             assertChatHasDialogue(contextMsgs.map(message => ({
@@ -971,7 +962,7 @@ export const useChatAI = ({
             });
 
             const payload = await stageT('payload', buildChatRequestPayload({
-                char: requestCharacter, userProfile, groups, emojis, categories,
+                char: charForGen, userProfile, groups, emojis, categories,
                 historyMsgs: contextMsgs,
                 recentMsgsHint: currentMsgs,
                 contextLimit: limit,

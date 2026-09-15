@@ -51,9 +51,11 @@ it('keeps this request history when the archive waterline advances during async 
     try {
         const payload = await buildChatRequestPayload(input);
         expect(payload.cleanedApiMessages.some(m => m.role === 'user' && String(m.content).includes('在吗'))).toBe(true);
+        expect(localStorage.getItem(key)).toBe('99999');
         // 新请求仍须遵守推进后的水位，不能把快照变成永久绕过。
         const next = await buildChatRequestPayload(input);
         expect(next.cleanedApiMessages).toEqual([]);
+        expect(localStorage.getItem(key)).toBe('99999');
     } finally { localStorage.removeItem(key); }
 });
 
