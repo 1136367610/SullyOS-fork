@@ -723,6 +723,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                     </div>
                     <button
                         ref={sendButtonRef}
+                        data-guide={isGenerateButton ? 'generate' : undefined}
                         type="button"
                         onPointerDown={e => {
                             // 保留点下时的发送模式与光标，避免 blur 先于 click 把这一下变成生成。

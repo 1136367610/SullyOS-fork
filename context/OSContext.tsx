@@ -1,4 +1,5 @@
 
+import { initializeFirstUseGuide } from '../utils/firstUseGuide';
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import type { VRSARActivity } from '../types';
 import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, CharacterGroup, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, SongSheet, Message, RealtimeConfig, AppearancePreset, CloudBackupConfig, CloudBackupFile, MemoryPalaceFeatureFlags } from '../types';
@@ -58,6 +59,7 @@ import { buildChatRequestPayload } from '../utils/chatRequestPayload';
 import { ChatPrompts } from '../utils/chatPrompts';
 import { extractHtmlBlocks } from '../utils/htmlPrompt';
 import { mergePalaceFragmentsIntoMemories } from '../utils/memoryPalace/pipeline';
+import { applyLinkedArchiveDeletion, LINKED_ARCHIVE_DELETED, type LinkedArchiveDeletionDetail } from '../utils/memoryPalace/linkedArchiveDeletion';
 import {
   MEMORY_AUTO_ARCHIVE_SYNC_EVENT,
   repairMissingAutoArchiveMemories,
@@ -1586,7 +1588,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         };
 
         const [dbChars, dbThemes, dbUser, dbGroups, dbWorldbooks, dbNovels, dbSongs, dbCharGroups] = await Promise.all([
-            settle(DB.getAllCharacters(), 'characters', [] as CharacterProfile[]),
+            settle(DB.getAllCharacters().then(chars => { initializeFirstUseGuide(chars.length); return chars; }), 'characters', [] as CharacterProfile[]),
             settle(DB.getThemes(), 'themes', [] as ChatTheme[]),
             settle(DB.getUserProfile(), 'userProfile', null as UserProfile | null),
             settle(DB.getGroups(), 'groups', [] as GroupProfile[]),
@@ -2830,10 +2832,23 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       };
 
       window.addEventListener('amsg2-tasks-adopted', tasksAdoptedHandler);
+      const linkedArchiveDeletedHandler = (event: Event) => {
+          const detail = (event as CustomEvent<LinkedArchiveDeletionDetail>).detail;
+          if (!detail?.charId || !detail.nodeId || !['delete', 'keep'].includes(detail.choice)) return;
+          setCharacters(previous => previous.map(character => {
+              if (character.id !== detail.charId) return character;
+              const next = { ...character, memories: applyLinkedArchiveDeletion(character.memories || [], detail.nodeId, detail.choice) };
+              // The deletion transaction already persisted this delta. Refresh context/cloud state only.
+              markAmsgStateDirty({ char: next, userProfile: userProfileRef.current, groups: groupsRef.current, realtimeConfig: realtimeConfigRef.current });
+              return next;
+          }));
+      };
+      window.addEventListener(LINKED_ARCHIVE_DELETED, linkedArchiveDeletedHandler);
       window.addEventListener('char-music-profile-updated', musicProfileSyncHandler);
       window.addEventListener(MEMORY_AUTO_ARCHIVE_SYNC_EVENT, memoryAutoArchiveSyncHandler);
       return () => {
           window.removeEventListener('amsg2-tasks-adopted', tasksAdoptedHandler);
+          window.removeEventListener(LINKED_ARCHIVE_DELETED, linkedArchiveDeletedHandler);
           window.removeEventListener('char-music-profile-updated', musicProfileSyncHandler);
           window.removeEventListener(MEMORY_AUTO_ARCHIVE_SYNC_EVENT, memoryAutoArchiveSyncHandler);
       };
