@@ -12351,7 +12351,7 @@ var extractScheduleChangeDirectives = (text) => {
   };
 };
 
-// worker/instant-push/src/classifier.ts
+// worker/amsg/src/classifier.ts
 var DATA_TAGS = [
   // [[RECALL: 2024-05]] / [[RECALL: 2024年5]]
   {

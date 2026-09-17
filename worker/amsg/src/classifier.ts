@@ -1,10 +1,11 @@
 /**
- * SullyOS-specific business-tag classifier for the amsg-instant 0.8 agentic loop.
+ * amsg worker 服务端工具循环用的 SullyOS 业务标签分类器（调用方见 ./agentic.ts 的 processLLMRound）。
  *
- * Scans `ctx.llmOutputText` and decides:
- *   - DATA tags (RECALL / SEARCH / READ_DIARY / FS_READ_DIARY / READ_NOTE / XHS_*) →
- *     tool-request: worker截断, 推送 toolCalls, 客户端跑工具后 POST /continue.
- *   - SIDE-EFFECT tags (ACTION:POKE / TRANSFER / ADD_EVENT / MUSIC_ACTION / XHS_LIKE /
+ * 扫一轮 LLM 输出，判定：
+ *   - 数据标签 (RECALL / SEARCH / READ_DIARY / FS_READ_DIARY / READ_NOTE / XHS_*) →
+ *     tool-request: 截出标签之前的 prefix, 并把标签转成 toolCalls, 由 worker 的
+ *     executeToolCalls 就地执行后进下一轮.
+ *   - 副作用标签 (ACTION:POKE / TRANSFER / ADD_EVENT / MUSIC_ACTION / XHS_LIKE /
  *     XHS_FAV / XHS_COMMENT / XHS_REPLY / XHS_POST / XHS_SHARE / schedule_message /
  *     DIARY / FS_DIARY / LIFE / NEWS_CARD) →
  *     finish + directive metadata. worker 识别但不执行, 客户端 applyAssistantPostProcessing
@@ -15,7 +16,8 @@
  * 跟 message 原文不重叠时由 onLLMOutput 条件塞进 payload.notification.body.
  *
  * 故意没有任何 sullyOS 业务执行逻辑 — 这层只做"看见什么标签 → 出什么 decision".
- * tool 实际跑在 utils/agenticTools.ts (客户端), directive 实际重放在 utils/directiveReplayer.ts.
+ * tool 实际跑在 utils/agenticTools.ts (worker 里经 dispatchAgenticTool 调用),
+ * directive 实际重放在 utils/directiveReplayer.ts (客户端).
  *
  * 把分类逻辑放独立文件方便单测 (不需要起整个 cf adapter).
  */
@@ -36,7 +38,7 @@ export type ToolCall = {
  * classifier 自己永远不产这个字段（它只看得到正文，看不到角色此刻在听什么）。填它的是
  * 主动消息 2.0 的 worker：到点渲染「你此刻在听：《X》」的时候顺手把 X 冻进来，客户端
  * 重放时才知道角色说的是哪首（见 worker/amsg/src/agentic.ts 的 attachSceneSong）。
- * instant push 路径不填，客户端照旧取「用户此刻在听的那首」。
+ * 没填的时候（比如本地聊天），客户端取「用户此刻在听的那首」。
  */
 export interface MusicActionSong {
   /** 歌曲 id；从角色歌单抽出来的都有，缺了就只能按名字对。 */
@@ -345,8 +347,8 @@ export function classifyLLMOutput(text: string): ClassificationResult {
   }
 
   if (toolCalls.length > 0) {
-    // 把数据标签从可见 prefix 剥掉; 副作用标签**保留**在 prefix 里, SW 会把 prefix 写到
-    // inbox, 客户端 applyAssistantPostProcessing 会在那次扫到并执行 (跟本地 fetch 路径一致).
+    // 把数据标签从可见 prefix 剥掉; 副作用标签**保留**在 prefix 里: 调用方把 prefix 当旁白
+    // 跨轮累积, finish 时拼回全文再分类一次, 副作用标签在那次统一结构化成 directives.
     let prefix = text;
     for (const spec of DATA_TAGS) prefix = prefix.replace(spec.re, '');
     prefix = prefix.trim();
