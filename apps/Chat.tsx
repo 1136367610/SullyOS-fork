@@ -1,3 +1,4 @@
+import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -4016,15 +4017,8 @@ const Chat: React.FC = () => {
                 {renderedMessages.map((m, i) => {
                     const prevMessage = i > 0 ? renderedMessages[i - 1] : null;
                     const nextMessage = i < renderedMessages.length - 1 ? renderedMessages[i + 1] : null;
-                    const messageGroupGapMs = 30 * 60 * 1000;
-                    const breaksWithPrevious =
-                        !prevMessage ||
-                        prevMessage.role !== m.role ||
-                        Math.abs(m.timestamp - prevMessage.timestamp) > messageGroupGapMs;
-                    const breaksWithNext =
-                        !nextMessage ||
-                        nextMessage.role !== m.role ||
-                        Math.abs(nextMessage.timestamp - m.timestamp) > messageGroupGapMs;
+                    const breaksWithPrevious = startsNewMessageGroup(prevMessage, m);
+                    const breaksWithNext = !nextMessage || startsNewMessageGroup(m, nextMessage);
                     const suppressEntranceAnimation = streamPreviewHandoverIdsRef.current.has(m.id);
                     // 这一轮在云端跑过哪些工具（即时对话才有，worker 挂在最后一条推送上）。
                     // 一条推送拆出的每条气泡都继承了同一份（metadata 是整份往下铺的，见
