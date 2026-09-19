@@ -1,5 +1,6 @@
 
 import { initializeFirstUseGuide } from '../utils/firstUseGuide';
+import { FEEDBACK_INVITATION_KEY, hasPriorFeedbackInstallEvidence, initializeFeedbackInvitation, suppressFeedbackInvitation } from '../utils/feedbackInvitation';
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import type { VRSARActivity } from '../types';
 import { APIConfig, AppID, OSTheme, VirtualTime, CharacterProfile, CharacterGroup, ChatTheme, Toast, FullBackupData, UserProfile, ApiPreset, GroupProfile, SystemLog, Worldbook, NovelBook, SongSheet, Message, RealtimeConfig, AppearancePreset, CloudBackupConfig, CloudBackupFile, MemoryPalaceFeatureFlags } from '../types';
@@ -1566,6 +1567,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         // 导致「主题回初始 / 盲盒收藏册清空 / API 配置丢失」三连。必须在 loadSettings
         // 读 localStorage 之前完成回填。见 utils/lsMirror.ts。
         const healedKeys = await initLocalStorageMirror().catch(() => [] as string[]);
+        const hadPriorFeedbackEvidence = hasPriorFeedbackInstallEvidence();
         if (healedKeys.length > 0) {
             console.warn('[lsMirror] localStorage 疑似被清除，已从 IndexedDB 镜像回填:', healedKeys);
             setTimeout(() => addToast(`检测到本地设置曾被浏览器清除，已自动恢复 ${healedKeys.length} 项（主题 / API 等）`, 'info'), 2500);
@@ -1594,7 +1596,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         };
 
         const [dbChars, dbThemes, dbUser, dbGroups, dbWorldbooks, dbNovels, dbSongs, dbCharGroups] = await Promise.all([
-            settle(DB.getAllCharacters().then(chars => { initializeFirstUseGuide(chars.length); return chars; }), 'characters', [] as CharacterProfile[]),
+            settle(DB.getAllCharacters().then(chars => {
+                initializeFeedbackInvitation(chars.length, hadPriorFeedbackEvidence);
+                initializeFirstUseGuide(chars.length);
+                return chars;
+            }), 'characters', [] as CharacterProfile[]),
             settle(DB.getThemes(), 'themes', [] as ChatTheme[]),
             settle(DB.getUserProfile(), 'userProfile', null as UserProfile | null),
             settle(DB.getGroups(), 'groups', [] as GroupProfile[]),
@@ -2719,7 +2725,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           try {
               const world = await DB.getWorld(d.worldId);
               if (!world) return;
-              await rerollWorldCharBeat({
+              const result = await rerollWorldCharBeat({
                   world,
                   characters: charactersRef.current,
                   apiConfig: apiConfigRef.current,
@@ -2732,6 +2738,14 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                   charId: d.charId,
                   direction: d.direction,
               });
+              if (result.ok) {
+                  setLastMsgTimestamp(Date.now());
+                  const char = charactersRef.current.find(c => c.id === d.charId);
+                  if (char) markAmsgStateDirty({ char, userProfile: userProfileRef.current, groups: groupsRef.current, realtimeConfig: realtimeConfigRef.current });
+                  addToast('重演已保存，剧情、私信、羁绊和伏笔已同步', 'success');
+              } else {
+                  addToast(result.reason === 'not-latest' ? '已有新的观测，请刷新后重演最新一段' : result.reason === 'archived' ? '这一段已结卷归档，不能单独重演' : '重演未保存，原记录已保留，请重试', 'error');
+              }
           } catch (err) {
               console.error('[WorldHome] reroll error', err);
           }
@@ -4907,6 +4921,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           };
 
           showImportProgress('database', '正在写入数据库...', 50, { current: '准备写入数据库', currentFile: '' });
+          suppressFeedbackInvitation();
           await DB.importFullData(data, {
               beforeWrite: restoreAssetsInPlace,
               onProgress: progress => {
@@ -5069,7 +5084,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           if (data.eventNotifFlags && typeof data.eventNotifFlags === 'object') {
               for (const [key, val] of Object.entries(data.eventNotifFlags)) {
                   // 只允许 sullyos_ 前缀，避免污染其它键
-                  if (typeof val === 'string' && key.startsWith('sullyos_')) {
+                  if (typeof val === 'string' && key.startsWith('sullyos_') && key !== FEEDBACK_INVITATION_KEY) {
                       localStorage.setItem(key, val);
                   }
               }
