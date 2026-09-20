@@ -685,6 +685,7 @@ export async function rerollWorldCharBeat(
         // 重演这一拍同样剔除和最近动态重复的 post
         dropDuplicatePosts(beat, collectRecentPosts(prevEp?.beats || [], otherBeats));
 
+        const hadBeat = episode.beats.some(b => b.charId === charId);
         const newBeats = hadBeat ? episode.beats.map(b => b.charId === charId ? beat : b) : [...episode.beats, beat];
         const stillFailed = (episode.failedCharIds || []).filter(id => id !== charId);
         const updatedEp: WorldEpisode = {

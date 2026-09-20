@@ -65,13 +65,22 @@ describe('家园重演', () => {
         expect((await DB.getWorldEpisodes(w.id))[0].beats[0].narrative).toBe('旧剧情');
         expect((await DB.getMessagesByCharId('a', true)).some(m => (m.metadata as any)?.worldId === w.id)).toBe(false);
     });
-    it('完整重演替换私信、关系、伏笔，并以数据库最新世界为准', async () => {
-        const w = world('reroll'), ep = episode(w.id);
-        applyBeatToThreads(w, beat(), members, 1, ep.storyTime);
+    it.each([true, false])('完整重演保存剧情、私信、关系、伏笔（已有剧情：%s）', async (hadBeat) => {
+        const w = world(`reroll-${hadBeat}`), ep = episode(w.id);
+        if (hadBeat) applyBeatToThreads(w, beat(), members, 1, ep.storyTime);
+        else {
+            ep.beats = [];
+            ep.failedCharIds = ['a'];
+            w.relationships = ep.relationshipsBefore!.map(r => ({ ...r }));
+        }
         await DB.saveWorld(w); await DB.saveWorldEpisode(ep);
         vi.mocked(safeFetchJson).mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ narrative: '新剧情', location: '家', mood: '开心', phone: { dms: [{ to: '乙', lines: ['新私信'] }] }, secrets: [{ text: '新伏笔' }], relationships: [{ with: '乙', delta: -3, relabel: '新标签' }] }) } }] });
         const result = await rerollWorldCharBeat({ world: { ...w, relationships: [] }, characters: members as any, apiConfig: { baseUrl: 'https://test.invalid', model: 'test' } as any, userProfile: { name: '我' } as any, groups: [], trigger: 'observe', episodeId: ep.id, charId: 'a' });
         expect(result.ok).toBe(true);
+        const savedEpisode = (await DB.getWorldEpisodes(w.id))[0];
+        expect(savedEpisode.beats).toHaveLength(1);
+        expect(savedEpisode.beats[0].narrative).toBe('新剧情');
+        expect(savedEpisode.failedCharIds).toBeUndefined();
         const saved = (await DB.getWorld(w.id))!;
         expect(saved.threads!.flatMap(t => t.messages).map(m => m.text)).toEqual(['新私信']);
         expect(saved.relationships[0]).toMatchObject({ value: 95, label: '新标签' });
