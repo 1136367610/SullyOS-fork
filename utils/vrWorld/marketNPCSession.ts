@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 import type {APIConfig} from '../../types';
 import {safeFetchJson} from '../safeApi';
 import {getVRApi,logVRApiCall} from './vrApi';
@@ -18,7 +17,7 @@ export async function runMarketNPCSession(chatApi?:APIConfig,signal?:AbortSignal
   try{
    const data=await safeFetchJson(baseUrl+'/chat/completions',{
     method:'POST',signal,headers:{'Content-Type':'application/json',Authorization:'Bearer '+(api.apiKey||'sk-none')},
-    body:JSON.stringify(prepareLlmRequest(api, {model:api.model,temperature:.95,stream:false,messages:[{role:'system',content:MARKET_NPC_SYSTEM},{role:'user',content:snapshot.prompt}]})),
+    body:JSON.stringify({model:api.model,temperature:.95,stream:false,messages:[{role:'system',content:MARKET_NPC_SYSTEM},{role:'user',content:snapshot.prompt}]}),
    },0,0,{appName:'彼方',purpose:'布告板路人来访'});
    content=data.choices?.[0]?.message?.content;
    await logVRApiCall({ts:start,room:'sar',charName:'布告板路人（整轮）',model:api.model,baseUrl,ok:true,ms:Date.now()-start});

@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
@@ -105,7 +104,7 @@ export async function generatePersonaScript(opts: {
     const res = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-        body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.98, max_tokens: 24000 })),
+        body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.98, max_tokens: 24000 }),
     });
     if (!res.ok) throw new Error('API');
     const data = await safeResponseJson(res);

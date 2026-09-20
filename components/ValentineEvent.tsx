@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 /**
@@ -569,14 +568,14 @@ export const ValentineSession: React.FC<ValentineSessionProps> = ({ charId, onCl
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: baseContext },
                         { role: 'user', content: `[最近记录 (Previous Context)]:\n${recentMsgs}\n\n---\n\n${valentinePrompt}` }
                     ],
                     temperature: 0.88
-                }))
+                })
             });
 
             if (!response.ok) throw new Error(`API 错误: ${response.status}`);

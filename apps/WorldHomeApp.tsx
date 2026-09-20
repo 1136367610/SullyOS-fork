@@ -1,5 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
-import { copyLlmApiOptions } from '../utils/llmApiOptions';
 /**
  * 「家园」—— 同世界观多角色共同生活的大世界。
  *
@@ -97,7 +95,7 @@ const WorldApiSettings: React.FC<{
                 ) : apiPresets.map(p => {
                     const on = sameAs(p.config);
                     return (
-                        <button key={p.id} onClick={() => onChoose({ ...copyLlmApiOptions(p.config), baseUrl: p.config.baseUrl, apiKey: p.config.apiKey, model: p.config.model })}
+                        <button key={p.id} onClick={() => onChoose({ baseUrl: p.config.baseUrl, apiKey: p.config.apiKey, model: p.config.model })}
                             className={`w-full flex items-center gap-2 rounded-xl p-3 mb-1.5 text-left border transition-all ${on ? 'bg-stone-900 border-stone-900 text-white shadow' : 'bg-white border-stone-200 text-stone-700'}`}>
                             <div className="flex-1 min-w-0">
                                 <div className="text-[12.5px] font-bold truncate">{p.name}</div>
@@ -608,7 +606,7 @@ const WorldEditor: React.FC<{
             const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-                body: JSON.stringify(prepareLlmRequest(api, {
+                body: JSON.stringify({
                     model: api.model,
                     messages: [{ role: 'user', content: buildNpcRollPrompt({
                         worldName: w.name || '这个世界',
@@ -618,7 +616,7 @@ const WorldEditor: React.FC<{
                         existingNames: w.npcs.map(n => n.name).filter(Boolean),
                     }) }],
                     temperature: 0.95, stream: false,
-                })),
+                }),
             }, 2, 0, { appName: '家园', purpose: `roll NPC · ${w.name || '新世界'}` });
             const rolled = parseRolledNpcs(data.choices?.[0]?.message?.content || '', w.npcs.map(n => n.name));
             if (rolled.length === 0) { addToast('这次没 roll 出新的，再试一次？', 'error'); return; }

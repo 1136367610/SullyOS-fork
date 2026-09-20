@@ -1,4 +1,3 @@
-import type { LlmApiOptions } from './utils/llmApiOptions';
 
 export enum AppID {
   Launcher = 'launcher',
@@ -255,7 +254,7 @@ export type MinimaxRegion = 'domestic' | 'overseas';
 // 语音合成（TTS）服务商。全局三选一：切换后聊天语音条 / 约会 / 电话统一用同一家。
 export type TtsProvider = 'minimax' | 'fishaudio' | 'elevenlabs';
 
-export interface VisionApiConfig extends LlmApiOptions {
+export interface VisionApiConfig {
   /** 开启后，聊天图片先由独立视觉模型转成文字，再交给主对话模型。 */
   enabled: boolean;
   baseUrl: string;
@@ -263,7 +262,7 @@ export interface VisionApiConfig extends LlmApiOptions {
   model: string;
 }
 
-export interface APIConfig extends LlmApiOptions {
+export interface APIConfig {
   baseUrl: string;
   apiKey: string;
   // 可选识图中转：给不支持 image_url 的主模型补视觉能力。
@@ -566,7 +565,11 @@ export interface MemoryPalaceBackupConfig {
     model: string;
     dimensions: number;
   };
-  lightLLM: APIConfig;
+  lightLLM: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  };
   rerank: {
     enabled: boolean;
     baseUrl: string;
@@ -1256,7 +1259,7 @@ export interface VRWorldCharState {
     /** 最近一次 SAR 自由活动，供活动室和模块触发判断展示。 */
     sarActivity?: VRSARActivity;
     /** 该角色专属 API 覆盖（用户可单独为「彼方」活动配 api）；不设则回落全局 apiConfig。 */
-    api?: APIConfig;
+    api?: { baseUrl: string; apiKey: string; model: string };
     /**
      * 角色在「彼方」里的 chibi 形象（Q版小人）。启用自主登入时要求设定，可随时编辑。
      * img 不设时回退到角色立绘/头像。
@@ -1599,7 +1602,7 @@ export interface WorldProfile {
     /** 生成内容是否注入各成员的 1v1 聊天（默认 true） */
     injectToChat?: boolean;
     /** 该世界专属 API 覆盖；不设则回落全局 apiConfig */
-    api?: APIConfig;
+    api?: { baseUrl: string; apiKey: string; model: string };
     createdAt: number;
     updatedAt: number;
 }
@@ -3857,7 +3860,6 @@ export interface FullBackupData {
      */
     amsg2GlobalConfig?: ActiveMsg2GlobalConfig;
     apiPresets?: ApiPreset[];
-    llmTokenCompatibility?: Record<string, boolean>;
     availableModels?: string[];
     realtimeConfig?: RealtimeConfig;  // 实时感知配置（天气/新闻/Notion）
     memoryPalaceConfig?: MemoryPalaceBackupConfig;

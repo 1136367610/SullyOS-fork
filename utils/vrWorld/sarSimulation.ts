@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 import type { APIConfig, CharacterProfile, GroupProfile, Message, RealtimeConfig, UserProfile } from '../../types';
 import { findSARPendingReply, isSARDeletedReply, replaceSARSimulationReply, resolveSARReplyRetry } from './sarSimulationEdits';
 import { DB } from '../db';
@@ -815,7 +814,7 @@ export async function forgeSARIdentityCard(input: ForgeSARIdentityInput): Promis
         data = await safeFetchJson(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-            body: JSON.stringify(prepareLlmRequest(api, {
+            body: JSON.stringify({
                 model: api.model,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -824,7 +823,7 @@ export async function forgeSARIdentityCard(input: ForgeSARIdentityInput): Promis
                 temperature: 0.88,
                 max_tokens: 8000,
                 stream: false,
-            })),
+            }),
         }, 2, 0, { appName: '彼方', charId: char.id, charName: char.name, purpose: 'SAR 异世界异格铸造' });
         void logVRApiCall({ ts: callStart, charId: char.id, charName: char.name, room: 'sar-cabinet', model: api.model, baseUrl, ok: true, ms: Date.now() - callStart });
     } catch (error: any) {
@@ -925,13 +924,13 @@ async function generateSARSimulationTurn(input: RunSARSimulationTurnInput) {
         data = await safeFetchJson(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-            body: JSON.stringify(prepareLlmRequest(api, {
+            body: JSON.stringify({
                 model: api.model,
                 messages: [{ role: 'system', content: systemPrompt }, ...apiMessages],
                 temperature: api.temperature ?? 0.88,
                 max_tokens: 3200,
                 stream: api.stream === true,
-            })),
+            }),
         }, 0, 0, {
             appName: '彼方',
             charId: char.id,

@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import { canAnalyzeVoiceSource, isVoiceAudioPriming, primeVoiceAudio, voicePlaybackErrorMessage } from '../utils/voicePlayback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -1783,13 +1782,13 @@ const CallApp: React.FC = () => {
         const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${directorApi.apiKey || 'sk-none'}` },
-          body: JSON.stringify(prepareLlmRequest(directorApi, {
+          body: JSON.stringify({
             model: directorApi.model,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.25,
             max_tokens: AVATAR_PERFORMANCE_PERSONA_MAX_TOKENS,
             stream: false,
-          })),
+          }),
         }, 1, 30_000, {
           appName: '电话',
           charId: character.id,
@@ -1862,13 +1861,13 @@ ${sentencePlan}`;
     const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${directorApi.apiKey || 'sk-none'}` },
-      body: JSON.stringify(prepareLlmRequest(directorApi, {
+      body: JSON.stringify({
         model: directorApi.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.45,
         max_tokens: AVATAR_PERFORMANCE_REHEARSAL_MAX_TOKENS,
         stream: false,
-      })),
+      }),
     }, 1, 30_000, {
       appName: '电话',
       charId: selectedChar.id,
@@ -1966,7 +1965,7 @@ ${sentencePlan}`;
     ) => safeFetchJson(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}` },
-      body: JSON.stringify(prepareLlmRequest(apiConfig, {
+      body: JSON.stringify({
         model: apiConfig.model,
         messages: [{ role: 'system', content: nextSystemPrompt }, ...nextMessages],
         temperature: 0.85,
@@ -1974,7 +1973,7 @@ ${sentencePlan}`;
         // 上游打回，包成 502 / bad_response_status_code。与私聊 (useChatAI.ts) 对齐。
         max_tokens: 8000,
         stream: false,
-      })),
+      }),
     }, maxRetries, 0, { appName: '电话', charId: selectedChar?.id, charName: selectedChar?.name, purpose });
     let chatData: any;
     try {

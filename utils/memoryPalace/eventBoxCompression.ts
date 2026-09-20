@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — EventBox 压缩
  *
@@ -210,7 +209,7 @@ ${sarMemoryBoundary ? `\n${sarMemoryBoundary}` : ''}
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(llmConfig, {
+                body: JSON.stringify({
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -219,7 +218,7 @@ ${sarMemoryBoundary ? `\n${sarMemoryBoundary}` : ''}
                     temperature: 0.5,
                     max_tokens: 8000,
                     stream: false,
-                })),
+                }),
             },
             2, 120_000, { appName: '记忆宫殿', purpose: '事件压缩' }
         );
@@ -302,7 +301,7 @@ async function recompressSummary(
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(llmConfig, {
+                body: JSON.stringify({
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -311,7 +310,7 @@ async function recompressSummary(
                     temperature: 0.3,
                     max_tokens: 4000,
                     stream: false,
-                })),
+                }),
             },
             2, 90_000, { appName: '记忆宫殿', purpose: '事件压缩-二次压缩' }
         );

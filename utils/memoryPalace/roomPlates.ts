@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — 房间门牌（Room Plates）
  *
@@ -80,7 +79,7 @@ async function callPlateLLM(
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${llmConfig.apiKey}`,
             },
-            body: JSON.stringify(prepareLlmRequest(llmConfig, {
+            body: JSON.stringify({
                 model: llmConfig.model,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -89,7 +88,7 @@ async function callPlateLLM(
                 temperature: PLATE_LLM_TEMPERATURE,
                 max_tokens: PLATE_LLM_MAX_TOKENS,
                 stream: false,
-            })),
+            }),
         },
         2, PLATE_LLM_TIMEOUT_MS, { appName: '记忆宫殿', purpose: '门牌整理' }
     );

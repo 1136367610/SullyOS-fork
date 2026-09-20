@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 import type { APIConfig, CharacterProfile, UserProfile } from '../../types';
 import { ContextBuilder } from '../context';
 import { extractContent, extractJson, safeFetchJson } from '../safeApi';
@@ -358,7 +357,7 @@ ${candidateText}`;
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${apiConfig.apiKey}`,
             },
-            body: JSON.stringify(prepareLlmRequest(apiConfig, {
+            body: JSON.stringify({
                 model: apiConfig.model,
                 temperature: 0.2,
                 stream: false,
@@ -366,7 +365,7 @@ ${candidateText}`;
                     { role: 'system', content: system },
                     { role: 'user', content: userPrompt },
                 ],
-            })),
+            }),
         },
         1,
         90_000,

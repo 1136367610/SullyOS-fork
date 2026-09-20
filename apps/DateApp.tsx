@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -224,7 +223,7 @@ const DateApp: React.FC = () => {
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify(prepareLlmRequest(apiConfig, {
+            body: JSON.stringify({
                 model: apiConfig.model,
                 messages,
                 temperature,
@@ -233,7 +232,7 @@ const DateApp: React.FC = () => {
                 // 与私聊 (useChatAI.ts) 对齐，统一带 8000。
                 max_tokens: 8000,
                 stream: apiConfig.stream ?? false,
-            }))
+            })
         });
         if (!response.ok) throw new Error(`API Error ${response.status}`);
         const data = await safeResponseJson(response);

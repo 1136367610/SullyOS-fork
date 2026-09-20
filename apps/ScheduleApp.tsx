@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 
 
 
@@ -175,12 +174,12 @@ const ScheduleApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: messages,
                     temperature: 0.9, 
                     max_tokens: 8000 
-                }))
+                })
             });
 
             if (!response.ok) {
@@ -259,12 +258,12 @@ const ScheduleApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: messages,
                     temperature: 0.8,
                     max_tokens: 8000
-                }))
+                })
             });
 
             if (!response.ok) {

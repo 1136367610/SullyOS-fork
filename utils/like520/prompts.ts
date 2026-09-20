@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 import { selectCharacterContextMessages } from '../chatContextRange';
 /**
  * 520 特别活动 (2026.5.20) — LLM Prompt & 调用模块
@@ -1007,7 +1006,7 @@ async function callLike520LLM<T>(opts: CallOptions<T>): Promise<T> {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${opts.apiConfig.apiKey}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(opts.apiConfig, {
+                body: JSON.stringify({
                     model: opts.apiConfig.model,
                     messages: [
                         { role: 'system', content: opts.systemContext },
@@ -1018,7 +1017,7 @@ async function callLike520LLM<T>(opts: CallOptions<T>): Promise<T> {
                     // 信件 900-1300 中文字 + JSON 包装会直接被截断（中文 1 字 ≈ 2-3 token）。
                     // 拉到 32000 把上限堆死，让信能完整写完。
                     max_tokens: 32000,
-                })),
+                }),
             });
 
             if (!response.ok) {

@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — 旧记忆迁移工具 (Migration)
  *
@@ -145,7 +144,7 @@ date 字段填记忆对应的大概日期。`;
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(llmConfig, {
+                body: JSON.stringify({
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -156,7 +155,7 @@ date 字段填记忆对应的大概日期。`;
                     // 配合外层 sub-batch 切分（≤6 天/call），输出 token 一般在 3k-6k，12k 充分够
                     max_tokens: 12000,
                     stream: false,
-                })),
+                }),
             },
             1,         // 失败只再试 1 次（整体 3 次 × 5min = 15min 太久）
             5 * 60_000, // 单次 5 分钟硬超时：第一批 142s 就过了，若超过 5min 基本是 provider 卡死，

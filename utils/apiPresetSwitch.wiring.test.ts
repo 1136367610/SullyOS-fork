@@ -31,9 +31,9 @@ describe('草稿同步不跨区块打架', () => {
     expect(settings).not.toMatch(/\}, \[apiConfig\]\);/);
   });
 
-  it('主 API 那份只盯自己的模型与高级字段', () => {
+  it('主 API 那份只盯自己的五个字段', () => {
     expect(settings).toMatch(
-      /\}, \[apiConfig\.baseUrl, apiConfig\.apiKey, apiConfig\.model, apiConfig\.stream, apiConfig\.temperature, apiConfig\.useMaxCompletionTokens\]\);/,
+      /\}, \[apiConfig\.baseUrl, apiConfig\.apiKey, apiConfig\.model, apiConfig\.stream, apiConfig\.temperature\]\);/,
     );
   });
 });
@@ -46,9 +46,7 @@ describe('点预设 = 直接切过去', () => {
 
   it('切换走 commitApiConfig，不自己调 updateApiConfig（否则漏掉凭据同步）', () => {
     const applyPreset = bodyOf('applyPreset');
-    expect(applyPreset).toMatch(/commitApiConfig\(/);
-    expect(applyPreset).toContain('...configFromPreset(preset)');
-    expect(applyPreset).toContain('useMaxCompletionTokens: preset.config.useMaxCompletionTokens');
+    expect(applyPreset).toMatch(/commitApiConfig\(configFromPreset\(preset\)\)/);
     expect(applyPreset).not.toMatch(/updateApiConfig\(/);
   });
 

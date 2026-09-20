@@ -1,4 +1,3 @@
-import { cloudTokenOptions, copyLlmApiOptions } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 import { ReiClient } from '@rei-standard/amsg-client';
 import {
@@ -2463,7 +2462,9 @@ export const ActiveMsgClient = {
         payload.apiKey = activeApi.apiKey;
         payload.primaryModel = activeApi.model;
       }
-      Object.assign(payload, cloudTokenOptions(activeApi, config.maxTokens));
+      if (config.maxTokens && config.maxTokens > 0) {
+        payload.maxTokens = config.maxTokens;
+      }
     }
 
     // ── 先传云端状态，成功了再建任务 ──
@@ -2684,7 +2685,7 @@ export const ActiveMsgClient = {
       },
       credRefs: { chat: params.credRow.credId },
       ...(typeof params.temperature === 'number' ? { temperature: params.temperature } : {}),
-      ...cloudTokenOptions({ baseUrl: params.credRow.value.apiUrl, model: params.credRow.value.primaryModel }, params.maxTokens),
+      ...(params.maxTokens && params.maxTokens > 0 ? { maxTokens: params.maxTokens } : {}),
       // 服务端要求「completePrompt 或 messages」二选一。到点真正发给 LLM 的 messages 由
       // worker 的 kind handler 返回值覆盖，这条占位内容永远不参与生成。
       messages: [{ role: 'user', content: AMSG2_PLACEHOLDER_PROMPT }],
@@ -2750,7 +2751,7 @@ export const ActiveMsgClient = {
      * 换成主动消息的「角色单独 API」的话，同一句话开不开即时对话会由不同的模型来答，
      * 而用户完全看不出这件事发生过。
      */
-    api: APIConfig;
+    api: { baseUrl: string; apiKey: string; model: string };
     /**
      * 本地这一轮会发的采样温度。不传就是本地也不发（开思考时本地会删掉温度）——
      * 上游 buildLlmRequestBody 对空温度整个省略该字段，两边落到同一个供应商默认值。
@@ -2829,7 +2830,7 @@ export const ActiveMsgClient = {
     const inlineCreds = !credRefs.chat;
     // 评估配置：凭据走引用时只留提示词模板，副 API 的 apiKey 一个字节都不进任务 metadata。
     const emotionEvalSpec = params.emotionEval
-      ? (credRefs.emotion ? { prompt: params.emotionEval.prompt, ...((params.emotionEval.api && Object.keys(copyLlmApiOptions(params.emotionEval.api)).length) ? { options: copyLlmApiOptions(params.emotionEval.api) } : {}) } : params.emotionEval)
+      ? (credRefs.emotion ? { prompt: params.emotionEval.prompt } : params.emotionEval)
       : undefined;
 
     const remoteAvatarUrl = toRemoteAvatarUrl(char.avatar);
@@ -2865,13 +2866,15 @@ export const ActiveMsgClient = {
       // 温度跟着本地走：本地发多少云端发多少，本地不发（开思考时）云端也不发。
       // 少了它，同一句话云端会落到供应商默认温度（常为 1.0），回复风格和本地对不上。
       ...(typeof params.temperature === 'number' ? { temperature: params.temperature } : {}),
-      ...cloudTokenOptions(api, params.maxTokens, params.extraBody),
+      ...(params.maxTokens && params.maxTokens > 0 ? { maxTokens: params.maxTokens } : {}),
       // 思考链三件套（thinking / reasoning_effort / extra_body）放行顶层，随加密信封
       // 到 fire 时刻由上游 buildLlmRequestBody 展开进请求体（核心字段 model/messages
       // 等优先）。⚠️ 依赖上游 amsg-server 认领这个字段（/schedule-message 的
       // fullTaskData 白名单 + buildLlmRequestBody 的展开）；旧版上游会把它剥掉——
       // 那时行为退回「只有 -thinking 模型名后缀生效」，即本次改动前的样子，不会更糟。
-
+      ...(params.extraBody && Object.keys(params.extraBody).length > 0
+        ? { llmExtraBody: params.extraBody }
+        : {}),
       metadata: {
         charId: char.id,
         charName: char.name,

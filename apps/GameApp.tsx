@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -295,13 +294,13 @@ const GameApp: React.FC = () => {
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify(prepareLlmRequest(apiConfig, {
+            body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.9, 
                 max_tokens: maxTokens,
                 stream: false
-            }))
+            })
         });
 
         if (!response.ok) throw new Error(`HTTP Error ${response.status}`);

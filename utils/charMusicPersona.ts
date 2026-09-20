@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
 /**
  * 角色音乐人格初始化
  *
@@ -24,7 +23,7 @@ const callLlm = async (api: APIConfig, sys: string, user: string): Promise<strin
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${api.apiKey || 'sk-none'}`,
         },
-        body: JSON.stringify(prepareLlmRequest(api, {
+        body: JSON.stringify({
             model: api.model,
             messages: [
                 { role: 'system', content: sys },
@@ -36,7 +35,7 @@ const callLlm = async (api: APIConfig, sys: string, user: string): Promise<strin
             // 8000 和项目里其它 prompt 一档，给 thinking 模型 / 话多的模型留足空间。
             max_tokens: 8000,
             stream: false,
-        })),
+        }),
         // API 调用记录标签：音乐人格生成是后台任务，不标会被兜底成「用户当时打开的 App」
         __sullyMeta: { appName: '音乐', purpose: '音乐人格生成' },
     } as RequestInit);
