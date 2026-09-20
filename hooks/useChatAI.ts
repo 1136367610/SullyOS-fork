@@ -1,3 +1,4 @@
+import { prepareLlmRequest, copyLlmApiOptions } from '../utils/llmApiOptions';
 
 import { useState, useRef, useEffect, useSyncExternalStore, MutableRefObject } from 'react';
 import { CharacterProfile, UserProfile, Message, Emoji, EmojiCategory, GroupProfile, RealtimeConfig, CharacterBuff, Amsg2ExpiredNoticeRecord } from '../types';
@@ -386,14 +387,14 @@ export async function evaluateEmotionBackground(
             data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(api, {
                     ...evalBody,
                     // 跟随全局流式开关（响应由 safeFetchJson 透明拼装，下游 JSON 解析不变）。
                     // 好处: ①评估动辄生成 4~5k token、跑 30~46s，非流式最容易撞网关超时；
                     // ②中转若按流式/非流式分渠道池，评估与主聊天落同一池，行为可对比。
                     stream: !!api.stream,
                     ...(api.stream ? { stream_options: { include_usage: true } } : {}),
-                })
+                }))
             }, 2, 0, evalMeta);
         } catch (e: any) {
             if (!api.stream) throw e;
@@ -406,7 +407,7 @@ export async function evaluateEmotionBackground(
             data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ ...evalBody, stream: false })
+                body: JSON.stringify(prepareLlmRequest({ ...api, stream: false }, { ...evalBody, stream: false }))
             }, 1, 0, evalMeta);
         }
 
@@ -910,7 +911,7 @@ export const useChatAI = ({
             const emotionApi = emotionEvalEnabled
                 ? ((char.emotionConfig!.api?.baseUrl)
                     ? { ...char.emotionConfig!.api!, stream: (char.emotionConfig!.api as any).stream ?? evalStream }
-                    : { baseUrl: apiConfig.baseUrl, apiKey: apiConfig.apiKey, model: apiConfig.model, stream: evalStream })
+                    : { ...copyLlmApiOptions(apiConfig), baseUrl: apiConfig.baseUrl, apiKey: apiConfig.apiKey, model: apiConfig.model, stream: evalStream })
                 : null;
             // 本地路径的情绪评估：主 fetch 发出后立即发射（见下方调用点）。
             // 历史备注：曾为串行中转做过 1.5s 错峰（评估抢跑会把主回复压后一个评估时长），
@@ -936,7 +937,7 @@ export const useChatAI = ({
                         charForGen, userProfile, systemPrompt, cleanedApiMessages, false,
                         shouldRequestAmbient(charForGen.id) ? buildAmbientEvalSection(charForGen) : ''
                     ),
-                    api: { baseUrl: emotionApi.baseUrl, apiKey: emotionApi.apiKey, model: emotionApi.model },
+                    api: { ...copyLlmApiOptions(emotionApi), baseUrl: emotionApi.baseUrl, apiKey: emotionApi.apiKey, model: emotionApi.model },
                 }
                 : undefined;
 
@@ -1184,7 +1185,7 @@ export const useChatAI = ({
                     // model / temperature 取 baseReqBody 的终值而不是 effectiveApi 的原始值：
                     // 上面那段已经按本地规则把 thinking 后缀（claude 系 -thinking）拼好、
                     // 开思考时把温度删掉了——云端要的就是「本地这一轮会发出去的那份」。
-                    api: { baseUrl: effectiveApi.baseUrl, apiKey: effectiveApi.apiKey, model: baseReqBody.model },
+                    api: { ...copyLlmApiOptions(effectiveApi), baseUrl: effectiveApi.baseUrl, apiKey: effectiveApi.apiKey, model: baseReqBody.model },
                     ...(typeof baseReqBody.temperature === 'number' ? { temperature: baseReqBody.temperature } : {}),
                     maxTokens: baseReqBody.max_tokens,
                     // 思考链三件套同理取终值：shouldSendThinkingParams 通过时本地会带
@@ -1298,7 +1299,7 @@ export const useChatAI = ({
             try {
                 data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                     method: 'POST', headers,
-                    body: JSON.stringify({ ...baseReqBody, messages: withAmsg2TaskContext(baseReqBody.messages) })
+                    body: JSON.stringify(prepareLlmRequest(effectiveApi, { ...baseReqBody, messages: withAmsg2TaskContext(baseReqBody.messages) }))
                 }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks);
             } catch (e) {
                 let requestError: unknown = e;
@@ -1316,7 +1317,7 @@ export const useChatAI = ({
                     try {
                         data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                             method: 'POST', headers,
-                            body: JSON.stringify(buildClaudeProxyCompatibilityBody(attemptedBody)),
+                            body: JSON.stringify(prepareLlmRequest(effectiveApi, buildClaudeProxyCompatibilityBody(attemptedBody))),
                         }, 0, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: 'Claude 中转兼容重试' }, streamHooks);
                         requestError = null;
                     } catch (compatError) {
@@ -1342,7 +1343,7 @@ export const useChatAI = ({
                 });
                 data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                     method: 'POST', headers,
-                    body: JSON.stringify(fallbackBody)
+                    body: JSON.stringify(prepareLlmRequest(effectiveApi, fallbackBody))
                 }, 0, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: 'MCP tools 兼容重试' });
                 // 后续正文工具循环必须继续带着兼容协议；只把它放在这次重试请求里，下一跳
                 // 又退回原 messages，会让模型忘掉工具签名和「每步只输出一行」的约定。
@@ -1479,7 +1480,7 @@ export const useChatAI = ({
                     delete followBody.tool_choice;
                     data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                         method: 'POST', headers,
-                        body: JSON.stringify(followBody)
+                        body: JSON.stringify(prepareLlmRequest(effectiveApi, followBody))
                     });
                     updateTokenUsage(data, historyMsgCount, `mcd-propose-${it + 1}`);
                     // 第二轮跳过 (我们已经禁用了 tools)
@@ -1582,7 +1583,7 @@ export const useChatAI = ({
                     delete followBody.tool_choice;
                     data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                         method: 'POST', headers,
-                        body: JSON.stringify(followBody)
+                        body: JSON.stringify(prepareLlmRequest(effectiveApi, followBody))
                     });
                     updateTokenUsage(data, historyMsgCount, `luckin-propose-${it + 1}`);
                     if (!data.choices?.[0]?.message?.tool_calls?.length) break;
@@ -1739,7 +1740,7 @@ export const useChatAI = ({
                     }
                     data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                         method: 'POST', headers,
-                        body: JSON.stringify(followBody)
+                        body: JSON.stringify(prepareLlmRequest(effectiveApi, followBody))
                     });
                     updateTokenUsage(data, historyMsgCount, `${payload.flags.luckinChatActive ? 'luckin-chat' : 'mcp-chat'}-${it + 1}`);
                     if (forceWrapUp) break;
@@ -1776,7 +1777,7 @@ export const useChatAI = ({
                         const wrapBody = buildMcpTextFallbackBody(baseReqBody, textLoopMessages);
                         data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                             method: 'POST', headers,
-                            body: JSON.stringify(wrapBody)
+                            body: JSON.stringify(prepareLlmRequest(effectiveApi, wrapBody))
                         });
                         updateTokenUsage(data, historyMsgCount, `mcp-text-wrap-${it + 1}`);
                         break;
@@ -1812,7 +1813,7 @@ export const useChatAI = ({
                     const followBody = buildMcpTextFallbackBody(baseReqBody, textLoopMessages);
                     data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                         method: 'POST', headers,
-                        body: JSON.stringify(followBody)
+                        body: JSON.stringify(prepareLlmRequest(effectiveApi, followBody))
                     });
                     updateTokenUsage(data, historyMsgCount, `mcp-text-${it + 1}`);
                     if (reachedHardLimit) break;

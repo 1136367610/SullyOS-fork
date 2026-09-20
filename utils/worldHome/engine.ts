@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 import { loadCharacterContextMessages } from '../chatContextRange';
 /**
  * 「家园」演绎引擎 —— 一轮"观测"的完整闭环。
@@ -424,11 +425,11 @@ export async function runWorldEpisode(deps: WorldEpisodeDeps): Promise<WorldEpis
                 const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-                    body: JSON.stringify({
+                    body: JSON.stringify(prepareLlmRequest(api, {
                         model: api.model,
                         messages: [{ role: 'system', content: systemPrompt }, ...payload.cleanedApiMessages, { role: 'user', content: turn }],
                         temperature: 0.9, stream: false,
-                    }),
+                    })),
                 }, 2, 0, { appName: '家园', charId: char.id, charName: char.name, purpose: `演绎 · ${world.name}` });
                 const beat = parseCharBeat(data.choices?.[0]?.message?.content || '', char, memberNames, world.npcs.map(n => n.name));
                 // 落库前剔除和最近动态重复的 post（上一轮 + 本轮已演绎角色）
@@ -458,11 +459,11 @@ export async function runWorldEpisode(deps: WorldEpisodeDeps): Promise<WorldEpis
                 const npcData = await safeFetchJson(`${baseUrl}/chat/completions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-                    body: JSON.stringify({
+                    body: JSON.stringify(prepareLlmRequest(api, {
                         model: api.model,
                         messages: [{ role: 'user', content: buildNpcTurn({ world, members, storyTime, lastSummary, chapterAtmosphere: latestChapter?.atmosphere, inboxes: npcInboxes(world), recentPosts: recentPostsForNpc }) }],
                         temperature: 0.9, stream: false,
-                    }),
+                    })),
                 }, 2, 0, { appName: '家园', purpose: `NPC世界引擎 · ${world.name}` });
                 const parsed = parseNpcScene(npcData.choices?.[0]?.message?.content || '');
                 npcScene = parsed.scene || undefined;
@@ -675,11 +676,11 @@ export async function rerollWorldCharBeat(
         const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(api, {
                 model: api.model,
                 messages: [{ role: 'system', content: systemPrompt }, ...payload.cleanedApiMessages, { role: 'user', content: turn }],
                 temperature: 0.95, stream: false,
-            }),
+            })),
         }, 2, 0, { appName: '家园', charId: char.id, charName: char.name, purpose: `重演 · ${world.name}` });
         const beat = parseCharBeat(data.choices?.[0]?.message?.content || '', char, memberNames, world.npcs.map(n => n.name));
         // 重演这一拍同样剔除和最近动态重复的 post

@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — 记忆提取 (Memory Extraction)
  *
@@ -471,7 +472,7 @@ pinDays 仅在需要置顶时才写，大多数记忆不需要。
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(llmConfig, {
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -482,7 +483,7 @@ pinDays 仅在需要置顶时才写，大多数记忆不需要。
                     // buffer 路径 pipeline 上层 CHUNK_SIZE=250 已经在切分 → 单 call 输出可控
                     max_tokens: 12000,
                     stream: false,
-                }),
+                })),
             },
             2, 180_000, { appName: '记忆宫殿', purpose: '记忆提取' }
         );

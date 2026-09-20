@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 /**
  * WhiteDayEvent.tsx
@@ -718,14 +719,14 @@ export const WhiteDaySession: React.FC<WhiteDaySessionProps> = ({ charId, onClos
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: baseContext },
                         { role: 'user', content: `[最近记录]:\n${recentMsgs}\n\n---\n\n${prompt}` },
                     ],
                     temperature: 0.85,
-                }),
+                })),
             });
 
             if (!response.ok) throw new Error(`API 错误: ${response.status}`);
@@ -846,14 +847,14 @@ ${answerSummary}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: baseContext },
                         { role: 'user', content: prompt },
                     ],
                     temperature: 0.82,
-                }),
+                })),
             });
 
             if (!response.ok) throw new Error(`API 错误: ${response.status}`);
@@ -932,7 +933,7 @@ ${answerSummary}
             let response = await fetch(endpoint, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: baseContext },
@@ -945,7 +946,7 @@ ${answerSummary}
                         },
                     ],
                     temperature: 0.88,
-                }),
+                })),
             });
 
             // 模型不支持视觉时降级为纯文字评价
@@ -954,14 +955,14 @@ ${answerSummary}
                 response = await fetch(endpoint, {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({
+                    body: JSON.stringify(prepareLlmRequest(apiConfig, {
                         model: apiConfig.model,
                         messages: [
                             { role: 'system', content: baseContext },
                             { role: 'user', content: fallbackPrompt },
                         ],
                         temperature: 0.88,
-                    }),
+                    })),
                 });
             }
 
@@ -1313,7 +1314,7 @@ ${answerSummary}
                     const resp = await fetch(endpoint, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                        body: JSON.stringify({
+                        body: JSON.stringify(prepareLlmRequest(apiConfig, {
                             model: apiConfig.model,
                             messages: [{
                                 role: 'user',
@@ -1323,7 +1324,7 @@ ${answerSummary}
                                 ],
                             }],
                             temperature: 0.7,
-                        }),
+                        })),
                     });
                     if (resp.ok) {
                         const data = await resp.json();

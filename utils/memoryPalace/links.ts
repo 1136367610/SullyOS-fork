@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — 关联网络 (Memory Links)
  *
@@ -83,7 +84,7 @@ strength 范围 0.3-0.8。没有关联返回 []。只输出 JSON。`;
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(llmConfig, {
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: prompt },
@@ -92,7 +93,7 @@ strength 范围 0.3-0.8。没有关联返回 []。只输出 JSON。`;
                     temperature: 0.2,
                     max_tokens: 800,
                     stream: false,
-                }),
+                })),
             },
             2, 90_000, { appName: '记忆宫殿', purpose: '记忆关联' }
         );

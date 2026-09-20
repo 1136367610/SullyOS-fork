@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 import type {
   APIConfig,
@@ -491,7 +492,7 @@ export const requestAvatarTouchReply = async (options: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(prepareLlmRequest(apiConfig, {
       model: apiConfig.model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -501,7 +502,7 @@ export const requestAvatarTouchReply = async (options: {
       temperature: 0.9,
       max_tokens: 1200,
       stream: false,
-    }),
+    })),
   }, 1, 45_000, {
     appName: '触感陪伴',
     charId: character.id,
@@ -895,7 +896,7 @@ export const requestAvatarTouchReactionPack = async (options: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(prepareLlmRequest(apiConfig, {
       model: apiConfig.model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -905,7 +906,7 @@ export const requestAvatarTouchReactionPack = async (options: {
       temperature: 0.92,
       max_tokens: 4800,
       stream: false,
-    }),
+    })),
   // A complete pack can contain dozens of lines plus translations and
   // performance data.  The previous 60s wall-clock timeout also kept ticking
   // while a healthy streamed response was arriving, so slower providers were

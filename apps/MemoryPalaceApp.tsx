@@ -1,3 +1,4 @@
+import { copyLlmApiOptions } from '../utils/llmApiOptions';
 import ChatHistoryCleanupModal from '../components/chat/ChatHistoryCleanupModal';
 import { MemoryTimeText } from '../components/MemoryTimeText';
 import { relativeTimeEdit } from '../utils/memoryPalace/relativeTime';
@@ -888,6 +889,7 @@ export default function MemoryPalaceApp() {
     const [lightUrl, setLightUrl] = useState(memoryPalaceConfig.lightLLM.baseUrl || '');
     const [lightKey, setLightKey] = useState(memoryPalaceConfig.lightLLM.apiKey || '');
     const [lightModel, setLightModel] = useState(memoryPalaceConfig.lightLLM.model || '');
+    const [lightAdvanced, setLightAdvanced] = useState(copyLlmApiOptions(memoryPalaceConfig.lightLLM));
     const [lightSaved, setLightSaved] = useState(false);
     const [testingLight, setTestingLight] = useState(false);
     const [lightTestResult, setLightTestResult] = useState<string | null>(null);
@@ -916,6 +918,7 @@ export default function MemoryPalaceApp() {
         setEmbKey(memoryPalaceConfig.embedding.apiKey || '');
         setEmbModel(memoryPalaceConfig.embedding.model || 'BAAI/bge-m3');
         setEmbDimensions(memoryPalaceConfig.embedding.dimensions || 1024);
+        setLightAdvanced(copyLlmApiOptions(memoryPalaceConfig.lightLLM));
         setLightUrl(memoryPalaceConfig.lightLLM.baseUrl || '');
         setLightKey(memoryPalaceConfig.lightLLM.apiKey || '');
         setLightModel(memoryPalaceConfig.lightLLM.model || '');
@@ -1524,6 +1527,7 @@ export default function MemoryPalaceApp() {
 
     const handleSaveLightApi = () => {
         const api = {
+            ...lightAdvanced,
             baseUrl: lightUrl.trim(),
             apiKey: lightKey.trim(),
             model: lightModel.trim(),
@@ -3182,6 +3186,7 @@ export default function MemoryPalaceApp() {
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 {apiPresets.map(p => (
                                     <button key={p.id} onClick={() => {
+                                        setLightAdvanced(copyLlmApiOptions(p.config));
                                         setLightUrl(p.config.baseUrl);
                                         setLightKey(p.config.apiKey);
                                         setLightModel(p.config.model);
@@ -3210,7 +3215,7 @@ export default function MemoryPalaceApp() {
                         </div>
                         <div>
                             <label className={labelClass}>MODEL</label>
-                            <input type="text" value={lightModel} onChange={e => setLightModel(e.target.value)}
+                            <input type="text" value={lightModel} onChange={e => { setLightModel(e.target.value); setLightAdvanced(v => ({ ...v, useMaxCompletionTokens: undefined })); }}
                                 placeholder="一个便宜的对话模型名" className={inputClass} />
                             <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, paddingLeft: 4 }}>
                                 填任意一家便宜的<b>对话模型</b>即可（按主 API 一样的填法），自己挑就好。

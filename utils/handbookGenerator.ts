@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 /**
  * 手账生成器
  *
@@ -460,12 +461,12 @@ ${transcriptParts.join('\n\n')}
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(apiConfig, {
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.8,
                 max_tokens: 12000,
-            }),
+            })),
         });
         if (!response.ok) {
             console.error('[Handbook/UserDiary] API error:', response.status);
@@ -702,12 +703,12 @@ text 里允许少量 markdown 语法,渲染时会变成对应的视觉效果:
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(apiConfig, {
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.85,
                 max_tokens: 12000,
-            }),
+            })),
         });
         if (!response.ok) {
             console.error('[Handbook/Lifestream] API error:', response.status, char.name);

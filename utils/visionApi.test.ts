@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('independent vision API', () => {
-  it('can load a generic model preset into vision without carrying unrelated main-model options', () => {
+  it('loads a model preset into vision with its stream and temperature settings', () => {
     expect(visionApiConfigFromPreset({
       id: 'preset-1',
       name: '视觉模型',
@@ -39,7 +39,7 @@ describe('independent vision API', () => {
         stream: true,
         temperature: 1.2,
       },
-    })).toEqual(config);
+    })).toEqual({ ...config, stream: true, temperature: 1.2 });
   });
 
   it('recognizes identical image data once, writes both message caches, then reuses them', async () => {

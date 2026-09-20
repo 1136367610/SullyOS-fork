@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../../utils/llmApiOptions';
 /**
  * Memory Dive Engine (记忆潜行引擎)
  *
@@ -306,7 +307,7 @@ export async function callDiveLLM(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiConfig.apiKey}`,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(prepareLlmRequest(apiConfig, {
         model: apiConfig.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.8,
@@ -314,7 +315,7 @@ export async function callDiveLLM(
         max_tokens: 8000,
         // 让兼容 OpenAI 的后端强制返回 JSON；不支持的后端会忽略此字段
         response_format: { type: 'json_object' },
-      }),
+      })),
     },
     2, // 最多重试 2 次（覆盖瞬时 5xx / 网络抖动）
     0, { appName: '记忆潜行', purpose: '探访生成' },
@@ -854,7 +855,7 @@ export async function planRoomVisit(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiConfig.apiKey}`,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(prepareLlmRequest(apiConfig, {
         model: apiConfig.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.85,
@@ -862,7 +863,7 @@ export async function planRoomVisit(
         // 给足余量避免被 max_tokens 截断
         max_tokens: 20000,
         response_format: { type: 'json_object' },
-      }),
+      })),
     },
     2, 0, { appName: '记忆潜行', purpose: '剧本生成' },
   );
@@ -1015,12 +1016,12 @@ export async function emitDiveEmotion(params: EmitDiveEmotionParams): Promise<vo
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${params.api.apiKey || 'sk-none'}`,
         },
-        body: JSON.stringify({
+        body: JSON.stringify(prepareLlmRequest(params.api, {
           model: params.api.model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.85,
           stream: false,
-        }),
+        })),
       },
       2, 0, { appName: '记忆潜行', purpose: '情绪结算' },
     );

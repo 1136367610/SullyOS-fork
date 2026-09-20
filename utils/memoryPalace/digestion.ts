@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Memory Palace — 认知消化 (Cognitive Digestion)
  *
@@ -366,7 +367,7 @@ ${material.recentEpisodes.length > 0 ? `
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(llmConfig, {
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -375,7 +376,7 @@ ${material.recentEpisodes.length > 0 ? `
                     temperature: 0.6,
                     max_tokens: 8000,
                     stream: false,
-                }),
+                })),
             },
             2, 120_000, { appName: '记忆宫殿', purpose: '记忆消化' }
         );
@@ -1031,7 +1032,7 @@ ${memoryContext}
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(llmConfig, {
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -1041,7 +1042,7 @@ ${memoryContext}
                     // 8000：给 think 型模型留足思考空间，300 会被 reasoning 吃光
                     max_tokens: 8000,
                     stream: false,
-                }),
+                })),
             },
             2, 120_000, { appName: '记忆宫殿', charName, purpose: '人格审视' }
         );

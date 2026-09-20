@@ -21,7 +21,7 @@ import { normalizeApiBaseUrl, normalizeApiCredential, normalizeApiModel } from '
  * 把用户手调过的温度、流式开关顺手重置掉。
  */
 export type PresetSwitchPatch =
-  Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model'> & Partial<Pick<APIConfig, 'stream' | 'temperature'>>;
+  Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model'> & Partial<Pick<APIConfig, 'stream' | 'temperature' | 'useMaxCompletionTokens'>>;
 
 export function configFromPreset(preset: ApiPreset): PresetSwitchPatch {
   const patch: PresetSwitchPatch = {
@@ -31,6 +31,7 @@ export function configFromPreset(preset: ApiPreset): PresetSwitchPatch {
   };
   if (typeof preset.config.stream === 'boolean') patch.stream = preset.config.stream;
   if (typeof preset.config.temperature === 'number') patch.temperature = preset.config.temperature;
+  if (typeof preset.config.useMaxCompletionTokens === 'boolean') patch.useMaxCompletionTokens = preset.config.useMaxCompletionTokens;
   return patch;
 }
 

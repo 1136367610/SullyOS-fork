@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
@@ -579,12 +580,12 @@ For each chapter, provide a title, a brief summary of what it covers, and a diff
         const response = await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                 model: effectiveApi.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.5,
                 max_tokens: 8000
-            })
+            }))
         });
 
         if (!response.ok) throw new Error('API Error');
@@ -691,7 +692,7 @@ Explain this chapter's key concepts to the user based strictly on the Source Mat
             return await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                     model: effectiveApi.model,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.7,
@@ -702,7 +703,7 @@ Explain this chapter's key concepts to the user based strictly on the Source Mat
                         { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
                         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
                     ]
-                })
+                }))
             });
         };
 
@@ -819,12 +820,12 @@ Answer the question based on the source material. Be helpful and encouraging (in
              const response = await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                     model: effectiveApi.model,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.7,
                     max_tokens: 8000
-                })
+                }))
             });
             
             const data = await safeResponseJson(response);
@@ -877,7 +878,7 @@ Note: Use "我" (I) to refer to yourself.
         fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-            body: JSON.stringify({ model: effectiveApi.model, messages: [{ role: "user", content: summaryPrompt }] })
+            body: JSON.stringify(prepareLlmRequest(effectiveApi, { model: effectiveApi.model, messages: [{ role: "user", content: summaryPrompt }] }))
         }).then(res => safeResponseJson(res)).then(data => {
             const mem = data.choices[0].message.content;
             const newMem = { id: `mem-${Date.now()}`, date: new Date().toLocaleDateString(), summary: `[教学] ${mem}`, mood: 'proud' };
@@ -998,12 +999,12 @@ ${chunkText.substring(0, 10000)}
             const response = await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                     model: effectiveApi.model,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.7,
                     max_tokens: 8000
-                })
+                }))
             });
 
             if (!response.ok) throw new Error(`API Error: ${response.status}`);
@@ -1116,12 +1117,12 @@ ${resultsText}
             const response = await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                     model: effectiveApi.model,
                     messages: [{ role: "user", content: reviewPrompt }],
                     temperature: 0.8,
                     max_tokens: 8000
-                })
+                }))
             });
 
             if (!response.ok) throw new Error(`API Error: ${response.status}`);
@@ -1219,12 +1220,12 @@ Answer in character. Be helpful and clear. If they're confused about a concept, 
             const response = await fetch(`${effectiveApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(effectiveApi, {
                     model: effectiveApi.model,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.7,
                     max_tokens: 4000
-                })
+                }))
             });
 
             if (!response.ok) throw new Error(`API Error: ${response.status}`);

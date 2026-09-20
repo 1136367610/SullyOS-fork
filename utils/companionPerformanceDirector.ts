@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import type { APIConfig, CharacterProfile } from '../types';
 import type { AvatarTouchModelAction } from './avatarTouch';
 import {
@@ -97,13 +98,13 @@ ${sentencePlan}`;
       'Content-Type': 'application/json',
       Authorization: `Bearer ${directorApi.apiKey || 'sk-none'}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(prepareLlmRequest(directorApi, {
       model: directorApi.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.45,
       max_tokens: AVATAR_PERFORMANCE_REHEARSAL_MAX_TOKENS,
       stream: false,
-    }),
+    })),
   }, 0, 30_000, {
     appName: '陪伴桌面',
     charId: character.id,

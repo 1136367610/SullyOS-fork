@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 import { APIConfig, CharacterProfile, Message, UserProfile } from '../types';
 import { ContextBuilder } from './context';
@@ -712,7 +713,7 @@ export async function prepareQixiMemoryBundle(
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey}` },
-                    body: JSON.stringify({
+                    body: JSON.stringify(prepareLlmRequest(apiConfig, {
                         model: apiConfig.model,
                         messages: [
                             { role: 'system', content: roleAndMemoryContext },
@@ -723,7 +724,7 @@ export async function prepareQixiMemoryBundle(
                         // 七夕首轮内容较长。强制使用流式传输，让上游尽早返回响应头/数据片段，
                         // 避免 Claude 在完整生成结束前触发 Cloudflare 524。
                         stream: true,
-                    }),
+                    })),
                 },
                 0,
                 QIXI_PART1_TIMEOUT_MS,

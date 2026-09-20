@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 // 人际关系系统 · 核心引擎
 // 查手机「人际关系」模块的纯逻辑 + LLM 链路：真假甄别、好感、双 LLM 私下对话（A 发 B 回）、AI 玩 AI。
@@ -229,11 +230,11 @@ async function chatCompletion(
     const res = await fetch(`${api.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${api.apiKey}` },
-        body: JSON.stringify({
+        body: JSON.stringify(prepareLlmRequest(api, {
             model: api.model,
             messages: [{ role: 'user', content: userContent }],
             temperature,
-        }),
+        })),
     });
     if (!res.ok) throw new Error(`LLM ${res.status}`);
     const data = await safeResponseJson(res);

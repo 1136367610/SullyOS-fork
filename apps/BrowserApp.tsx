@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
@@ -301,7 +302,7 @@ Generate realistic results linking to hypothetical URLs.`;
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [
                         { role: "system", content: systemPrompt },
@@ -309,7 +310,7 @@ Generate realistic results linking to hypothetical URLs.`;
                     ],
                     temperature: 0.6,
                     max_tokens: 4000
-                })
+                }))
             });
 
             if (!response.ok) throw new Error('Network Error');

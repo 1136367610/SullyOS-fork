@@ -1,3 +1,4 @@
+import type { LlmApiOptions } from '../../utils/llmApiOptions';
 export type CollaborationMode = 'immersive' | 'focused';
 
 export type CollaborationUiTheme = 'sully' | 'gpt' | 'claude' | 'gemini' | 'kimi' | 'deepseek';
@@ -106,7 +107,7 @@ export interface CollaborationCategory {
   createdAt: number;
 }
 
-export interface CollaborationApiProfile {
+export interface CollaborationApiProfile extends LlmApiOptions {
   baseUrl: string;
   apiKey: string;
   model: string;

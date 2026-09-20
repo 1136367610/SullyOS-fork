@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 import { acquireCharacterModule, consumeCharacterModule, characterModuleAllowance, characterModuleCount } from './sarCharacterCommerce';
 import { rollSARActivity, sarActivityPool } from './activityChoices';
 import type { VRSARActivity } from '../../types';
@@ -609,11 +610,11 @@ async function runVRSessionUnlocked(deps: VRSessionDeps): Promise<VRSessionResul
             data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${vrApi.apiKey || 'sk-none'}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(vrApi, {
                     model: vrApi.model,
                     messages: [{ role: 'system', content: systemPrompt }, ...payload.cleanedApiMessages, { role: 'user', content: roomTurn }],
                     temperature: 0.9, stream: false,
-                }),
+                })),
             }, 2, 0, { appName: '彼方', charId: char.id, charName: char.name, purpose: '自由活动' });
             logVRApiCall({ ts: callStart, charId: char.id, charName: char.name, charEnabled: !!char.vrState?.enabled, room: room.id, model: vrApi.model, baseUrl, ok: true, ms: Date.now() - callStart });
         } catch (e: any) {
