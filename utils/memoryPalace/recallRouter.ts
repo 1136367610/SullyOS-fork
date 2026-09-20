@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Local Context Analyzer + 预留的 Recall Resolver 协议。
  *
@@ -510,7 +511,7 @@ export async function runLightRecallRouter(
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${config.apiKey}`,
                 },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(config, {
                     model: config.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -519,7 +520,7 @@ export async function runLightRecallRouter(
                     temperature: 0.1,
                     max_tokens: 320,
                     stream: false,
-                }),
+                })),
             },
             0,
             timeoutMs,

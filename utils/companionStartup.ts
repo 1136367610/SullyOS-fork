@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 import type {
   APIConfig,
@@ -300,7 +301,7 @@ export const requestCompanionStartupDraft = async (options: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(prepareLlmRequest(apiConfig, {
       model: apiConfig.model,
       messages: [
         { role: 'system', content: buildCompanionStartupPrompt(coreContext, character.name, user.name || '用户', modelActions, hint) },
@@ -310,7 +311,7 @@ export const requestCompanionStartupDraft = async (options: {
       temperature: 0.86,
       max_tokens: 1400,
       stream: false,
-    }),
+    })),
   }, 1, 60_000, {
     appName: '触感陪伴',
     charId: character.id,

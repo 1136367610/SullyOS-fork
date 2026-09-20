@@ -1,3 +1,4 @@
+import { copyLlmApiOptions } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 /**
  * Like520Event.tsx
@@ -3557,6 +3558,7 @@ const Like520InlineApiSetup: React.FC<{ onDone: () => void; onBack: () => void }
     const [localKey, setLocalKey] = useState(apiConfig.apiKey);
     const [localModel, setLocalModel] = useState(apiConfig.model);
     const [localStream, setLocalStream] = useState(apiConfig.stream === true);
+    const [advanced, setAdvanced] = useState(copyLlmApiOptions(apiConfig));
     const [isLoadingModels, setIsLoadingModels] = useState(false);
     const [statusMsg, setStatusMsg] = useState('');
     const [showModelList, setShowModelList] = useState(false);
@@ -3564,6 +3566,7 @@ const Like520InlineApiSetup: React.FC<{ onDone: () => void; onBack: () => void }
     const [testResult, setTestResult] = useState<string | null>(null);
 
     const loadPreset = (preset: typeof apiPresets[0]) => {
+        setAdvanced(copyLlmApiOptions(preset.config));
         setLocalUrl(preset.config.baseUrl);
         setLocalKey(preset.config.apiKey);
         setLocalModel(preset.config.model);
@@ -3573,7 +3576,7 @@ const Like520InlineApiSetup: React.FC<{ onDone: () => void; onBack: () => void }
     };
 
     const handleSave = () => {
-        updateApiConfig({ baseUrl: localUrl, apiKey: localKey, model: localModel, stream: localStream });
+        updateApiConfig({ ...advanced, baseUrl: localUrl, apiKey: localKey, model: localModel, stream: localStream });
         setStatusMsg('配置已保存');
         addToast('API 配置已保存', 'success');
         setTimeout(() => setStatusMsg(''), 2000);
@@ -3637,7 +3640,7 @@ const Like520InlineApiSetup: React.FC<{ onDone: () => void; onBack: () => void }
     };
 
     const handleContinue = () => {
-        updateApiConfig({ baseUrl: localUrl, apiKey: localKey, model: localModel, stream: localStream });
+        updateApiConfig({ ...advanced, baseUrl: localUrl, apiKey: localKey, model: localModel, stream: localStream });
         onDone();
     };
 

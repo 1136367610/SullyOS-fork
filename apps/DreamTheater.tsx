@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
@@ -163,7 +164,7 @@ export async function generateDreamScript(opts: {
         // 中转的合法区间是 0~1，>1 会直接报错（OpenAI 虽允许到 2，但 1.0 已足够发散）。
         // max_tokens 用 8192：梦是一堆短碎片，足够用；16000 在 claude-3.5 等输出上限 8192 的
         // 模型上会 400。仍有「finish_reason==='length' → 截断」兜底。
-        body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 1.0, max_tokens: 8192 }),
+        body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 1.0, max_tokens: 8192 })),
     });
     if (!res.ok) throw new Error('API');
     const data = await safeResponseJson(res);

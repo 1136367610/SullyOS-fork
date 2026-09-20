@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -484,7 +485,7 @@ const SocialApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8, max_tokens: 8000 }),
+                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8, max_tokens: 8000 })),
                 signal: controller.signal,
                 __sullyMeta: { appId: 'social', appName: 'Spark', purpose: '刷新推荐流' },
             } as RequestInit);
@@ -597,7 +598,7 @@ ${post.content || '(楼主没写正文)'}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8 }),
+                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8 })),
                 signal: controller.signal,
                 __sullyMeta: { appId: 'social', appName: 'Spark', purpose: '生成帖子评论' },
             } as RequestInit);
@@ -688,7 +689,7 @@ ${buildSparkCommentHistory(post)}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8 }),
+                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'system', content: context }, { role: "user", content: prompt }], temperature: 0.8 })),
                 signal: controller.signal,
                 __sullyMeta: { appId: 'social', appName: 'Spark', purpose: '回复用户评论' },
             } as RequestInit);

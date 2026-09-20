@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../../utils/llmApiOptions';
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { CharacterProfile, Message, DateState, DialogueItem, UserProfile, DateObservation } from '../../types';
 import Modal from '../../components/os/Modal';
@@ -297,11 +298,11 @@ const DateSession: React.FC<DateSessionProps> = ({
                     const transRes = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey}` },
-                        body: JSON.stringify({
+                        body: JSON.stringify(prepareLlmRequest(apiConfig, {
                             model: apiConfig.model,
                             messages: [{ role: 'system', content: `Translate the following text to ${langLabel}. Output ONLY the translation, nothing else.` }, { role: 'user', content: ttsText }],
                             temperature: 0.3,
-                        }),
+                        })),
                     });
                     const transData = await transRes.json();
                     const translated = transData?.choices?.[0]?.message?.content?.trim();

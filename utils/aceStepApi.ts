@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 /**
  * ACE-Step song synthesis via Replicate (lucataco/ace-step).
  *
@@ -309,7 +310,7 @@ ${trimmed ? '⚠️ 再次提醒: 用户 hint 里写明的具体音乐元素 (vo
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiConfig.apiKey}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(prepareLlmRequest(apiConfig, {
       model: apiConfig.model,
       messages: [
         { role: 'system', content: sysPrompt },
@@ -320,7 +321,7 @@ ${trimmed ? '⚠️ 再次提醒: 用户 hint 里写明的具体音乐元素 (vo
       // Generous budget — modern models burn tokens on thinking.
       // Output is one short line; we trust the prompt to keep the model concise.
       max_tokens: 8000,
-    }),
+    })),
     signal,
   });
   if (!res.ok) {

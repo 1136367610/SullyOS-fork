@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 
 import { CharacterProfile, NovelBook, NovelSegment, UserProfile } from '../types';
 import { ContextBuilder } from './context';
@@ -394,12 +395,12 @@ ${char.memories?.slice(-3).map(m => `- ${m.summary}`).join('\n') || '- 无记忆
                 'Content-Type': 'application/json', 
                 'Authorization': `Bearer ${apiConfig.apiKey}` 
             },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(apiConfig, {
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: analysisPrompt }],
                 temperature: 0.7,
                 max_tokens: 8000
-            })
+            }))
         });
         
         if (response.ok) {

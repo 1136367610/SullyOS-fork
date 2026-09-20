@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * 外部记忆搬家
  *
@@ -325,7 +326,7 @@ export async function extractExternalMemoryText(
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${llmConfig.apiKey}`,
                         },
-                        body: JSON.stringify({
+                        body: JSON.stringify(prepareLlmRequest(llmConfig, {
                             model: llmConfig.model,
                             messages: [
                                 { role: 'system', content: systemPrompt },
@@ -339,7 +340,7 @@ export async function extractExternalMemoryText(
                             temperature: 0.05,
                             max_tokens: 16_000,
                             stream: false,
-                        }),
+                        })),
                     },
                     2,
                     180_000,

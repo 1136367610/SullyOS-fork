@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../../utils/llmApiOptions';
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { BankTransaction, SavingsGoal, APIConfig } from '../../types';
@@ -140,7 +141,7 @@ ${txList}
             const res = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }] })
+                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'user', content: prompt }] }))
             });
 
             if (res.ok) {

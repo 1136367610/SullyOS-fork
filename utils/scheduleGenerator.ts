@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 
 import { CharacterProfile, UserProfile, DailySchedule, ScheduleSlot, Message, Emoji } from '../types';
 import { ContextBuilder } from './context';
@@ -290,12 +291,12 @@ export async function generateDailyScheduleForChar(
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(apiConfig, {
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.85,
                 max_tokens: 8000
-            }),
+            })),
             // API 调用记录标签（全局 fetch 拦截器读取）；不传会兜底成「用户当时打开的 App」，
             // 后台任务被标成 Message/群聊 之类，用户看记录一头雾水。
             __sullyMeta: { appName: '日程系统', charId: char.id, charName: char.name, purpose: '生成当日日程' },
@@ -431,12 +432,12 @@ ${chatSummary}
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(apiConfig, {
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.85,
                 max_tokens: 500
-            }),
+            })),
             __sullyMeta: { appName: '日程系统', charId: char.id, charName: char.name, purpose: '进化意识流' },
         } as RequestInit);
 

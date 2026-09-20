@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * 「家园 · 模拟时间」章节总结 —— 每 20 天结一卷。
  *
@@ -145,11 +146,11 @@ export async function summarizeChapter(args: {
         const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` },
-            body: JSON.stringify({
+            body: JSON.stringify(prepareLlmRequest(api, {
                 model: api.model,
                 messages: [{ role: 'user', content: buildChapterSummaryPrompt({ world, members, fromLabel, toLabel, digest, prevSynopsis }) }],
                 temperature: 0.8, stream: false,
-            }),
+            })),
         }, 2, 0, { appName: '家园', purpose: `结卷总结 · ${world.name} 第${index}卷` });
         const parsed = parseChapterSummary(data.choices?.[0]?.message?.content || '', members);
         // 每个角色这一卷「最后一天」的 beat：取窗口内 round 最大的那条 episode 里各自的 beat

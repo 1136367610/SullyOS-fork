@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
@@ -636,12 +637,12 @@ const RoomApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model, 
                     messages: [{ role: "user", content: fallbackPrompt }], 
                     temperature: 0.5,
                     max_tokens: 8000 // Keep it tiny
-                })
+                }))
             });
 
             if (response.ok) {
@@ -799,7 +800,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [{ role: "user", content: prompt }],
                     temperature: 0.5, // Lower temp for stability
@@ -811,7 +812,7 @@ ${!shouldGenerateTodo ? `(系统: 今日待办已存在，无需生成，请忽�
                         { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
                         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
                     ]
-                })
+                }))
             });
 
             if (response.ok) {

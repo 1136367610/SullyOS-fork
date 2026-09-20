@@ -1,3 +1,5 @@
+import ModelTokenCompatibilityNotice from '../components/ModelTokenCompatibilityNotice';
+import { finalizeLlmRequest, saveLlmApiOptions, readTokenCompatibilityPreferences, restoreTokenCompatibilityPreferences } from '../utils/llmApiOptions';
 
 import { initializeFirstUseGuide } from '../utils/firstUseGuide';
 import { FEEDBACK_INVITATION_KEY, hasPriorFeedbackInstallEvidence, initializeFeedbackInvitation, suppressFeedbackInvitation } from '../utils/feedbackInvitation';
@@ -1150,8 +1152,10 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               const rawBody = (config as RequestInit | undefined)?.body;
               if (typeof rawBody === 'string') {
                   try {
-                      const parsed = JSON.parse(rawBody);
-                      let body = rawBody;
+                      const finalized = finalizeLlmRequest(urlStr, JSON.parse(rawBody));
+                      const parsed = finalized.body;
+                      const requestedStream = finalized.stream;
+                      let body = JSON.stringify(parsed);
                       if (clampClaudeTemperature(parsed)) {
                           body = JSON.stringify(parsed);
                       }
@@ -1162,7 +1166,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                       // （查手机/记忆宫殿/日程/剧场/群聊…40+ 处）升级为流式**传输**，防网关
                       // 空闲超时把长生成掐成半截；响应会在下面攒齐拼回标准 JSON，调用方无感。
                       // 已自带 stream:true 的请求（聊天主路径/见面/情绪评估）不碰。
-                      if (isGlobalStreamEnabled()) {
+                      if (typeof requestedStream === 'boolean' ? requestedStream : isGlobalStreamEnabled()) {
                           const upgraded = upgradeChatBodyToStream(body);
                           if (upgraded) {
                               body = upgraded;
@@ -3024,7 +3028,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         addToast('主题没能保存到本地（存储空间可能已满），重启后可能会还原', 'error');
     }
   };
-  const updateApiConfig = (updates: Partial<APIConfig>) => { const newConfig = normalizeApiConfig({ ...apiConfig, ...updates }); setApiConfig(newConfig); localStorage.setItem('os_api_config', JSON.stringify(newConfig)); };
+  const updateApiConfig = (updates: Partial<APIConfig>) => { const newConfig = saveLlmApiOptions(normalizeApiConfig({ ...apiConfig, ...((updates.model !== undefined && updates.model !== apiConfig.model) || (updates.baseUrl !== undefined && updates.baseUrl !== apiConfig.baseUrl) ? { useMaxCompletionTokens: undefined } : {}), ...updates })); localStorage.setItem('os_api_config', JSON.stringify(newConfig)); setApiConfig(newConfig); };
   const updateRealtimeConfig = (updates: Partial<RealtimeConfig>) => { const newConfig = { ...realtimeConfig, ...updates }; setRealtimeConfig(newConfig); localStorage.setItem('os_realtime_config', JSON.stringify(newConfig)); };
 
   // Cloud Backup functions
@@ -3152,8 +3156,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       setAvailableModels(safeModels);
       localStorage.setItem('os_available_models', JSON.stringify(safeModels));
   };
-  const addApiPreset = (name: string, config: APIConfig) => { setApiPresets(prev => { const next = [...prev, normalizeApiPreset({ id: Date.now().toString(), name, config })]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
-  const updateApiPreset = (id: string, name: string, config: APIConfig) => { setApiPresets(prev => { const next = prev.map(p => p.id === id ? normalizeApiPreset({ ...p, name, config }) : p); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
+  const addApiPreset = (name: string, config: APIConfig) => { setApiPresets(prev => { const next = [...prev, normalizeApiPreset({ id: Date.now().toString(), name, config: saveLlmApiOptions(config) })]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
+  const updateApiPreset = (id: string, name: string, config: APIConfig) => { setApiPresets(prev => { const next = prev.map(p => p.id === id ? normalizeApiPreset({ ...p, name, config: saveLlmApiOptions(config) }) : p); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
   const removeApiPreset = (id: string) => { setApiPresets(prev => { const next = prev.filter(p => p.id !== id); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
   const savePresets = (presets: ApiPreset[]) => { const normalized = presets.map(normalizeApiPreset); setApiPresets(normalized); localStorage.setItem('os_api_presets', JSON.stringify(normalized)); };
   const addCharacter = async () => {
@@ -3933,6 +3937,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               timestamp: Date.now(),
               version: 3,
               apiConfig: (mode === 'text_only' || mode === 'full') ? apiConfig : undefined,
+              llmTokenCompatibility: (mode === 'text_only' || mode === 'full') ? readTokenCompatibilityPreferences() : undefined,
               checkPhoneApi: (mode === 'text_only' || mode === 'full') ? getCheckPhoneApi() : undefined,
               apiPresets: (mode === 'text_only' || mode === 'full') ? apiPresets : undefined,
               availableModels: (mode === 'text_only' || mode === 'full') ? availableModels : undefined,
@@ -4968,6 +4973,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               await restoreAssetsInPlace(data.theme, '系统主题');
               await updateTheme(data.theme);
           }
+          if (data.llmTokenCompatibility) restoreTokenCompatibilityPreferences(data.llmTokenCompatibility);
           if (data.apiConfig) updateApiConfig(data.apiConfig);
           if (data.checkPhoneApi !== undefined) setCheckPhoneApi(data.checkPhoneApi ?? null);
           if (data.availableModels) saveModels(data.availableModels);
@@ -5370,6 +5376,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   return (
     <OSContext.Provider value={value}>
       {children}
+      <ModelTokenCompatibilityNotice />
     </OSContext.Provider>
   );
 };

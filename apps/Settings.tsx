@@ -1,3 +1,4 @@
+import { tokenCompatibilityEnabled, saveLlmApiOptions, copyLlmApiOptions, prepareLlmRequest } from '../utils/llmApiOptions';
 
 import { useFirstUseGuideStep } from '../utils/firstUseGuide';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
@@ -496,9 +497,14 @@ const Settings: React.FC = () => {
   const [localUrl, setLocalUrl] = useState(apiConfig.baseUrl);
   const [localModel, setLocalModel] = useState(String(apiConfig.model || ''));
   const [localStream, setLocalStream] = useState<boolean>(apiConfig.stream === true);
+  const [tokenChoice, setTokenChoice] = useState({ baseUrl: apiConfig.baseUrl, model: apiConfig.model, value: apiConfig.useMaxCompletionTokens });
+  const localTokenMode = tokenChoice.baseUrl === localUrl && tokenChoice.model === localModel ? tokenChoice.value : undefined;
+  const [editTokenChoice, setEditTokenChoice] = useState<{ baseUrl: string; model: string; value?: boolean }>({ baseUrl: '', model: '' });
+
   const [localTemperature, setLocalTemperature] = useState<number>(
     typeof apiConfig.temperature === 'number' ? apiConfig.temperature : 0.85
   );
+  const [localVisionAdvanced, setLocalVisionAdvanced] = useState(copyLlmApiOptions(apiConfig.visionApi));
   const [localVisionEnabled, setLocalVisionEnabled] = useState(apiConfig.visionApi?.enabled === true);
   const [localVisionUrl, setLocalVisionUrl] = useState(apiConfig.visionApi?.baseUrl || '');
   const [localVisionKey, setLocalVisionKey] = useState(apiConfig.visionApi?.apiKey || '');
@@ -942,9 +948,13 @@ const Settings: React.FC = () => {
       setLocalKey(apiConfig.apiKey);
       setLocalModel(String(apiConfig.model || ''));
       setLocalStream(apiConfig.stream === true);
+      setTokenChoice({ baseUrl: apiConfig.baseUrl, model: apiConfig.model, value: apiConfig.useMaxCompletionTokens });
       setLocalTemperature(typeof apiConfig.temperature === 'number' ? apiConfig.temperature : 0.85);
-  }, [apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, apiConfig.stream, apiConfig.temperature]);
+  }, [apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, apiConfig.stream, apiConfig.temperature, apiConfig.useMaxCompletionTokens]);
 
+  useEffect(() => {
+      setLocalVisionAdvanced(copyLlmApiOptions(apiConfig.visionApi));
+  }, [apiConfig.visionApi?.stream, apiConfig.visionApi?.temperature, apiConfig.visionApi?.useMaxCompletionTokens]);
   useEffect(() => {
       setLocalVisionEnabled(apiConfig.visionApi?.enabled === true);
   }, [apiConfig.visionApi?.enabled]);
@@ -997,6 +1007,7 @@ const Settings: React.FC = () => {
    * 还要把已排程的主动消息凭据一起换掉，否则聊天换了、后台任务还拿旧 Key 打请求。
    */
   const commitApiConfig = (patch: PresetSwitchPatch | Partial<APIConfig>) => {
+    patch = saveLlmApiOptions({ ...apiConfig, ...((patch.model !== undefined && patch.model !== apiConfig.model) || (patch.baseUrl !== undefined && patch.baseUrl !== apiConfig.baseUrl) ? { useMaxCompletionTokens: undefined } : {}), ...patch });
     updateApiConfig(patch);
     // 支持凭据表的 Worker 上，任务只带引用，换 Key 只要覆盖云端那几行——不用逐条改任务。
     // 老 Worker 上这句是 no-op，凭据靠下面那条逐条补刷的老路续命。
@@ -1026,7 +1037,7 @@ const Settings: React.FC = () => {
   const applyPreset = (preset: typeof apiPresets[0]) => {
       // 已经在用这条也照切：「使用中」只看 URL/Key/Model 三件套，温度、流式可能被手调过，
       // 再点一下的语义就是「整套回到这条预设存的样子」。
-      commitApiConfig(configFromPreset(preset));
+      commitApiConfig({ ...configFromPreset(preset), useMaxCompletionTokens: preset.config.useMaxCompletionTokens });
       addToast(`已切换到「${preset.name}」，立即生效`, 'success');
   };
 
@@ -1038,6 +1049,7 @@ const Settings: React.FC = () => {
       setEditPresetUrl(preset.config.baseUrl || '');
       setEditPresetKey(preset.config.apiKey || '');
       setEditPresetModel(preset.config.model || '');
+      setEditTokenChoice({ baseUrl: preset.config.baseUrl || '', model: preset.config.model || '', value: isActive ? localTokenMode : preset.config.useMaxCompletionTokens });
       // 当前正在使用的预设要接住主表单里刚改的高级设置：用户点铅笔再点保存即可写回，
       // 不必猜还要额外按一次「用当前配置填入」。非当前/老预设则读取自身，缺字段才回退。
       setEditPresetStream(
@@ -1063,6 +1075,7 @@ const Settings: React.FC = () => {
           baseUrl: normalizeApiBaseUrl(editPresetUrl),
           apiKey: normalizeApiCredential(editPresetKey),
           model: normalizeApiModel(editPresetModel),
+          useMaxCompletionTokens: editTokenChoice.baseUrl === editPresetUrl && editTokenChoice.model === editPresetModel ? editTokenChoice.value : undefined,
           stream: editPresetStream,
           temperature: editPresetTemperature,
       };
@@ -1116,6 +1129,7 @@ const Settings: React.FC = () => {
         baseUrl: normalizeApiBaseUrl(localUrl),
         apiKey: normalizeApiCredential(localKey),
         model: normalizeApiModel(localModel),
+        useMaxCompletionTokens: localTokenMode,
         stream: localStream,
         temperature: localTemperature,
       });
@@ -1133,6 +1147,7 @@ const Settings: React.FC = () => {
       apiKey: normalizeApiCredential(localKey),
       baseUrl: normalizeApiBaseUrl(localUrl),
       model: normalizeApiModel(localModel),
+      useMaxCompletionTokens: localTokenMode,
       stream: localStream,
       temperature: localTemperature,
     };
@@ -1146,6 +1161,7 @@ const Settings: React.FC = () => {
 
   const handleSaveVisionApi = (enabled = localVisionEnabled) => {
     const nextVisionApi = {
+      ...localVisionAdvanced,
       enabled,
       baseUrl: normalizeApiBaseUrl(localVisionUrl),
       apiKey: normalizeApiCredential(localVisionKey),
@@ -1155,6 +1171,7 @@ const Settings: React.FC = () => {
       addToast('开启识图 API 前，请填写完整的 URL、Key 和 Model', 'error');
       return;
     }
+    setLocalVisionAdvanced(copyLlmApiOptions(nextVisionApi));
     setLocalVisionUrl(nextVisionApi.baseUrl);
     setLocalVisionKey(nextVisionApi.apiKey);
     setLocalVisionModel(nextVisionApi.model);
@@ -1183,6 +1200,7 @@ const Settings: React.FC = () => {
     const next = visionApiConfigFromPreset(preset);
     setSelectedVisionPresetId(preset.id);
     setLocalVisionEnabled(true);
+    setLocalVisionAdvanced(copyLlmApiOptions(next));
     setLocalVisionUrl(next.baseUrl);
     setLocalVisionKey(next.apiKey);
     setLocalVisionModel(next.model);
@@ -1214,6 +1232,7 @@ const Settings: React.FC = () => {
       try { localStorage.setItem(VISION_MODEL_LIST_STORAGE_KEY, JSON.stringify(models)); } catch { /* ignore */ }
       if (!models.includes(normalizeApiModel(localVisionModel))) {
         setLocalVisionModel(models[0]);
+        setLocalVisionAdvanced(options => ({ ...options, useMaxCompletionTokens: undefined }));
         setSelectedVisionPresetId(null);
       }
       setVisionStatusMsg(`获取到 ${models.length} 个识图模型`);
@@ -2459,8 +2478,13 @@ const Settings: React.FC = () => {
                     {showApiAdvanced && (
                         <div className="mt-2 pl-2 border-l-2 border-slate-100 space-y-3 py-2">
                             <p className="text-[10px] text-slate-300 leading-relaxed">
-                                这两项绝大多数用户保持默认即可。除非接口报错"only stream supported"或对回复风格有强需求，否则不建议改。
+                                这些选项绝大多数用户保持默认即可。除非接口报错"only stream supported"或对回复风格有强需求，否则不建议改。
                             </p>
+                            <label className="flex items-start gap-3 text-xs text-slate-600">
+                                <input type="checkbox" className="mt-1" checked={tokenCompatibilityEnabled({ baseUrl: localUrl, model: localModel, useMaxCompletionTokens: localTokenMode })}
+                                    onChange={e => setTokenChoice({ baseUrl: localUrl, model: localModel, value: e.target.checked })} />
+                                <span>GPT‑5.1 参数兼容<span className="block mt-1 text-[10px] text-slate-400">改用 max_completion_tokens。识别到可能是 GPT‑5.1 时自动开启；可手动关闭。修改后请保存配置，预设需单独存回。</span></span>
+                            </label>
                             <div className="flex items-center justify-between">
                                 <div>
                                     <span className="text-[10px] text-slate-400">流式输出 (Stream)</span>
@@ -2488,7 +2512,7 @@ const Settings: React.FC = () => {
                                     onChange={(e) => setLocalTemperature(parseFloat(e.target.value))}
                                     className="w-full accent-slate-400 mt-1"
                                 />
-                                <p className="text-[9px] text-slate-300 mt-0.5">默认 0.85；只作用于聊天和约会的主回复</p>
+                                <p className="text-[9px] text-slate-300 mt-0.5">默认 0.85；随 API 配置和预设保存，不支持温度的模型会忽略此项</p>
                             </div>
                         </div>
                     )}
@@ -2533,12 +2557,12 @@ const Settings: React.FC = () => {
                             const res = await fetch(`${localUrl.trim().replace(/\/+$/, '')}/chat/completions`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localKey.trim()}` },
-                                body: JSON.stringify({
+                                body: JSON.stringify(prepareLlmRequest({ baseUrl: localUrl, model: localModel, useMaxCompletionTokens: localTokenMode, stream: localStream }, {
                                     model: localModel.trim(),
                                     messages: [{ role: 'user', content: 'Hi' }],
                                     max_tokens: 5,
                                     stream: localStream,
-                                }),
+                                })),
                             });
                             if (res.ok) {
                                 // 走 safeResponseJson —— 它能透明把 SSE 流响应拼成普通 chat/completion 结构
@@ -2657,7 +2681,7 @@ const Settings: React.FC = () => {
                         <input
                             type="text"
                             value={localVisionUrl}
-                            onChange={event => { setLocalVisionUrl(event.target.value); setSelectedVisionPresetId(null); setVisionTestResult(null); }}
+                            onChange={event => { setLocalVisionUrl(event.target.value); setLocalVisionAdvanced(options => ({ ...options, useMaxCompletionTokens: undefined })); setSelectedVisionPresetId(null); setVisionTestResult(null); }}
                             disabled={!localVisionEnabled}
                             placeholder="https://.../v1"
                             className="w-full bg-white/60 border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all disabled:cursor-not-allowed"
@@ -3936,6 +3960,7 @@ const Settings: React.FC = () => {
                             value={localVisionModel}
                             onChange={(event) => {
                                 setLocalVisionModel(event.target.value);
+                                setLocalVisionAdvanced(options => ({ ...options, useMaxCompletionTokens: undefined }));
                                 setSelectedVisionPresetId(null);
                                 setVisionTestResult(null);
                             }}
@@ -3982,6 +4007,7 @@ const Settings: React.FC = () => {
                                     key={model}
                                     onClick={() => {
                                         setLocalVisionModel(model);
+                                        setLocalVisionAdvanced(options => ({ ...options, useMaxCompletionTokens: undefined }));
                                         setSelectedVisionPresetId(null);
                                         setVisionTestResult(null);
                                         setShowVisionModelModal(false);
@@ -4019,7 +4045,7 @@ const Settings: React.FC = () => {
           <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase">预设名称 (例如: DeepSeek)</label>
               <input value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="w-full bg-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-primary" autoFocus placeholder="Name..." />
-              <p className="text-[10px] text-slate-400 leading-relaxed pt-1">会保存上面表单里的 URL / Key / Model，以及高级设置中的流式与温度。</p>
+              <p className="text-[10px] text-slate-400 leading-relaxed pt-1">会保存上面表单里的 URL / Key / Model，以及高级设置中的流式、温度和 GPT‑5.1 参数兼容。</p>
           </div>
       </Modal>
 
@@ -4031,6 +4057,11 @@ const Settings: React.FC = () => {
           footer={<button onClick={handleUpdatePreset} className="w-full py-3 bg-primary text-white font-bold rounded-2xl">保存</button>}
       >
           <div className="space-y-3">
+              <label className="flex items-center gap-3 text-xs text-slate-600">
+                  <input type="checkbox" checked={tokenCompatibilityEnabled({ baseUrl: editPresetUrl, model: editPresetModel, useMaxCompletionTokens: editTokenChoice.baseUrl === editPresetUrl && editTokenChoice.model === editPresetModel ? editTokenChoice.value : undefined })}
+                      onChange={e => setEditTokenChoice({ baseUrl: editPresetUrl, model: editPresetModel, value: e.target.checked })} />
+                  GPT‑5.1 参数兼容（随预设保存）
+              </label>
               <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">名称</label>
                   <input value={editPresetName} onChange={e => setEditPresetName(e.target.value)} placeholder="预设名称" className="w-full bg-slate-100 rounded-xl px-4 py-2.5 text-sm focus:outline-primary" />
@@ -4086,7 +4117,7 @@ const Settings: React.FC = () => {
                       setEditPresetUrl(localUrl);
                       setEditPresetKey(localKey);
                       setEditPresetModel(localModel);
-                      setEditPresetStream(localStream);
+                      setEditPresetStream(localStream); setEditTokenChoice({ baseUrl: localUrl, model: localModel, value: localTokenMode });
                       setEditPresetTemperature(localTemperature);
                       addToast('已填入当前配置', 'info');
                   }}

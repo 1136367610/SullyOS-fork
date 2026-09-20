@@ -1,3 +1,4 @@
+import { prepareLlmRequest } from './llmApiOptions';
 import { APIConfig, CharacterProfile, UserProfile } from '../types';
 import { ContextBuilder } from './context';
 import { QixiMemoryBundle, QixiSceneId } from './qixiMemoryBundle';
@@ -613,7 +614,7 @@ export async function prepareQixiReunion(
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({
+                body: JSON.stringify(prepareLlmRequest(apiConfig, {
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: context },
@@ -623,7 +624,7 @@ export async function prepareQixiReunion(
                     max_tokens: 24000,
                     // 最终见面与约定一次生成，必须尽早收到流式数据以绕开代理 524 超时。
                     stream: true,
-                }),
+                })),
             },
             0,
             QIXI_PART3_TIMEOUT_MS,
