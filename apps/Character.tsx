@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -548,14 +547,14 @@ const Character: React.FC = () => {
           const data = await safeFetchJson(refineUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify(prepareLlmRequest(apiConfig, {
+              body: JSON.stringify({
                   model: apiConfig.model,
                   messages: [
                       { role: 'system', content: systemContent },
                       { role: 'user', content: userContent },
                   ],
                   temperature: 0.3,
-              }))
+              })
           }, 0);
           const dt = Math.round(performance.now() - t0);
           const summary = extractContent(data);
@@ -650,7 +649,7 @@ const Character: React.FC = () => {
           const data = await safeFetchJson(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 8000, stream: false })),
+              body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 8000, stream: false }),
           }, 0);
           let summary = extractContent(data).replace(/^["']|["']$/g, '');
           if (!summary) throw new Error('空响应');
@@ -834,12 +833,12 @@ const Character: React.FC = () => {
                     data = await safeFetchJson(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                        body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                        body: JSON.stringify({
                             model: apiConfig.model,
                             messages: [{ role: "user", content: prompt }],
                             max_tokens: 8000,
                             temperature: 0.5
-                        }))
+                        })
                     }, 0);
                 } catch {
                     // 单天失败软跳过，继续后面的日期（与原 if(response.ok) 的语义一致）
@@ -1020,7 +1019,7 @@ ${isInitialGeneration ? `
           const data = await safeFetchJson(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify(prepareLlmRequest(apiConfig, {
+              body: JSON.stringify({
                   model: apiConfig.model,
                   messages: [{ role: "user", content: prompt }],
                   max_tokens: 8000,
@@ -1028,7 +1027,7 @@ ${isInitialGeneration ? `
                   // 与「设置 → API → 流式输出」保持一致，不在印象功能里强制覆盖用户选择。
                   // 流式响应由 safeResponseJson 拼回完整对象，下游 extractContent 无需改动。
                   stream: apiConfig.stream === true
-              }))
+              })
           }, 0);
           const parsed = parseGeneratedImpression(data);
 

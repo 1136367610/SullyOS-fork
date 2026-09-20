@@ -1,4 +1,3 @@
-import { copyLlmApiOptions } from '../../utils/llmApiOptions';
 
 import React, { useState, useEffect } from 'react';
 import { CharacterProfile, ApiPreset, APIConfig, CharacterBuff } from '../../types';
@@ -32,13 +31,11 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
     const [model, setModel] = useState('');
     const [showSavePreset, setShowSavePreset] = useState(false);
     const [newPresetName, setNewPresetName] = useState('');
-    const [advanced, setAdvanced] = useState(copyLlmApiOptions(char.emotionConfig?.api));
     const [dirty, setDirty] = useState(false);
 
     // Sync form state from character
     useEffect(() => {
         const s = char.emotionConfig;
-        setAdvanced(copyLlmApiOptions(s?.api));
         setUrl(s?.api?.baseUrl ?? '');
         setKey(s?.api?.apiKey ?? '');
         setModel(s?.api?.model ?? '');
@@ -48,7 +45,6 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
     }, [char.id]);
 
     const loadPreset = (preset: ApiPreset) => {
-        setAdvanced(copyLlmApiOptions(preset.config));
         setUrl(preset.config.baseUrl);
         setKey(preset.config.apiKey);
         setModel(preset.config.model);
@@ -57,13 +53,13 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
 
     const handleSavePreset = () => {
         if (!newPresetName.trim()) return;
-        addApiPreset(newPresetName.trim(), { ...advanced, baseUrl: url, apiKey: key, model });
+        addApiPreset(newPresetName.trim(), { baseUrl: url, apiKey: key, model });
         setNewPresetName('');
         setShowSavePreset(false);
     };
 
     const handleSave = () => {
-        const api = url ? { ...advanced, baseUrl: url, apiKey: key, model } : undefined;
+        const api = url ? { baseUrl: url, apiKey: key, model } : undefined;
         // 与日程强制同步：日程/情绪总开关开启时情绪必跑。
         // 注意 scheduleFeatureEnabled=true 时即使还没选 scheduleStyle，也应保持情绪开启。
         onSave({ enabled: isScheduleFeatureOn(char), api });
@@ -169,7 +165,7 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
                     <input
                         type="text"
                         value={model}
-                        onChange={e => { setModel(e.target.value); setAdvanced(v => ({ ...v, useMaxCompletionTokens: undefined })); setDirty(true); }}
+                        onChange={e => { setModel(e.target.value); setDirty(true); }}
                         placeholder="claude-haiku-4-5 / gpt-4o-mini / ..."
                         className="w-full bg-white/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all"
                     />

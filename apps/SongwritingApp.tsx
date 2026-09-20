@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -509,7 +508,7 @@ const SongwritingApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: apiMessages, temperature: 0.8, max_tokens: 2000 }))
+                body: JSON.stringify({ model: apiConfig.model, messages: apiMessages, temperature: 0.8, max_tokens: 2000 })
             });
 
             if (response.ok) {
@@ -864,7 +863,7 @@ const SongwritingApp: React.FC = () => {
                 const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                    body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                    body: JSON.stringify({
                         model: apiConfig.model,
                         messages: [
                             { role: 'system', content: systemPrompt },
@@ -872,7 +871,7 @@ const SongwritingApp: React.FC = () => {
                         ],
                         temperature: attempt === 0 ? 0.9 : 0.65,
                         max_tokens: 500,
-                    })),
+                    }),
                 });
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 const data = await safeResponseJson(response);
@@ -931,7 +930,7 @@ const SongwritingApp: React.FC = () => {
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -939,7 +938,7 @@ const SongwritingApp: React.FC = () => {
                     ],
                     temperature: 0.7,
                     max_tokens: 500,
-                }))
+                })
             });
 
             if (response.ok) {

@@ -1,4 +1,3 @@
-import { copyLlmApiOptions } from '../../utils/llmApiOptions';
 import React, { useEffect, useState } from 'react';
 import { ApiPreset, APIConfig, CharacterProfile } from '../../types';
 import { CheckSquare, FloppyDisk, Gear, Square, X } from '@phosphor-icons/react';
@@ -7,7 +6,7 @@ import { CharacterGroupFilterBar, filterCharactersByGroup, GROUP_FILTER_ALL } fr
 import { trackEvent } from '../../utils/analytics';
 import TokenImg from '../../components/os/TokenImg';
 
-type LifeSimApiDraft = APIConfig;
+type LifeSimApiDraft = Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model'>;
 
 const EMPTY_API_DRAFT: LifeSimApiDraft = {
     baseUrl: '',
@@ -48,7 +47,6 @@ const LifeSimSettingsPanel: React.FC<{
     useEffect(() => {
         setUseIndependentApi(useIndependentApiConfig);
         setDraft({
-            ...copyLlmApiOptions(independentApiConfig),
             baseUrl: independentApiConfig?.baseUrl || '',
             apiKey: independentApiConfig?.apiKey || '',
             model: independentApiConfig?.model || '',
@@ -56,12 +54,11 @@ const LifeSimSettingsPanel: React.FC<{
     }, [independentApiConfig, useIndependentApiConfig]);
 
     const patchDraft = (updates: Partial<LifeSimApiDraft>) => {
-        setDraft(prev => ({ ...prev, ...(updates.model !== undefined && updates.model !== prev.model ? { useMaxCompletionTokens: undefined } : {}), ...updates }));
+        setDraft(prev => ({ ...prev, ...updates }));
     };
 
     const handleLoadPreset = (preset: ApiPreset) => {
         setDraft({
-            ...copyLlmApiOptions(preset.config),
             baseUrl: preset.config.baseUrl || '',
             apiKey: preset.config.apiKey || '',
             model: preset.config.model || '',
@@ -76,7 +73,6 @@ const LifeSimSettingsPanel: React.FC<{
             await onSaveApiSettings({
                 enabled: useIndependentApi,
                 config: {
-                    ...copyLlmApiOptions(draft),
                     baseUrl: draft.baseUrl.trim(),
                     apiKey: draft.apiKey.trim(),
                     model: draft.model.trim(),

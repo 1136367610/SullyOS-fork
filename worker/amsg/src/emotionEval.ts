@@ -1,4 +1,3 @@
-import { copyLlmApiOptions, type LlmApiOptions } from '../../../utils/llmApiOptions';
 /**
  * 即时对话的云端情绪评估。
  *
@@ -28,7 +27,7 @@ import {
 } from '../../../utils/emotionEvalCore';
 
 /** 副 API 凭据的两种长相：任务里内联的 { baseUrl, apiKey, model }，或凭据表里的三件套。 */
-export interface AmsgEmotionEvalApi extends LlmApiOptions {
+export interface AmsgEmotionEvalApi {
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -36,8 +35,6 @@ export interface AmsgEmotionEvalApi extends LlmApiOptions {
 
 /** 前端塞进任务 metadata.amsgEmotionEval 的那份评估配置。 */
 export interface AmsgEmotionEvalSpec {
-  /** Non-secret generation options accompany credential references. */
-  options?: Pick<LlmApiOptions, 'stream' | 'temperature' | 'useMaxCompletionTokens'>;
   /** 带两个占位符的评估提示词模板。 */
   prompt: string;
   /**
@@ -88,7 +85,6 @@ export const resolveEmotionEvalApi = async (
     baseUrl: resolved.apiUrl.replace(/\/chat\/completions\/*$/i, ''),
     apiKey: resolved.apiKey || '',
     model: resolved.primaryModel,
-    ...copyLlmApiOptions(spec.options),
   };
 };
 

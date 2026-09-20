@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
 /**
  * 日程小剧场（窥视演出）生成器。
  *
@@ -192,13 +191,13 @@ export async function generateSlotTheater(
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify(prepareLlmRequest(apiConfig, {
+            body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.9,
                 // 12–18 行、每行可写得有质感，2600 容易把最后一拍截断；放宽到 4600 留足尾巴。
                 max_tokens: 4600,
-            })),
+            }),
             __sullyMeta: { appName: '日程系统', charId: char.id, charName: char.name, purpose: '小剧场生成' },
         } as RequestInit);
 

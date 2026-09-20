@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * 彼方·剧院 —— LLM 编排管线（脚本生成/润色、演员意见收集、导演整合）。
  *
@@ -38,7 +37,7 @@ async function chat(api: TheaterApi, messages: Array<{ role: string; content: an
     const data: any = await safeFetchJson(`${api.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey}` },
-        body: JSON.stringify(prepareLlmRequest(api, { model: api.model, messages, temperature, stream: false })),
+        body: JSON.stringify({ model: api.model, messages, temperature, stream: false }),
     }, 2, 0, { appName: '彼方·剧院' });
     const c: string = data.choices?.[0]?.message?.content || '';
     return c.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();

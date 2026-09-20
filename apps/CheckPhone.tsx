@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
@@ -499,12 +498,12 @@ const CheckPhone: React.FC = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${config.apiKey || 'sk-none'}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(config, {
+                body: JSON.stringify({
                     model: config.model,
                     messages: [{ role: 'user', content: 'Hi' }],
                     max_tokens: 5,
                     stream: false,
-                })),
+                }),
             });
             if (!response.ok) {
                 const detail = await response.text().catch(() => '');
@@ -822,11 +821,11 @@ ${realCharRule}
             const response = await fetch(`${effectiveApiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(effectiveApiConfig, {
+                body: JSON.stringify({
                     model: effectiveApiConfig.model,
                     messages: [{ role: "user", content: fullPrompt }],
                     temperature: 0.8
-                }))
+                })
             });
 
             if (!response.ok) throw new Error('API Error');
@@ -964,7 +963,7 @@ ${realCharRule}
         const response = await fetch(`${effectiveApiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApiConfig.apiKey}` },
-            body: JSON.stringify(prepareLlmRequest(effectiveApiConfig, { model: effectiveApiConfig.model, messages: [{ role: 'user', content: prompt }], temperature })),
+            body: JSON.stringify({ model: effectiveApiConfig.model, messages: [{ role: 'user', content: prompt }], temperature }),
         });
         if (!response.ok) throw new Error('API Error');
         const data = await safeResponseJson(response);

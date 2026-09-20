@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
 /**
  * 手账 v2 编排器 — 版式优先 / 槽位填空
  *
@@ -130,12 +129,12 @@ async function callLLM(
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-            body: JSON.stringify(prepareLlmRequest(apiConfig, {
+            body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature,
                 max_tokens: maxTokens,
-            })),
+            }),
         });
         if (!response.ok) {
             console.error(`[Handbook v2] HTTP ${response.status} ${response.statusText}`);

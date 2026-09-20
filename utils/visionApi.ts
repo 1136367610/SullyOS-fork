@@ -1,5 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
-import { copyLlmApiOptions } from './llmApiOptions';
 import type { ApiPreset, Message, VisionApiConfig } from '../types';
 import { DB } from './db';
 import { extractContent, safeFetchJson } from './safeApi';
@@ -31,7 +29,6 @@ const inFlightDescriptions = new Map<string, Promise<string>>();
 /** 把一份通用模型预设填入独立识图配置，不改变主 API 当前选择。 */
 export const visionApiConfigFromPreset = (preset: ApiPreset, enabled = true): VisionApiConfig => ({
   enabled,
-  ...copyLlmApiOptions(preset.config),
   baseUrl: normalizeApiBaseUrl(preset.config.baseUrl),
   apiKey: normalizeApiCredential(preset.config.apiKey),
   model: normalizeApiModel(preset.config.model),
@@ -78,7 +75,7 @@ export async function describeImageWithVisionApi(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.apiKey.trim()}`,
       },
-      body: JSON.stringify(prepareLlmRequest(config, {
+      body: JSON.stringify({
         model: config.model.trim(),
         messages: [{
           role: 'user',
@@ -90,7 +87,7 @@ export async function describeImageWithVisionApi(
         temperature: 0,
         max_tokens: 1200,
         stream: false,
-      })),
+      }),
     }, 1, 60_000, { appName: '消息', purpose: '识图' });
 
     const description = cleanDescription(extractContent(data));

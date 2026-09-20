@@ -1,4 +1,3 @@
-import { copyLlmApiOptions } from '../../utils/llmApiOptions';
 import type { APIConfig, ApiPreset } from '../../types';
 import { extractModelIds } from '../../utils/modelList';
 import { safeResponseJson } from '../../utils/safeApi';
@@ -19,9 +18,8 @@ export const collaborationProfileFromApi = (
   model: config.model || '',
   stream: config.stream ?? true,
   temperature: config.temperature ?? 0.7,
-  ...copyLlmApiOptions(config),
-  source: source === 'preset' ? 'custom' : source,
-  sourceId: source === 'preset' ? undefined : sourceId,
+  source,
+  sourceId,
   sourceName,
 });
 

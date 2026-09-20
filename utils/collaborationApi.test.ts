@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { APIConfig, ApiPreset } from '../types';
 import {
   fetchCollaborationModels,
-  collaborationProfileFromApi,
   hydrateCollaborationApiSettings,
 } from '../features/collaboration/api';
 import type { CollaborationSettings } from '../features/collaboration/types';
@@ -72,14 +71,6 @@ describe('collaboration API selection', () => {
       temperature: 0.35,
       source: 'preset',
     });
-  });
-
-  it('new preset selections are complete independent copies', () => {
-    const config = { ...chatApi, stream: true, temperature: 0, useMaxCompletionTokens: false };
-    const copy = collaborationProfileFromApi(config, 'preset', 'A', 'a');
-    config.temperature = 1;
-    const hydrated = hydrateCollaborationApiSettings(settings({ focused: copy }), chatApi, [{ id: 'a', name: 'A', config }]);
-    expect(hydrated.focused).toMatchObject({ stream: true, temperature: 0, useMaxCompletionTokens: false, source: 'custom' });
   });
 
   it('fetches common OpenAI-compatible model lists with the saved key', async () => {

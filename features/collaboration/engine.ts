@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../../utils/llmApiOptions';
 import { extractContent, safeFetchJson } from '../../utils/safeApi';
 import { buildCollaborationModelMessages } from './context';
 import type { ModelMessage } from './context';
@@ -121,7 +120,7 @@ export const runCollaborationTurn = async ({
       method: 'POST',
       headers,
       signal,
-      body: JSON.stringify(prepareLlmRequest(profile, requestBody)),
+      body: JSON.stringify(requestBody),
     },
     0,
     0,
@@ -170,7 +169,7 @@ export const summarizeCollaborationForMemory = async (input: {
       method: 'POST',
       headers,
       signal,
-      body: JSON.stringify(prepareLlmRequest(profile, {
+      body: JSON.stringify({
         model: profile.model.trim(),
         stream: false,
         temperature: 0.25,
@@ -184,7 +183,7 @@ export const summarizeCollaborationForMemory = async (input: {
             content: `任务标题：${sessionTitle}\n\n请把以下经历总结成一条我真正会记住的事情：\n\n${transcript}`,
           },
         ],
-      })),
+      }),
     },
     0,
     120_000,

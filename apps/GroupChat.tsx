@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { avatarDecorationImageStyle, isAnniversaryFrame } from '../utils/anniversaryGifts';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
@@ -1285,7 +1284,7 @@ ${memberTimeline || '(暂无互动记录)'}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, { model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.3, max_tokens: 2000 })),
+                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.3, max_tokens: 2000 }),
             });
             if (!response.ok) throw new Error(`API 返回 ${response.status}`);
             const data = await safeResponseJson(response);
@@ -1418,12 +1417,12 @@ ${memberTimeline || '(暂无互动记录)'}
             const data = await completeGroupChatWithMcp({
                 url: `${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`,
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: prepareLlmRequest(apiConfig, {
+                body: {
                     model: apiConfig.model,
                     messages: [{ role: "user", content: buildUserMessageContent(prompt, history) }],
                     temperature: 0.9, // High creativity for banter
                     max_tokens: 8000
-                }),
+                },
                 groupId: activeGroup.id,
                 userName: userProfile.name,
                 signal: abort.signal,
@@ -1533,12 +1532,12 @@ ${memberTimeline || '(暂无互动记录)'}
                     const data = await completeGroupChatWithMcp({
                         url: `${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`,
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                        body: prepareLlmRequest(apiConfig, {
+                        body: {
                             model: apiConfig.model,
                             messages: [{ role: "user", content: buildUserMessageContent(prompt, history) }],
                             temperature: 0.9,
                             max_tokens: 2000
-                        }),
+                        },
                         groupId: activeGroup.id,
                         userName: userProfile.name,
                         signal: abort.signal,

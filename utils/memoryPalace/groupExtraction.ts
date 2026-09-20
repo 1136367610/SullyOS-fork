@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../llmApiOptions';
 /**
  * Group Memory Palace — 群聊记忆提取（第三人称版本，独立于私聊）
  *
@@ -142,7 +141,7 @@ ${buildGroupRulesBlock(groupName, memberNames, userLabel)}
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${llmConfig.apiKey}`,
                 },
-                body: JSON.stringify(prepareLlmRequest(llmConfig, {
+                body: JSON.stringify({
                     model: llmConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -151,7 +150,7 @@ ${buildGroupRulesBlock(groupName, memberNames, userLabel)}
                     temperature: 0.4,
                     max_tokens: 12000,
                     stream: false,
-                })),
+                }),
             },
             2, 180_000, { appName: '记忆宫殿', purpose: '群记忆提取' }
         );

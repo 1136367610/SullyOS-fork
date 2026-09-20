@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
@@ -547,11 +546,11 @@ const Chat: React.FC = () => {
             const res = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
                     temperature: 0.3,
-                })),
+                }),
             });
             if (!res.ok) throw new Error(`translate http ${res.status}`);
             const data = await res.json();
@@ -2739,12 +2738,12 @@ const Chat: React.FC = () => {
                 const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                    body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                    body: JSON.stringify({
                         model: apiConfig.model,
                         messages: [{ role: "user", content: prompt }],
                         temperature: 0.5,
                         max_tokens: 8000 
-                    }))
+                    })
                 });
 
                 if (!response.ok) throw new Error(`API Error on ${dateStr}`);

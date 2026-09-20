@@ -425,7 +425,7 @@ export const sendInstantChatTurn = async (params: {
   char: CharacterProfile;
   chatMessages: Array<{ role: string; content: unknown }>;
   /** 本地生成这一轮会用的凭据（effectiveApi），云端必须用同一份。 */
-  api: import('../types').APIConfig;
+  api: { baseUrl: string; apiKey: string; model: string };
   /** 本地这一轮会发的采样温度；开思考时本地不发温度，这里也就不传。 */
   temperature?: number;
   maxTokens?: number;

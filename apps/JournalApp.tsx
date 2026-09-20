@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -508,14 +507,14 @@ Structure:
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: `Users Diary:\n${currentEntry.userPage.text}` }
                     ],
                     temperature: 0.85
-                }))
+                })
             });
 
             if (!response.ok) throw new Error('API Error');
@@ -619,12 +618,12 @@ ${charPart}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                body: JSON.stringify({
                     model: apiConfig.model,
                     messages: [{ role: 'user', content: prompt }],
                     temperature: 0.4,
                     max_tokens: 1200,
-                })),
+                }),
             });
             if (!response.ok) throw new Error(`主 API 失败 (${response.status})`);
             const data = await safeResponseJson(response);

@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
 /**
  * Pixel Home — LLM 装修逻辑
  *
@@ -101,7 +100,7 @@ ${JSON.stringify(layoutSummary, null, 2)}
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${llmConfig.apiKey}`,
         },
-        body: JSON.stringify(prepareLlmRequest(llmConfig, {
+        body: JSON.stringify({
           model: llmConfig.model,
           messages: [
             { role: 'system', content: systemPrompt },
@@ -109,7 +108,7 @@ ${JSON.stringify(layoutSummary, null, 2)}
           ],
           temperature: 0.7,
           max_tokens: 800,
-        })),
+        }),
       },
       2, 0, { appName: '小小窝', purpose: '房间布置' },
     );

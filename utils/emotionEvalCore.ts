@@ -1,4 +1,3 @@
-import { prepareLlmRequest, type LlmApiOptions } from './llmApiOptions';
 /**
  * 云端情绪评估的共用内核：占位符还原 + 副 API 请求 + 失败文案（先打码后截断）。
  *
@@ -10,7 +9,7 @@ import { prepareLlmRequest, type LlmApiOptions } from './llmApiOptions';
  */
 
 /** 副 API 凭据（没单独配就是主 API 那一份）。 */
-export interface EmotionEvalApi extends LlmApiOptions { baseUrl: string; apiKey: string; model: string }
+export interface EmotionEvalApi { baseUrl: string; apiKey: string; model: string }
 
 export const EMOTION_EVAL_SYSTEM_SLOT = '__EMOTION_EVAL_SYSTEM_PROMPT__';
 export const EMOTION_EVAL_HISTORY_SLOT = '__EMOTION_EVAL_HISTORY__';
@@ -108,7 +107,7 @@ export const requestEmotionEval = async (
         'Content-Type': 'application/json',
         Authorization: `Bearer ${api.apiKey || 'sk-none'}`,
       },
-      body: JSON.stringify(prepareLlmRequest(api, {
+      body: JSON.stringify({
         model: api.model,
         messages: [{ role: 'user', content: promptContent }],
         temperature: 0.85,
@@ -116,7 +115,7 @@ export const requestEmotionEval = async (
         // 会被截成半截 JSON。
         max_tokens: 8000,
         stream: false,
-      })),
+      }),
       signal: controller.signal,
     });
     if (!res.ok) {

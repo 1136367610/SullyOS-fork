@@ -1,4 +1,3 @@
-import { prepareLlmRequest } from './llmApiOptions';
 import { loadCharacterContextMessages } from './chatContextRange';
 
 /**
@@ -77,7 +76,7 @@ const callLlm = async (
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiConfig.apiKey || 'sk-none'}`,
         },
-        body: JSON.stringify(prepareLlmRequest(apiConfig, {
+        body: JSON.stringify({
             model: apiConfig.model,
             messages: [
                 { role: 'system', content: systemPrompt },
@@ -85,7 +84,7 @@ const callLlm = async (
             ],
             temperature: 0.85,
             stream: false,
-        })),
+        }),
         // API 调用记录标签：自由活动是后台任务，不标会被兜底成「用户当时打开的 App」
         __sullyMeta: { appName: '自由活动', purpose: '自由活动生成' },
     } as RequestInit);

@@ -3,7 +3,7 @@
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_9e059971b36a62b60bb8ce3daf58f01f/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.28_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1215,7 +1215,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_9e059971b36a62b60bb8ce3daf58f01f/node_modules/@rei-standard/amsg-server/dist/chunk-YBBXKK7U.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.28_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-YBBXKK7U.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -12763,67 +12763,6 @@ function buildScheduledPush(message, build, extraMeta, bannerBody) {
   };
 }
 
-// utils/llmApiOptions.ts
-var TOKEN_COMPAT_STORAGE_KEY = "os_llm_token_compat";
-var TOKEN_COMPAT_EVENT = "sully-token-compat-notice";
-var notices = [];
-function copyLlmApiOptions(api) {
-  return {
-    ...typeof api?.stream === "boolean" ? { stream: api.stream } : {},
-    ...typeof api?.temperature === "number" ? { temperature: api.temperature } : {},
-    ...typeof api?.useMaxCompletionTokens === "boolean" ? { useMaxCompletionTokens: api.useMaxCompletionTokens } : {}
-  };
-}
-function isLikelyGpt51(model) {
-  return typeof model === "string" && /gpt/i.test(model) && /(?:^|[^\d])5[.]1(?![\d]|[.]\d)/.test(model);
-}
-var identity = (api) => JSON.stringify([
-  (api.baseUrl || "").trim().replace(/\/chat\/completions\/?$/, "").replace(/\/+$/, ""),
-  (api.model || "").trim()
-]);
-function readPreferences() {
-  try {
-    const value = JSON.parse(localStorage.getItem(TOKEN_COMPAT_STORAGE_KEY) || "{}");
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  } catch {
-    return {};
-  }
-}
-function tokenCompatibilityEnabled(api) {
-  if (typeof api.useMaxCompletionTokens === "boolean") return api.useMaxCompletionTokens;
-  const saved = readPreferences()[identity(api)];
-  return typeof saved === "boolean" ? saved : isLikelyGpt51(api.model);
-}
-function rememberTokenCompatibility(api) {
-  const enabled = tokenCompatibilityEnabled(api);
-  if (typeof localStorage === "undefined" || !api.model) return enabled;
-  const prefs = readPreferences();
-  const key = identity(api);
-  if (prefs[key] === enabled) return enabled;
-  const automatic = api.useMaxCompletionTokens === void 0 && enabled && isLikelyGpt51(api.model);
-  if (!automatic && api.useMaxCompletionTokens === void 0) return enabled;
-  localStorage.setItem(TOKEN_COMPAT_STORAGE_KEY, JSON.stringify({ ...prefs, [key]: enabled }));
-  if (automatic && typeof window !== "undefined") {
-    notices.push(api.model);
-    window.dispatchEvent(new Event(TOKEN_COMPAT_EVENT));
-  }
-  return enabled;
-}
-function prepareLlmRequest(api, request) {
-  const body = { ...request };
-  const enabled = rememberTokenCompatibility(api);
-  if (enabled && body.max_tokens !== void 0) {
-    if (body.max_completion_tokens === void 0) body.max_completion_tokens = body.max_tokens;
-    delete body.max_tokens;
-  }
-  if (typeof api.temperature === "number" && "temperature" in body) body.temperature = api.temperature;
-  if (typeof window !== "undefined") {
-    body.__sullyTokenMode = enabled;
-    if (typeof api.stream === "boolean") body.__sullyStream = api.stream;
-  }
-  return body;
-}
-
 // utils/emotionEvalCore.ts
 var EMOTION_EVAL_SYSTEM_SLOT = "__EMOTION_EVAL_SYSTEM_PROMPT__";
 var EMOTION_EVAL_HISTORY_SLOT = "__EMOTION_EVAL_HISTORY__";
@@ -12866,7 +12805,7 @@ var requestEmotionEval = async (api, promptContent, timeoutMs = EMOTION_EVAL_TIM
         "Content-Type": "application/json",
         Authorization: `Bearer ${api.apiKey || "sk-none"}`
       },
-      body: JSON.stringify(prepareLlmRequest(api, {
+      body: JSON.stringify({
         model: api.model,
         messages: [{ role: "user", content: promptContent }],
         temperature: 0.85,
@@ -12874,7 +12813,7 @@ var requestEmotionEval = async (api, promptContent, timeoutMs = EMOTION_EVAL_TIM
         // 会被截成半截 JSON。
         max_tokens: 8e3,
         stream: false
-      })),
+      }),
       signal: controller.signal
     });
     if (!res.ok) {
@@ -12922,8 +12861,7 @@ var resolveEmotionEvalApi = async (spec, credRefs, resolveLlmCredential2) => {
   return {
     baseUrl: resolved.apiUrl.replace(/\/chat\/completions\/*$/i, ""),
     apiKey: resolved.apiKey || "",
-    model: resolved.primaryModel,
-    ...copyLlmApiOptions(spec.options)
+    model: resolved.primaryModel
   };
 };
 var amsgEmotionUpdateKey = (clientTaskId) => `emotion_update:${clientTaskId}`;
@@ -13084,7 +13022,7 @@ var readOverdueTasks = async (db, options) => {
     if (!row.uuid || nextSendAtMs === null) return null;
     const lastError = parseLastError(row.last_error);
     const currentError = lastError && isCurrentOccurrence(lastError, nextSendAtMs) ? lastError : null;
-    const identity2 = await readIdentity(row);
+    const identity = await readIdentity(row);
     const facts = {
       nextSendAtMs,
       createdAtMs: parseMs(row.created_at),
@@ -13092,18 +13030,18 @@ var readOverdueTasks = async (db, options) => {
       retryAfterMs: parseMs(row.retry_after),
       leaseUntilMs: parseMs(row.lease_until),
       currentErrorAtMs: currentError ? parseMs(currentError.at) : null,
-      serializeKey: identity2.serializeKey
+      serializeKey: identity.serializeKey
     };
-    return { row: { ...row, uuid: row.uuid }, nextSendAtMs, currentError, identity: identity2, facts };
+    return { row: { ...row, uuid: row.uuid }, nextSendAtMs, currentError, identity, facts };
   }))).filter((item) => item !== null);
   const verdicts = classifyOverdueTasks(prepared.map((item) => item.facts), nowMs);
-  const tasks = prepared.map(({ row, nextSendAtMs, currentError, identity: identity2, facts }, index) => {
+  const tasks = prepared.map(({ row, nextSendAtMs, currentError, identity, facts }, index) => {
     const verdict = verdicts[index];
     return {
       uuid: row.uuid,
-      charId: identity2.charId,
-      contactName: identity2.contactName,
-      kind: identity2.kind,
+      charId: identity.charId,
+      contactName: identity.contactName,
+      kind: identity.kind,
       messageType: row.message_type,
       nextSendAt: new Date(nextSendAtMs).toISOString(),
       state: verdict.state,
@@ -13144,12 +13082,12 @@ var readRecentFailures = async (db, options) => {
     const error = parseLastError(row.last_error);
     const atMs = parseMs(error?.at);
     if (!row.uuid || !error || atMs === null || atMs < sinceMs) return null;
-    const identity2 = await readIdentity(row);
+    const identity = await readIdentity(row);
     return {
       uuid: row.uuid,
-      charId: identity2.charId,
-      contactName: identity2.contactName,
-      kind: identity2.kind,
+      charId: identity.charId,
+      contactName: identity.contactName,
+      kind: identity.kind,
       messageType: row.message_type,
       outcome: row.status === "failed" ? "failed" : "skipped",
       error

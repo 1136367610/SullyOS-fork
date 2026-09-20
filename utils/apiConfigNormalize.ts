@@ -1,4 +1,3 @@
-import { copyLlmApiOptions } from './llmApiOptions';
 import type { APIConfig, ApiPreset } from '../types';
 
 // Clipboard contents can carry zero-width characters that String.trim() does not
@@ -26,7 +25,6 @@ export function normalizeApiConfig(config: APIConfig): APIConfig {
     model: normalizeApiModel(config.model),
     ...(visionApi ? {
       visionApi: {
-        ...copyLlmApiOptions(visionApi),
         enabled: visionApi.enabled === true,
         baseUrl: normalizeApiBaseUrl(visionApi.baseUrl),
         apiKey: normalizeApiCredential(visionApi.apiKey),

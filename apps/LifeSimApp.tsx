@@ -1,5 +1,3 @@
-import { copyLlmApiOptions } from '../utils/llmApiOptions';
-import { prepareLlmRequest } from '../utils/llmApiOptions';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 /**
  * LifeSimApp — 都市模拟人生 · 2026现代版
@@ -10,7 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import {
     LifeSimState, SimAction, SimActionType, SimEventType,
-    CharacterProfile, SimNPC, APIConfig,
+    CharacterProfile, SimNPC,
 } from '../types';
 import {
     createNewLifeSimState, createNPC, applyAddNPC,
@@ -88,12 +86,12 @@ async function callCharAI(
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                    body: JSON.stringify(prepareLlmRequest(apiConfig, {
+                    body: JSON.stringify({
                         model: apiConfig.model,
                         messages: [{ role: 'user', content: systemPrompt }],
                         temperature: 0.85, max_tokens: 8192, stream: false,
                         response_format: { type: 'json_object' },
-                    })),
+                    }),
                 },
                 2, 0, { appName: '都市人生', purpose: '剧情生成' }
             );
@@ -191,8 +189,6 @@ const LifeSimApp: React.FC = () => {
         const override = state.independentApiConfig || {};
         return {
             ...apiConfig,
-            ...copyLlmApiOptions(override),
-            useMaxCompletionTokens: override.useMaxCompletionTokens,
             baseUrl: override.baseUrl?.trim() || apiConfig.baseUrl,
             apiKey: override.apiKey?.trim() || apiConfig.apiKey,
             model: override.model?.trim() || apiConfig.model,
@@ -709,14 +705,13 @@ const LifeSimApp: React.FC = () => {
 
     const handleSaveLifeSimApiSettings = useCallback(async (payload: {
         enabled: boolean;
-        config: APIConfig;
+        config: { baseUrl: string; apiKey: string; model: string };
     }) => {
         if (!gameState) return;
         await saveState({
             ...gameState,
             useIndependentApiConfig: payload.enabled,
             independentApiConfig: {
-                ...copyLlmApiOptions(payload.config),
                 baseUrl: payload.config.baseUrl,
                 apiKey: payload.config.apiKey,
                 model: payload.config.model,
