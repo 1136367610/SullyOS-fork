@@ -129,7 +129,21 @@ const REQUIRED_WORKER_FEATURES = [
 //            看不出是中转站在报错。同一批还带上 0.4.0-next.9 的脱敏补漏：形状像模型名
 //            的自建网关 Key 不再明文进 last_error。
 // 不比版本的话，旧粘贴部署会被误判为最新，问题全在 worker 侧静默发生。
+//
 const REQUIRED_WORKER_VERSION = '2.6.0-next.28';
+
+/**
+ * 门槛故意落后于依赖时，把当前依赖的版本写在这里，表示「知道，是有意的」。
+ *
+ * next.29 多了按命名空间 / 按前缀清理的四条端点（「云端数据」清点用的就是它们），但那是
+ * **可选增强**：没有它的 worker 照样能清点和清理，只是「只在云端留了上下文、既没任务也
+ * 没凭据」的角色列不出来——那一页会自己说明清单不是全集。为这个亮一次「版本过旧」、
+ * 逼所有人重贴一遍部署，不值当。
+ *
+ * 守卫在 utils/amsgWorkerVersion.test.ts：门槛和这里两个都没跟上依赖，测试就会红，
+ * 免得哪天真有「不更新就出错」的改动被当成可选的漏过去。
+ */
+const WORKER_VERSION_LAG_ACK = '2.6.0-next.29';
 
 /** 装着打包好的 worker 代码的部署仓库：fork 它 → 在 Cloudflare 连上 → 以后点 Sync fork 更新。 */
 const WORKERS_REPO_URL = 'https://github.com/Tosd0/sullyos-workers';
