@@ -69,8 +69,9 @@ import {
 import { ActiveMsgClient } from '../utils/activeMsgClient';
 import { resolveCharTimeZone } from '../utils/timezone';
 import { ActiveMsgStore, exportAmsg2GlobalConfig } from '../utils/activeMsgStore';
-import { charMayHaveCloudState, purgeCharCloudState } from '../utils/amsg2CharCleanup';
-import { markAmsgStateDirty, markAmsgStateDirtyForAll, resumePendingAmsgStateSync, syncAmsgToolConfigAndPrompts } from '../utils/amsgStateSync';
+import { charMayHaveCloudState, purgeCharCloudState, purgeCloudCharById } from '../utils/amsg2CharCleanup';
+import { parseCharCredId } from '../utils/amsgLlmCredentials';
+import { markAmsgStateDirty, markAmsgStateDirtyForAll, resumePendingAmsgStateSync, syncAmsgToolConfigAndPrompts, wipeAmsgCloudDataForReset } from '../utils/amsgStateSync';
 import { loadMusicPlaybackSnapshot } from './MusicContext';
 import { setCharNameRegistry } from '../utils/charNameRegistry';
 import { setMinimaxRegion } from '../utils/minimaxEndpoint';
@@ -295,6 +296,18 @@ const normalizeMemoryPalaceConfig = (value?: Partial<MemoryPalaceGlobalConfig> |
 /** deleteCharacter 的结果：cloud-cleanup-failed = 云端还有任务没清掉，本地没删。 */
 export type DeleteCharacterResult = { status: 'deleted' } | { status: 'cloud-cleanup-failed' };
 
+/**
+ * resetSystem 的结果。
+ *
+ * `cloud-cleanup-failed` = 云端那份没清干净，**本地一个字节都还没动**，等调用方拿着
+ * worker 地址去问用户是重试还是照样重置。`failed` = 本地这一步自己炸了（已经提示过）。
+ * `done` 的时候页面正在刷新，调用方拿到它基本没机会做别的。
+ */
+export type ResetSystemResult =
+  | { status: 'done' }
+  | { status: 'cloud-cleanup-failed'; workerUrl: string; detail: string }
+  | { status: 'failed' };
+
 interface OSContextType {
   activeApp: AppID;
   openApp: (appId: AppID) => void;
@@ -429,7 +442,7 @@ interface OSContextType {
   // System
   exportSystem: (mode: 'text_only' | 'media_only' | 'full') => Promise<Blob>;
   importSystem: (fileOrJson: File | string) => Promise<void>; // Accept File or String
-  resetSystem: () => Promise<void>;
+  resetSystem: (options?: { force?: boolean }) => Promise<ResetSystemResult>;
   sysOperation: { status: 'idle' | 'processing', message: string, progress: number }; // Progress state
 
   // Logs
@@ -5181,14 +5194,33 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               const amsgWorkerUrl = (await ActiveMsgStore.getGlobalConfig()).workerUrl?.trim();
               if (amsgWorkerUrl) {
                   const knownCharIds = new Set(importedChars.map(c => c.id));
+                  const orphanCharIds = new Set<string>();
                   const remoteTasks = await ActiveMsgClient.listAllTasks();
                   for (const task of remoteTasks) {
                       if (typeof task?.uuid !== 'string') continue;
                       const owner = typeof task?.charId === 'string' ? task.charId : '';
                       if (owner && knownCharIds.has(owner)) continue;
+                      if (owner) orphanCharIds.add(owner);
                       // 「导入即放弃旧数据」：这条任务的主人在新档里已经不存在了（连主人是谁
                       // 都没投影出来的同理），它正属于该一起放弃的部分，取消就是对的。
                       await ActiveMsgClient.cancelTask(task.uuid).catch(() => {});
+                  }
+                  // 凭据清单是另一条线索：只配过 API、没排过任务的角色在任务表里根本不露面，
+                  // 但 credId 的形状是 `char:<charId>/<用途>`，角色身份就编在那个字符串里。
+                  try {
+                      for (const { credId } of await ActiveMsgClient.listLlmCredentials()) {
+                          const parsed = parseCharCredId(credId);
+                          if (parsed && !knownCharIds.has(parsed.charId)) orphanCharIds.add(parsed.charId);
+                      }
+                  } catch (e) {
+                      console.warn('[amsg2] 导入后读云端凭据清单失败，孤儿角色可能漏清', e);
+                  }
+                  // 取消任务只解决「还会不会响」。旧档角色在云端那份上下文（完整角色卡 +
+                  // 最近 30 条对话原文，一个角色 32KB 起步）和那几行 API 凭据还留着，而且
+                  // 新档里已经没有这个角色，再没有任何一条路会去刷新它或清掉它——角色命名
+                  // 空间在 worker 侧没有 TTL，不在这里清就是永久留着。
+                  for (const charId of orphanCharIds) {
+                      await purgeCloudCharById(charId).catch(() => {});
                   }
                   // 留下来的角色逐个刷云端快照，同时把导入进来的实时感知凭据传上去。
                   // 走同一个入口：云端提示词是按凭据裁过的，两者必须同进同退。
@@ -5224,7 +5256,38 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
   };
 
-  const resetSystem = async () => { try { await DB.deleteDB(); localStorage.clear(); window.location.reload(); } catch (e) { console.error(e); addToast('重置失败，请手动清除浏览器数据', 'error'); } };
+  /**
+   * 把这台设备和它名下的云端数据一起归零。
+   *
+   * 云端那一步必须排在删库**之前**：2.0 的连接信息（worker 地址、主密钥、用户 id）
+   * 就住在马上要删掉的 ActiveMsg 库里，删完就再也够不着那台 worker 了——而云端留着的
+   * 任务会继续到点跑、继续烧 API 额度、继续往这台设备推消息。
+   *
+   * 「重置全部数据」是用户明确表达过毁灭意图的操作，所以这里可以真删云端；换地址、
+   * 清空地址那几个没有这层意味的操作一律只提示、不动手。
+   *
+   * 云端没清干净就先不删本地（除非调用方 force）：本地一删，用户连重试的入口都没有了。
+   * 判据只看任务和角色上下文这两样——前者不清会继续烧钱，后者是聊天原文；凭据行和推送
+   * 订阅没清成只记一笔，不拦着用户重置（老 worker 上压根没有凭据表，拿它当判据会把
+   * 一批根本没东西可清的人堵在门口）。
+   */
+  const resetSystem = async (options?: { force?: boolean }): Promise<ResetSystemResult> => {
+    try {
+      const cleanup = await wipeAmsgCloudDataForReset();
+      if (!options?.force && cleanup.status === 'failed') {
+        return { status: 'cloud-cleanup-failed', workerUrl: cleanup.workerUrl, detail: cleanup.detail };
+      }
+      await DB.deleteDB();
+      await ActiveMsgStore.deleteDB();
+      localStorage.clear();
+      window.location.reload();
+      return { status: 'done' };
+    } catch (e) {
+      console.error(e);
+      addToast('重置失败，请手动清除浏览器数据', 'error');
+      return { status: 'failed' };
+    }
+  };
   const openApp = (appId: AppID) => setActiveApp(appId);
   const closeApp = () => setActiveApp(AppID.Launcher);
   // 从聊天直接进入某角色的见面：切换当前角色 + 标记自动进入 + 打开见面 App

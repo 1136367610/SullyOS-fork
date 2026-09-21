@@ -14,7 +14,8 @@ import {
 } from '../../utils/amsgDiagnostics';
 import { ActiveMsgStore, maskActiveMsgUserId } from '../../utils/activeMsgStore';
 import { formatTaskTime } from '../../utils/amsg2Tasks';
-import { cancelAllRemoteAmsgTasks, isWorkerUrlCleared, wipeAmsgCloudData } from '../../utils/amsgStateSync';
+import { isWorkerUrlCleared, wipeAmsgCloudData } from '../../utils/amsgStateSync';
+import { rememberDetachedWorker } from '../../utils/amsgDetachedWorkers';
 import { buildCloudflareDashboardUrl } from '../../utils/workerDeploy';
 import { generateClientToken } from '../../utils/vapidGen';
 import { loadPushVapid, savePushVapid } from '../../utils/pushVapid';
@@ -384,34 +385,40 @@ const ActiveMsgGlobalSettingsModal: React.FC<ActiveMsgGlobalSettingsModalProps> 
   }, [isOpen]);
 
   /**
-   * 地址被清空时的收尾：先问一句，再拿**旧地址**把远端任务取消干净，最后才存空值。
+   * 地址被清空时的收尾：把「那边还留着东西」说清楚，把旧地址记一笔，**不动云端数据**。
    *
-   * 光存空值的话，前端这边所有同步立刻停摆，D1 里的任务却一条没少：cron 每分钟照常
-   * 消费、照烧 LLM、照推送（推送订阅也还在），只是内容永远停在最后一次同步的样子。
-   * 用户以为自己关掉了一切，实际只是把自己变成了看不见的那一方。
+   * 早先这里会顺手把远端任务全取消掉，理由是「地址一清，回复推回来这边也接不住」。
+   * 但清空地址本身没有毁灭的意味：用户可能只是要换个反代端点、换个自定义域名，背后
+   * 还是同一台 worker、同一个 D1，照着「地址变了」就去销毁任务，等于把人家排好的东西
+   * 删了。真想清有专门的入口——「清空云端数据」是用户亲手点的，那里才该动手。
+   *
+   * 代价得说在明处：光存空值的话，前端这边所有同步立刻停摆，D1 里的任务却一条没少，
+   * cron 每分钟照常消费、照烧 LLM、照推送，只是内容永远停在最后一次同步的样子。所以
+   * 这句提示必须把「任务不会被取消」写明白，并且把旧地址记进备忘——地址一清，本地就
+   * 再没有别的地方记得它，用户想回去清都找不到门。
    */
-  const confirmAndClearRemote = async (): Promise<boolean> => {
-    const ok = confirm('清空 Worker 地址会把远端还挂着的主动消息任务一并取消，确定吗？\n\n不取消的话，那些任务仍会按时触发并给你推送，而这边已经管不到它们了。');
+  const confirmDetachWorker = async (previousUrl: string): Promise<boolean> => {
+    const ok = confirm(`清空 Worker 地址之后，那台 Worker 上已经排好的定时任务不会被取消——它们仍会按时触发、照常推送，只是这边管不到了。\n\n地址：${previousUrl}\n\n想连任务一起停掉的话，请先用下面「高级信息」里的「清空云端数据」清一遍，再回来清空地址。\n\n仍然清空吗？`);
     if (!ok) return false;
-    const { total, failed, listed } = await cancelAllRemoteAmsgTasks();
-    if (!listed) {
-      addToast('远端任务没能取消，可能还挂在那儿照常触发。建议把地址填回去，到角色的主动消息面板里逐个处理。', 'error');
-    } else if (failed > 0) {
-      addToast(`还有 ${failed} 个远端任务取消失败，建议恢复地址后在面板处理。`, 'error');
-    } else if (total > 0) {
-      addToast(`已取消远端 ${total} 个任务。`, 'info');
-    }
+    rememberDetachedWorker(previousUrl);
+    addToast('地址已清空，云端那份没动。想清的话把地址填回来，用「清空云端数据」清一遍。', 'info');
     return true;
   };
 
   const persistGlobalConfig = async () => {
     if (!config) return;
-    if (isWorkerUrlCleared(savedWorkerUrlRef.current, config.workerUrl)) {
-      if (!await confirmAndClearRemote()) {
+    const previousUrl = savedWorkerUrlRef.current;
+    const nextUrl = config.workerUrl || '';
+    if (isWorkerUrlCleared(previousUrl, nextUrl)) {
+      if (!await confirmDetachWorker(previousUrl)) {
         // 用户反悔：把地址填回输入框，别留一个「界面空着、库里还存着」的错位。
         patchConfig({ workerUrl: savedWorkerUrlRef.current });
         return;
       }
+    } else if (previousUrl && nextUrl && previousUrl !== nextUrl) {
+      // 换地址：多半只是换了个入口（反代端点、自定义域名），背后还是同一台 worker，
+      // 所以一个字节都不动，只把旧地址记一笔——万一真是换了后端，用户还有地方找回去。
+      rememberDetachedWorker(previousUrl);
     }
     await ActiveMsgStore.saveGlobalConfig({
       workerUrl: config.workerUrl,

@@ -558,6 +558,9 @@ const Settings: React.FC = () => {
   const [visionModelFilter, setVisionModelFilter] = useState('');
   const [showExportModal, setShowExportModal] = useState(false); // Used for completion now
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  /** 云端没清干净时停在这里：本地还一个字节都没动，等用户决定重试还是照样重置。 */
+  const [resetCloudFailure, setResetCloudFailure] = useState<{ workerUrl: string; detail: string } | null>(null);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showApiCallLog, setShowApiCallLog] = useState(false);
   const [showRealtimeModal, setShowRealtimeModal] = useState(false);
@@ -1736,9 +1739,32 @@ const Settings: React.FC = () => {
       }
   };
 
-  const confirmReset = () => {
-      resetSystem();
-      setShowResetConfirm(false);
+  // 重置会先清云端再删本地，清云端要发几个请求，所以按钮得自己顶着「进行中」。
+  // 顺利的话页面直接刷新，下面这些 setState 都执行不到。
+  const confirmReset = async () => {
+      setResetting(true);
+      try {
+          const result = await resetSystem();
+          if (result.status === 'cloud-cleanup-failed') {
+              setShowResetConfirm(false);
+              setResetCloudFailure({ workerUrl: result.workerUrl, detail: result.detail });
+          } else if (result.status === 'failed') {
+              setShowResetConfirm(false);
+          }
+      } finally {
+          setResetting(false);
+      }
+  };
+
+  /** 云端没清干净，用户仍然要重置：这一次不再拦，能清多少算多少。 */
+  const confirmResetAnyway = async () => {
+      setResetting(true);
+      try {
+          setResetCloudFailure(null);
+          await resetSystem({ force: true });
+      } finally {
+          setResetting(false);
+      }
   };
 
   // 保存实时感知配置
@@ -4636,8 +4662,8 @@ const Settings: React.FC = () => {
           onClose={() => setShowResetConfirm(false)}
           footer={
               <div className="flex gap-2 w-full">
-                  <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl">取消</button>
-                  <button onClick={confirmReset} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg shadow-red-200">确认格式化</button>
+                  <button onClick={() => setShowResetConfirm(false)} disabled={resetting} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl disabled:opacity-50">取消</button>
+                  <button onClick={confirmReset} disabled={resetting} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg shadow-red-200 disabled:opacity-60">{resetting ? '清理中…' : '确认格式化'}</button>
               </div>
           }
       >
@@ -4645,6 +4671,32 @@ const Settings: React.FC = () => {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-red-500"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
               <p className="text-center text-sm text-slate-600 font-medium">
                   这将<span className="text-red-500 font-bold">永久删除</span>所有角色、聊天记录和设置，且无法恢复！
+              </p>
+              <p className="text-center text-xs text-slate-400">
+                  主动消息 2.0 在云端存的定时任务、角色上下文和 API 凭据也会一起清掉。
+              </p>
+          </div>
+      </Modal>
+
+      {/* 云端没清干净：本地还一个字节都没动，让用户决定 */}
+      <Modal
+          isOpen={!!resetCloudFailure}
+          title="云端还没清干净"
+          onClose={() => setResetCloudFailure(null)}
+          footer={
+              <div className="flex gap-2 w-full">
+                  <button onClick={() => setResetCloudFailure(null)} disabled={resetting} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl disabled:opacity-50">先不重置</button>
+                  <button onClick={confirmResetAnyway} disabled={resetting} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg shadow-red-200 disabled:opacity-60">{resetting ? '清理中…' : '仍然重置'}</button>
+              </div>
+          }
+      >
+          <div className="flex flex-col gap-3 py-2 text-sm text-slate-600">
+              <p>{resetCloudFailure?.detail}。本地数据一个字节都还没动，你可以检查一下网络和 Worker 连接再试一次。</p>
+              <p className="text-xs text-slate-400 break-all">
+                  Worker 地址：{resetCloudFailure?.workerUrl}
+              </p>
+              <p className="text-xs text-rose-500">
+                  仍然重置的话，本地会归零，而云端那些没清掉的定时任务还会到点运行、消耗你的 API 额度。重置之后本地不再保存连接信息，只能去 Cloudflare 后台手动删掉那个 D1 数据库。
               </p>
           </div>
       </Modal>

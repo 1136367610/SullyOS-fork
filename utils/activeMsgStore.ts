@@ -17,6 +17,8 @@ const STORE_OUTBOUND_SESSIONS = 'outbound_sessions';
 const STORE_PENDING_TOOL_CALLS = 'pending_tool_calls';
 const STORE_REASONING_BUFFER = 'reasoning_buffer';
 const GLOBAL_CONFIG_KEY = 'global-config';
+/** 删库被别的连接挡住时最多等多久（见 deleteDB 的注释）。 */
+const DELETE_DB_BLOCKED_TIMEOUT_MS = 3000;
 
 const EXPIRED_NOTICES_PREFIX = 'amsg2_expired_notices_';
 const EXPIRED_NOTICES_MAX = 10;
@@ -186,6 +188,40 @@ const generateUuidV4 = () => {
 };
 
 export const ActiveMsgStore = {
+  /**
+   * 删掉整个 ActiveMsg 库。只给「重置全部数据」用。
+   *
+   * 2.0 的连接信息（worker 地址、共享密钥、主密钥、用户 id）住在这个库里，跟角色、
+   * 聊天记录那个主库（AetherOS_Data）是分开的两个库。重置只删主库的话，角色全没了
+   * 而连接信息还在，云端那批任务照样到点跑、照样烧 API 额度、照样往这台设备推消息，
+   * 本地却已经没有任何记录知道它们存在。
+   *
+   * Service Worker 也开着这个库（见 worker/sw-keep-alive.ts），它那条连接不归页面管，
+   * 所以 deleteDatabase 可能一直 blocked。超时后照常往下走，不把重置卡在这里：重置的
+   * 下一步就是刷新页面，页面一刷新连接就断，库会在那之后被删掉。
+   */
+  async deleteDB(): Promise<void> {
+    if (dbPromise) {
+      try { (await dbPromise).close(); } catch { /* ignore */ }
+      dbPromise = null;
+    }
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      const finish = () => resolve();
+      // blocked 不是终态：占用方关闭后仍会触发 onsuccess。超时兜底只是不再等它。
+      const timer = setTimeout(finish, DELETE_DB_BLOCKED_TIMEOUT_MS);
+      const settle = () => { clearTimeout(timer); finish(); };
+      request.onsuccess = settle;
+      request.onerror = () => {
+        console.warn('[ActiveMsgStore] 删库失败', request.error);
+        settle();
+      };
+      request.onblocked = () => {
+        console.warn('[ActiveMsgStore] 删库被占用方挡住，等页面刷新后自行完成');
+      };
+    });
+  },
+
   async getGlobalConfig(): Promise<ActiveMsg2GlobalConfig> {
     const stored = await getKv<ActiveMsg2GlobalConfig>(GLOBAL_CONFIG_KEY);
     const config = { ...defaultGlobalConfig, ...(stored || {}) };
