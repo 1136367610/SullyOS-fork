@@ -3159,6 +3159,52 @@ export const ActiveMsgClient = {
   },
 
   /**
+   * 列出云端 client_state 里有哪些命名空间，各占多少。给「云端数据」清点用。
+   *
+   * 这是唯一一条能发现「本地已经没有、云端只剩一份上下文」的角色的线索：任务表和凭据
+   * 表都问不到它们（没排过任务、没配过单独 API），而角色命名空间在 worker 侧没有 TTL，
+   * 不主动去看就永远不知道它在那儿。
+   *
+   * 要用户那台 worker 更新到带 `client-state-namespaces` 的版本。老 worker 上那条路由
+   * 不存在，直接问会拿到一句没法解释的 404——所以先问 capabilities，缺能力时抛一句
+   * 说得清的话，界面照它提示「更新 Worker 之后清单会更全」。
+   *
+   * 这一趟要在 worker 上按用户扫一遍 client_state，所以只在用户点开清点界面时调，
+   * 别塞进体检或者任何定时路径（每分钟白扫一遍 D1 就是 rows read 被扫穿的来由）。
+   */
+  async listCloudNamespaces(): Promise<Array<{
+    namespace: string; entryCount: number; byteSize: number; updatedAt: number | null;
+  }>> {
+    const config = await ensureWorkerReady();
+    const client = await initializeClient(config);
+    const features = await this.getCapabilities().then((c) => c?.features ?? null).catch(() => null);
+    if (!features?.includes('client-state-namespaces')) {
+      throw new Error('这台 Worker 还没有「列出云端命名空间」的能力，更新 Worker 之后清单会更全。');
+    }
+    const response = await fetchWithAuth('client-state/namespaces', config, {
+      method: 'GET',
+      headers: {
+        'X-Response-Encrypted': 'true',
+        'X-Encryption-Version': '1',
+      },
+    }, '读取云端命名空间清单');
+    if (!response?.success) {
+      throw new Error(response?.error?.message || '读取云端命名空间清单失败。');
+    }
+    const payload = await decryptPayload(client, response.data) as {
+      namespaces?: Array<{ namespace?: unknown; entryCount?: unknown; byteSize?: unknown; updatedAt?: unknown }>;
+    };
+    return (payload?.namespaces ?? [])
+      .filter((row): row is { namespace: string } & Record<string, unknown> => typeof row?.namespace === 'string' && !!row.namespace)
+      .map((row) => ({
+        namespace: row.namespace,
+        entryCount: Number(row.entryCount ?? 0) || 0,
+        byteSize: Number(row.byteSize ?? 0) || 0,
+        updatedAt: typeof row.updatedAt === 'number' ? row.updatedAt : null,
+      }));
+  },
+
+  /**
    * 列出云端登记着哪些凭据行。上游只回 credId 和更新时间，**不回凭据本体**。
    *
    * credId 的形状是 `char:<charId>/<用途>`，角色身份就编在这个字符串里——所以这是眼下
