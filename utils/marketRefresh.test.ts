@@ -103,3 +103,27 @@ describe('路人一次模型调用',()=>{
    await expect(runMarketNPCSession(api)).rejects.toThrow('截断');
    expect(localStorage.getItem('vr_fishing_market_v1')).toBe(before);
  });
+
+ it.each([
+  ['duplicate', '重复发帖或交易'], ['target', 'targetId'], ['price', 'price'],
+ ])('identifies the exact seventh action failure: %s', (kind, expected) => {
+   const snapshot=prepareMarketNPCs(initial(),()=>.1),ids=snapshot.visitors.map(v=>v.id);
+   const actions:any[]=dialogue(ids);
+   while(actions.length<6)actions.push({actorId:ids[1],action:'comment',targetId:'n1',words:'有效回复'});
+   const bad=kind==='duplicate'?{...actions[0],ref:'n2'}:kind==='length'?{actorId:ids[1],action:'comment',targetId:'n1',words:'密'.repeat(601)}:kind==='target'?{actorId:ids[1],action:'comment',targetId:'unknown',words:'正文'}:{actorId:ids[1],action:'list',ref:'n2',title:'标题',words:'正文',price:'10'};
+   actions.push(bad);
+   expect(()=>plan(snapshot,actions)).toThrow('动作 7');
+   expect(()=>plan(snapshot,actions)).toThrow(expected);
+   try{plan(snapshot,actions)}catch(error){expect(String(error)).not.toContain('密密密');}
+ });
+
+ it('keeps long public text, titles and replies instead of rejecting or truncating them',()=>{
+   const snapshot=prepareMarketNPCs(initial(),()=>.1),actions=dialogue(snapshot.visitors.map(v=>v.id));
+   const long='长正文'.repeat(700)+'结尾保留';
+   actions[0].words=long;actions[0].title='长标题'.repeat(30);
+   actions[1].words=long;
+   const result=applyMarketNPCs(initial(),snapshot,plan(snapshot,actions));
+   expect(result.state.requests[0].body).toBe(long);
+   expect(result.state.requests[0].itemLabel).toBe(actions[0].title);
+   expect(result.state.requests[0].comments[0].content).toBe(long);
+ });
