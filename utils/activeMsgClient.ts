@@ -19,10 +19,18 @@ import { getLastRealUserMessageAt } from './amsg2ExpireGuard';
 import { AMSG_BUNDLE_VERSION } from './amsgBundleVersion';
 import { buildTaskInstruction, resolveSendAtMs } from './amsgFireSchedule';
 import {
-  getPendingTasks, isAmsg2EnabledForChar, MAX_ACTIVE_TASKS_PER_CHAR,
+  getPendingTasks, isAmsg2EnabledForChar,
   parseRemoteTaskLastError, RemoteTaskLastError, type RemoteTaskProjection,
   resolveExpirePolicy, toDatetimeLocalValue,
 } from './amsg2Tasks';
+import {
+  AMSG_DAILY_SENDS_KEY,
+  AMSG_LIMITS_KEY,
+  type AmsgDailySends,
+  buildAmsgLimitsRecord,
+  parseDailySends,
+  resolveAmsgLimits,
+} from './amsgLimits';
 import { AMSG_CHAT_PRESENCE_KEY, AmsgChatPresence } from './amsgChatPresence';
 import {
   AmsgDiagnosticsProbe, AmsgFailKind, type AmsgTickReportResult, describeAmsgFetchFailure, parseAmsgDebugReport,
@@ -887,11 +895,6 @@ export const buildFirePack = async (
     // 自排任务备账还配不配得上当前清单（见 amsgFirePack 的 reconcileSelfLogWithPack）。
     // 每打一次包都是新值。
     builtAt: Date.now(),
-    // 用户主权连发上限（0 = 不限；没设就不带，worker 用默认值）。worker 拿它拦两处：
-    // 排程工具打回超额自排、角色自排任务到点兜底作废。用户面板排的任务不受它管。
-    ...(typeof char.activeMsg2Config?.maxUnansweredSends === 'number'
-      ? { maxUnansweredSends: char.activeMsg2Config.maxUnansweredSends }
-      : {}),
     // 角色级 2.0 开关随包上云：关着的角色即便走即时对话（全局开关是另一颗），云端
     // fire 也不给排程能力——本地的 amsg2ToolsInjected 闸门在云端的对应物就是它。
     selfScheduleEnabled: isAmsg2EnabledForChar(char),
@@ -1374,11 +1377,25 @@ export const owesInstantChatReply = (charId: string): boolean =>
  * 「哪个 namespace 配哪个 key 配哪个 build 函数」只在这里写一遍：排程和批量同步两条路
  * 都得把同一批东西写上去，各写各的话漏一条就是 worker 到点读不到 → 整条任务硬失败。
  */
+/**
+ * 用户给这个角色定的「频率与额度」（见 amsgLimits）。
+ *
+ * 保存设置时单独立刻传一次（putCharLimits），每次传 fire_pack 也顺手带一份——两条路
+ * 都走这里，worker 读到的永远是同一个构造出来的形状。
+ */
+const buildLimitsEntry = (char: CharacterProfile, updatedAt: number) => ({
+  namespace: amsgStateNamespace(char.id),
+  key: AMSG_LIMITS_KEY,
+  value: JSON.stringify(buildAmsgLimitsRecord(char.activeMsg2Config, isAmsg2EnabledForChar(char))),
+  updatedAt,
+});
+
 const buildCharStateEntries = async (
   char: CharacterProfile,
   firePack: AmsgFirePack,
   updatedAt: number,
 ) => [
+  buildLimitsEntry(char, updatedAt),
   {
     namespace: amsgStateNamespace(char.id),
     key: AMSG_FIRE_PACK_KEY,
@@ -2379,11 +2396,13 @@ export const ActiveMsgClient = {
     if (nativeToken) await this.registerNativePushToken(nativeToken);
     else await this.registerPushSubscription();
 
-    // 数量封顶：待触发任务（不含被替换的那个）满 5 个就拒绝，让角色/用户先清。
+    // 数量封顶：待触发任务（不含被替换的那个）排满就拒绝，让角色/用户先清。名额用户可调，
+    // 用户和角色共用（见 amsgLimits 的 maxActiveTasks）。
+    const maxActiveTasks = resolveAmsgLimits(config).maxActiveTasks;
     const pendingOthers = getPendingTasks(config, Date.now())
       .filter((t) => t.taskUuid !== replaceTaskUuid);
-    if (pendingOthers.length >= MAX_ACTIVE_TASKS_PER_CHAR) {
-      throw new Error(`该角色的待触发任务已达上限 ${MAX_ACTIVE_TASKS_PER_CHAR} 个，请先取消或合并已有任务。`);
+    if (pendingOthers.length >= maxActiveTasks) {
+      throw new Error(`该角色同时排着的消息已经有 ${maxActiveTasks} 条了（上限在「主动频率」里调），请先取消或合并已有的。`);
     }
 
     // 角色的时间参照系：任务行、fire_pack、worker 渲染全用这一个，解析 send_at 也一样。
@@ -3561,12 +3580,46 @@ export const ActiveMsgClient = {
    * 读失败按「没有记录」处理：这是一句锦上添花的说明，不该让面板打不开。
    */
   async readLastSkip(charId: string): Promise<AmsgLastSkip | null> {
+    return (await this.readPanelStatus(charId)).lastSkip;
+  },
+
+  /**
+   * 面板上那两句「近况」一次读齐：最近一次为什么没响（last_skip）、今天主动找了几次
+   * （daily_sends）。两份住在同一个角色命名空间里，读一次整个命名空间就都有了——分两次
+   * 读的话每次都要把几十 KB 的 fire_pack 一起拉下来解密。读失败两样都按「没有」处理：
+   * 这是锦上添花的说明，不该让面板打不开。
+   */
+  async readPanelStatus(charId: string): Promise<{
+    lastSkip: AmsgLastSkip | null;
+    dailySends: AmsgDailySends | null;
+  }> {
     try {
-      const value = await this.readClientStateValue(amsgStateNamespace(charId), AMSG_LAST_SKIP_KEY);
-      return value ? parseLastSkip(value) : null;
+      const config = await ensureWorkerReady();
+      const client = await initializeClient(config);
+      const response = await client.getClientState(amsgStateNamespace(charId));
+      if (!response?.success) return { lastSkip: null, dailySends: null };
+      const entries = (response.data?.entries ?? []) as Array<{ key: string; value: string }>;
+      const valueOf = (key: string) => entries.find((e) => e?.key === key)?.value || null;
+      const skipValue = valueOf(AMSG_LAST_SKIP_KEY);
+      return {
+        lastSkip: skipValue ? parseLastSkip(skipValue) : null,
+        dailySends: parseDailySends(valueOf(AMSG_DAILY_SENDS_KEY)),
+      };
     } catch {
-      return null;
+      return { lastSkip: null, dailySends: null };
     }
+  },
+
+  /**
+   * 把这个角色的「频率与额度」单独传上去（面板保存、关掉 2.0 时用）。
+   *
+   * 不等下一次 fire_pack 同步：那一份要「有待发任务、聊完一轮」才重传，用户改的上限会
+   * 迟迟不生效。失败照抛，让面板告诉用户没同步上。
+   */
+  async putCharLimits(char: CharacterProfile): Promise<void> {
+    const config = await ensureWorkerReady();
+    const client = await initializeClient(config);
+    await putClientStateOrThrow(client, [buildLimitsEntry(char, stampStateUpdatedAt())], '同步主动频率设置');
   },
 
   /**
