@@ -140,10 +140,15 @@ const REQUIRED_WORKER_VERSION = '2.6.0-next.28';
  * 没凭据」的角色列不出来——那一页会自己说明清单不是全集。为这个亮一次「版本过旧」、
  * 逼所有人重贴一遍部署，不值当。
  *
+ * next.30 让投递重试少花钱：模型明确拒了请求（Key 失效、余额不足、模型名写错……）一跳就
+ * 终审，不再白试 4 次；内容已经落进收件箱、只是推送没成的，重试只补推原文，不再重新生成。
+ * 老 worker 上这些照旧是多花钱、不出错，所以同样不抬门槛——bundle 版本已经往前推了，
+ * 设置页会提示有更新。
+ *
  * 守卫在 utils/amsgWorkerVersion.test.ts：门槛和这里两个都没跟上依赖，测试就会红，
  * 免得哪天真有「不更新就出错」的改动被当成可选的漏过去。
  */
-const WORKER_VERSION_LAG_ACK = '2.6.0-next.29';
+const WORKER_VERSION_LAG_ACK = '2.6.0-next.30';
 
 /** 装着打包好的 worker 代码的部署仓库：fork 它 → 在 Cloudflare 连上 → 以后点 Sync fork 更新。 */
 const WORKERS_REPO_URL = 'https://github.com/Tosd0/sullyos-workers';
