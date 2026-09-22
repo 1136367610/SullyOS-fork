@@ -74,7 +74,7 @@ it('rejects malformed hidden events, impersonated actor ids, incomplete personas
 });
 it('refuses to rename an NPC with open posts, and changing persona never refills a wallet',()=>{
  const {state,data}=fixture(),snapshot=prepareMarketNPCs(state,()=>.1);
- const altered=structuredClone(data);altered.personas[0].name='另一个人';expect(()=>parseMarketNPCs(JSON.stringify(altered),snapshot)).toThrow();
+ const altered=structuredClone(data);altered.personas[0].name='另一个人';const kept=parseMarketNPCs(JSON.stringify(altered),snapshot);expect(kept[0].persona).toEqual(snapshot.visitors[0].persona);const applied=applyMarketNPCs(state,snapshot,kept);expect(applied.state.accounts).toEqual(state.accounts);expect(applied.state.listings.at(-1)?.npcPersona?.name).toBe('路人0');
  const closed=M.removeMarketPost(state,state.listings[0].id,'wanderer:0');const next=prepareMarketNPCs(closed,()=>.1);
  const generated=applyMarketNPCs(closed,next,parseMarketNPCs(JSON.stringify(altered),next));
  expect(generated.state.accounts).toEqual(closed.accounts);expect(generated.state.listings[0].npcPersona?.name).toBe('路人0');
