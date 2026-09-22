@@ -16,7 +16,6 @@ import { canSynthesizeSpeech, stripTtsMarkupForDisplay, synthesizeSpeechDetailed
 import { CANTONESE_VOICE_SUPPORT_NOTE, VOICE_LANGUAGE_OPTIONS, voiceLanguageAnalyticsValue, voiceLanguagePromptLabel } from '../utils/voiceLanguage';
 import { startStt, isSttSupported, type SttSession } from '../utils/speechToText';
 import { ContextBuilder } from '../utils/context';
-import { injectWorldbookDepthEntries, resolveWorldbookDepthEntries } from '../utils/worldbook';
 import { resolveCharTimeZone } from '../utils/timezone';
 import {
   injectMemoryPalace,
@@ -99,7 +98,7 @@ import {
   type UserCameraEmotionResult,
 } from '../utils/userCameraEmotion';
 import {
-  attachSnapshotToLatestUserMessage,
+  prepareUserCameraSnapshot,
   captureUserCameraSnapshot,
   isVisionInputUnsupportedError,
   USER_CAMERA_SNAPSHOT_SYSTEM_NOTE,
@@ -1775,17 +1774,18 @@ const CallApp: React.FC = () => {
         const directorApi = resolvePerformanceDirectorApi(character);
         const baseUrl = directorApi.baseUrl?.replace(/\/+$/, '');
         if (!baseUrl) return null;
-        const coreContext = ContextBuilder.buildCoreContext(character, userProfile, true);
+        const characterContextInput = { char: character, user: userProfile, includeDetailedMemories: true };
+
         const prompt = buildAvatarPerformancePersonaPrompt({
           characterName: character.name,
-          coreContext,
+          coreContext: '',
         });
         const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${directorApi.apiKey || 'sk-none'}` },
           body: JSON.stringify({
             model: directorApi.model,
-            messages: [{ role: 'user', content: prompt }],
+            messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'user', content: prompt }]),
             temperature: 0.25,
             max_tokens: AVATAR_PERFORMANCE_PERSONA_MAX_TOKENS,
             stream: false,
@@ -1902,28 +1902,9 @@ ${sentencePlan}`;
       await injectMemoryPalace(selectedChar, callMsgs);
     }
     const touchContext = selectedChar
-      ? buildPendingAvatarTouchContext(
-          pendingTouches,
-          selectedChar.name,
-          userName,
-        )
+      ? buildPendingAvatarTouchContext(pendingTouches, selectedChar.name, userName)
       : '';
-    // 历史先建好：世界书关键词要扫它，「聊天记录指定深度」的条目也要插进它
     const messages = await buildHistoryMessages(input, skipDbId, touchContext);
-    const baseCallPrompt = selectedChar
-      ? buildCallPrompt(
-          userName,
-          selectedChar.name,
-          // conversational：通话是实时对话，时间块补那句语境框定（见 buildTimeAwarenessBlock）
-          ContextBuilder.buildCoreContext(selectedChar, userProfile, true, undefined, undefined, {
-            conversational: true,
-            worldbookMessages: messages,
-          }),
-          voiceLang || undefined,
-          callMode,
-          resolveCharTimeZone(selectedChar),
-        )
-      : buildCallPrompt(userName, undefined, undefined, voiceLang || undefined, callMode);
     const thinkingPrompt = selectedChar?.showThinkingChain
       ? [
           buildThinkingChainPrompt(selectedChar.name, userName),
@@ -1950,6 +1931,14 @@ ${sentencePlan}`;
     if (includeUserCameraContext && callMode === 'video' && userCameraMode === 'snapshot' && !userCameraSnapshot && userCameraSnapshotForTurn === undefined) {
       addToast('摄像头画面还没准备好，本轮已只发送文字', 'info');
     }
+    const snapshotHistory = prepareUserCameraSnapshot(messages, userCameraSnapshot);
+    const characterContext = selectedChar ? ContextBuilder.buildCharacterContext({
+      char: selectedChar, user: userProfile, history: snapshotHistory.messages,
+      timeOptions: { conversational: true },
+      instructions: core => buildCallPrompt(userName, selectedChar.name, core, voiceLang || undefined, callMode, resolveCharTimeZone(selectedChar)),
+    }) : null;
+    const baseCallPrompt = characterContext?.coreContext
+      ?? buildCallPrompt(userName, undefined, undefined, voiceLang || undefined, callMode);
     const baseSystemPrompt = [
       baseCallPrompt,
       callMode === 'video' && !highQualityPerformance ? buildAvatarPerformancePrompt(allowedModelActions) : '',
@@ -1959,15 +1948,8 @@ ${sentencePlan}`;
     const systemPrompt = [baseSystemPrompt, userCameraSnapshot ? USER_CAMERA_SNAPSHOT_SYSTEM_NOTE : '']
       .filter(Boolean)
       .join('\n\n');
-    // 深度条目在贴完快照之后再插：快照要贴在用户本轮的话上，
-    // 不能让插进来的 user 角色条目顶掉「最后一条 user 消息」的位置
-    const depthEntries = selectedChar
-      ? resolveWorldbookDepthEntries(selectedChar.mountedWorldbooks || [], messages, selectedChar.name, userName)
-      : [];
-    const textOnlyMessages = injectWorldbookDepthEntries(messages, depthEntries);
-    const requestMessages = userCameraSnapshot
-      ? injectWorldbookDepthEntries(attachSnapshotToLatestUserMessage(messages, userCameraSnapshot), depthEntries)
-      : textOnlyMessages;
+    const requestMessages = characterContext?.history ?? snapshotHistory.messages;
+    const textOnlyMessages = snapshotHistory.restoreTextMessages(requestMessages);
     const sendChatRequest = (
       nextMessages: any[],
       nextSystemPrompt: string,

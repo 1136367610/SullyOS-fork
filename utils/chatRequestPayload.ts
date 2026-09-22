@@ -34,7 +34,6 @@ import { buildMcpSystemBlock, MCP_TAIL_REMINDER } from './mcpToolBridge';
 import type { MusicCfg, Song, LyricLine, MusicPlaybackSnapshot, RecentTrackChange } from '../context/MusicContext';
 import { isPromptBuildSkipped, isSystemMessageMergeEnabled } from './devDebug';
 import { mergeSystemMessages } from './systemMessageMerge';
-import { injectWorldbookDepthEntries, resolveWorldbookDepthEntries } from './worldbook';
 import { normalizeTranslationLangLabel } from './translationLang';
 import { cleanApiMessages, flattenImageContentParts } from './promptMessageCleanup';
 import { materializeVisionDescriptions } from './visionApi';
@@ -327,6 +326,20 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     // 但主 API 的 historyMsgsForPrompt 来自完整 DB，仍然会看到它们。模式切换必须以 API
     // 真正要发送的历史为准，否则模型会收到特殊模式正文，却收不到「切回聊天格式」的提示。
     const returningFromMode = detectChatModeTransition(historyMsgsForPrompt);
+    // 在公共上下文管线之前准备实际历史，世界书触发和摆放共用这一份消息。
+    const { apiMessages } = ChatPrompts.buildMessageHistory(
+        historyMsgsForPrompt,
+        contextLimit,
+        char,
+        userProfile,
+        emojis,
+        undefined,
+        { useVisionDescriptions, contextHighWaterMark },
+    );
+
+    // ── 8. 剥离历史里旧的双语标签（stripImages 时先压平 image_url → 纯文本占位） ──
+    const cleanedApiMessages = cleanApiMessages(input.stripImages ? flattenImageContentParts(apiMessages) : apiMessages);
+
     const parts = await ChatPrompts.buildSystemPromptParts(
         char, userProfile, groups, emojis, categories, recentMsgsHint,
         realtimeConfig, innerState || undefined,
@@ -334,10 +347,11 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         !!isListeningTogether,
         musicCfg,
         recentTrackSwitch,
-        (input.timelyByWorker || returningFromMode) ? {
+        {
+            history: cleanedApiMessages,
             timelyByWorker: input.timelyByWorker === true,
             returningFromMode: returningFromMode || undefined,
-        } : undefined,
+        },
     );
     let systemPrompt = parts.stable;
     let volatileTail = parts.volatileState;
@@ -398,23 +412,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         }
     }
 
-    // ── 7. 历史消息构造 ───────────────────────────────────
-    const { apiMessages } = ChatPrompts.buildMessageHistory(
-        historyMsgsForPrompt,
-        contextLimit,
-        char,
-        userProfile,
-        emojis,
-        undefined,
-        { useVisionDescriptions, contextHighWaterMark },
-    );
-
-    // ── 8. 剥离历史里旧的双语标签（stripImages 时先压平 image_url → 纯文本占位） ──
-    const cleanedApiMessages = cleanApiMessages(input.stripImages ? flattenImageContentParts(apiMessages) : apiMessages);
-    const messagesWithWorldbookDepth = injectWorldbookDepthEntries(
-        cleanedApiMessages,
-        resolveWorldbookDepthEntries(char.mountedWorldbooks || [], cleanedApiMessages, char.name, userProfile.name),
-    );
+    const messagesWithWorldbookDepth = parts.history;
 
     // ── 9. 麦当劳小程序上下文（购物车/菜单实时快照 → 易变尾段） ──
     const mcdActive = !!mcdMiniSnap?.open;
