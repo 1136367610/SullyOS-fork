@@ -3,7 +3,7 @@
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.29_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1215,7 +1215,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.29_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-IDQPG2GZ.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-VBDBORLR.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -2026,6 +2026,10 @@ function isTaskCancelledError(error) {
   return !!error && typeof error === "object" && /** @type {any} */
   error.code === TASK_CANCELLED_CODE;
 }
+function markUnrecoverablePartialDelivery(error, { outboxed, pushedCount }) {
+  if (outboxed || !(pushedCount > 0) || isTaskCancelledError(error)) return error;
+  return markPermanent(error);
+}
 var TERMINAL_PUSH_STATUSES = /* @__PURE__ */ new Set([404, 410]);
 var PUSH_PAYLOAD_TOO_LARGE_STATUS = 413;
 var PERMANENT_ERROR_CODES = /* @__PURE__ */ new Set([
@@ -2033,6 +2037,19 @@ var PERMANENT_ERROR_CODES = /* @__PURE__ */ new Set([
   "PUSH_SUBSCRIPTION_STORE_UNSUPPORTED",
   "PUSH_PAYLOAD_TOO_LARGE"
 ]);
+var LLM_CALL_FAILED_CODE = "LLM_CALL_FAILED";
+var PERMANENT_LLM_STATUSES = /* @__PURE__ */ new Set([400, 401, 402, 403, 404, 405, 413, 422]);
+function isPermanentLlmFailure(error) {
+  if (!error || typeof error !== "object") return false;
+  const { code, llmStatus } = (
+    /** @type {any} */
+    error
+  );
+  return code === LLM_CALL_FAILED_CODE && Number.isInteger(llmStatus) && PERMANENT_LLM_STATUSES.has(llmStatus);
+}
+function markPermanentIfLlmRejected(error) {
+  return isPermanentLlmFailure(error) ? markPermanent(error) : error;
+}
 function isPermanentDeliveryFailure(failure) {
   const { permanent, errorCode, pushStatus } = failure || {};
   return permanent === true || typeof errorCode === "string" && PERMANENT_ERROR_CODES.has(errorCode) || Number.isInteger(pushStatus) && (TERMINAL_PUSH_STATUSES.has(
@@ -2106,6 +2123,13 @@ function isUniqueViolation(error) {
   if (code === "23505") return true;
   const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
   return message.includes("duplicate key") || message.includes("unique constraint");
+}
+async function callLlm2(payload, options) {
+  try {
+    return await callLlm(payload, options);
+  } catch (error) {
+    throw markPermanentIfLlmRejected(error);
+  }
 }
 var STATE_CHUNK_SLICE_BYTES = 200 * 1024;
 var DEFAULT_MAX_STATE_VALUE_BYTES = 5 * 1024 * 1024;
@@ -2429,42 +2453,90 @@ async function discardUndeliveredPushesForTask({ db, userId, taskUuid }) {
     return;
   }
   if (typeof db.listUnackedOutbox !== "function" || typeof db.discardOutboxMessages !== "function") return;
-  const messageIds = [];
-  let exhausted = false;
+  let scan;
   try {
-    let cursor = 0;
-    let scanned = 0;
-    while (scanned < OUTBOX_SCAN_MAX_ROWS) {
-      const rows = await db.listUnackedOutbox(userId, cursor, OUTBOX_SCAN_PAGE_SIZE);
-      if (!rows || rows.length === 0) {
-        exhausted = true;
-        break;
-      }
-      scanned += rows.length;
-      let nextCursor = cursor;
-      for (const row of rows) {
-        if (row.id > nextCursor) nextCursor = row.id;
-        if (row.task_uuid !== taskUuid) continue;
-        if (row.delivered_at != null) continue;
-        messageIds.push(row.message_id);
-      }
-      if (nextCursor <= cursor) break;
-      cursor = nextCursor;
-      if (rows.length < OUTBOX_SCAN_PAGE_SIZE) {
-        exhausted = true;
-        break;
-      }
-    }
+    scan = await scanUnackedOutboxForTask(db, userId, taskUuid);
   } catch (error) {
     console.warn("[amsg-server] outbox \u67E5\u672A\u6295\u9012\u7684\u884C\u5931\u8D25\uFF08\u5DF2\u5FFD\u7565\uFF09:", error && error.message);
     return;
   }
-  if (!exhausted) {
+  if (!scan.exhausted) {
     console.warn(
       `[amsg-server] outbox \u626B\u63CF\u5230 ${OUTBOX_SCAN_MAX_ROWS} \u884C\u4E0A\u9650\u4ECD\u672A\u626B\u5B8C\uFF0C\u4EFB\u52A1 ${taskUuid} \u53EF\u80FD\u8FD8\u6709\u672A\u6295\u9012\u7684\u884C\u6CA1\u64A4\u6389\uFF08\u88AB\u53D6\u6D88\u4EFB\u52A1\u7684\u884C\u901A\u5E38\u662F\u6700\u65B0\u7684\uFF0C\u6B63\u597D\u5728\u4E0A\u9650\u4E4B\u5916\uFF09\u3002\u7ED9\u9002\u914D\u5668\u5B9E\u73B0 discardUndeliveredOutboxForTask \u53EF\u7ED5\u5F00\u8FD9\u4E2A\u4E0A\u9650\u3002`
     );
   }
-  await discardPushesFromOutbox({ db, userId, messageIds });
+  await discardPushesFromOutbox({
+    db,
+    userId,
+    // 已经推出去的那几条不动（见上）。
+    messageIds: scan.rows.filter((row) => row.delivered_at == null).map((row) => row.message_id)
+  });
+}
+async function scanUnackedOutboxForTask(db, userId, taskUuid) {
+  const rows = [];
+  let exhausted = false;
+  let cursor = 0;
+  let scanned = 0;
+  while (scanned < OUTBOX_SCAN_MAX_ROWS) {
+    const page = await db.listUnackedOutbox(userId, cursor, OUTBOX_SCAN_PAGE_SIZE);
+    if (!page || page.length === 0) {
+      exhausted = true;
+      break;
+    }
+    scanned += page.length;
+    let nextCursor = cursor;
+    for (const row of page) {
+      if (row.id > nextCursor) nextCursor = row.id;
+      if (row.task_uuid === taskUuid) rows.push(row);
+    }
+    if (nextCursor <= cursor) break;
+    cursor = nextCursor;
+    if (page.length < OUTBOX_SCAN_PAGE_SIZE) {
+      exhausted = true;
+      break;
+    }
+  }
+  return { rows, exhausted };
+}
+var COMMITTED_BATCH_LOOKBACK_MS = 60 * 60 * 1e3;
+var COMMITTED_BATCH_MAX_ROWS = 500;
+async function findCommittedBatch({ db, userId, userKey, taskUuid, occurrenceMs, now = Date.now() }) {
+  if (!db || !taskUuid || !Number.isFinite(occurrenceMs)) return null;
+  let rows;
+  try {
+    rows = await listOutboxRowsForTask(db, userId, taskUuid, Math.min(occurrenceMs, now) - COMMITTED_BATCH_LOOKBACK_MS);
+  } catch (error) {
+    console.warn("[amsg-server] \u67E5\u8FD9\u6B21\u89E6\u53D1\u843D\u5B9A\u7684\u6279\u6B21\u5931\u8D25\uFF08\u6309\u6CA1\u6709\u5904\u7406\uFF0C\u8FD9\u4E00\u8DF3\u4F1A\u91CD\u65B0\u751F\u6210\uFF09:", error && error.message);
+    return null;
+  }
+  if (!rows || rows.length === 0) return null;
+  const entries = [];
+  for (const row of rows) {
+    if (row.total_messages == null) continue;
+    let push;
+    try {
+      push = JSON.parse(await decryptFromStorage(row.payload, userKey));
+    } catch (_decryptError) {
+      continue;
+    }
+    if (!push || typeof push !== "object") continue;
+    if (push.taskUuid !== taskUuid || push.occurrenceMs !== occurrenceMs) continue;
+    if (push.messageKind === "result") continue;
+    entries.push({ push, delivered: row.delivered_at != null, acked: row.acked_at != null });
+  }
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => (a.push.messageIndex ?? 0) - (b.push.messageIndex ?? 0));
+  return { entries };
+}
+async function listOutboxRowsForTask(db, userId, taskUuid, sinceMs) {
+  if (typeof db.listOutboxForTask === "function") {
+    return db.listOutboxForTask(userId, taskUuid, { sinceMs, limit: COMMITTED_BATCH_MAX_ROWS });
+  }
+  if (typeof db.listUnackedOutbox === "function") {
+    const { rows } = await scanUnackedOutboxForTask(db, userId, taskUuid);
+    return rows.filter((row) => !(Number(row.created_at) < sinceMs));
+  }
+  return null;
 }
 function shouldSendPush(push, { outboxed }) {
   if (!outboxed) return true;
@@ -3012,7 +3084,17 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
     now: new Date(nowFn()),
     scratch
   });
-  const progress = { sentCount: 0, pushedCount: 0, total: 0, iterations: 0, skipReason: null, usage: null };
+  const progress = {
+    sentCount: 0,
+    pushedCount: 0,
+    total: 0,
+    iterations: 0,
+    skipReason: null,
+    usage: null,
+    usageTotal: null,
+    llmCalls: 0,
+    outboxed: false
+  };
   let settledStatus = "failed";
   let settledError = null;
   try {
@@ -3061,6 +3143,13 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
       // 最后一轮 LLM 响应的 usage（prompt/completion tokens；没跑到 LLM →
       // null）。宿主拿它更新用量记账，不用从 llmResponse 里自己扒。
       usage: progress.usage,
+      // 整次 fire 的用量：所有轮次的 token 相加、实际发了几次 LLM 请求（失败
+      // 的那次也算）。失败结局一样带——「失败也花了钱」宿主要记得上。
+      usageTotal: progress.usageTotal,
+      llmCalls: progress.llmCalls,
+      // finish 的整批已经落进 outbox 了吗。true 时客户端补收一定拿得到全部
+      // total 段，推送没发完的那部分库会在重试时补推、不会重新生成。
+      outboxed: progress.outboxed,
       scratch,
       readState,
       writeState,
@@ -3119,7 +3208,8 @@ async function runFireChain({
     }
     progress.iterations = iteration + 1;
     const roundTimeoutMs = Math.max(1, Math.min(3e5, deadline - nowFn()));
-    const { response: llmResponse } = await callLlm(
+    progress.llmCalls++;
+    const { response: llmResponse } = await callLlm2(
       {
         ...decryptedPayload,
         ...chatCred || {},
@@ -3131,6 +3221,7 @@ async function runFireChain({
     const assistantMessage = extractAssistantMessage(llmResponse);
     messages = [...messages, assistantMessage];
     progress.usage = llmResponse && typeof llmResponse === "object" && llmResponse.usage || null;
+    progress.usageTotal = accumulateUsage(progress.usageTotal, progress.usage);
     const sessionCtx = Object.freeze({
       ...buildSessionContext({
         sessionId,
@@ -3274,19 +3365,21 @@ async function sendHookPushPayloads({
   let sentCount = 0;
   let pushedCount = 0;
   progress.total = total;
-  const afterSendBase = { task, total, scratch, readState, writeState, emitResult, usage: progress.usage };
+  const afterSendBase = {
+    task,
+    total,
+    scratch,
+    readState,
+    writeState,
+    emitResult,
+    usage: progress.usage,
+    usageTotal: progress.usageTotal,
+    llmCalls: progress.llmCalls
+  };
   const sentIds = [];
   const finalized = [];
+  let outboxed = false;
   try {
-    if (!ctx.vapid || !ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
-      throw new Error("VAPID configuration missing - push notifications cannot be sent");
-    }
-    const pushSubscription = await resolvePushSubscription({
-      db: ctx.db,
-      userId: task.user_id,
-      userKey,
-      legacyFallback: (decryptedPayload && decryptedPayload.pushSubscription) ?? null
-    });
     for (let i = 0; i < total; i++) {
       const push = { ...pushPayloads[i] };
       if (typeof push.messageId !== "string" || !push.messageId) push.messageId = `${messageIdBase}_hook_${i}`;
@@ -3297,7 +3390,17 @@ async function sendHookPushPayloads({
       stampTaskIdentity(push, task, decryptedPayload, occurrenceMs);
       finalized.push(push);
     }
-    const outboxed = await appendPushesToOutbox({ db: ctx.db, userId: task.user_id, userKey, pushes: finalized });
+    outboxed = await appendPushesToOutbox({ db: ctx.db, userId: task.user_id, userKey, pushes: finalized });
+    progress.outboxed = outboxed;
+    if (!ctx.vapid || !ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
+      throw new Error("VAPID configuration missing - push notifications cannot be sent");
+    }
+    const pushSubscription = await resolvePushSubscription({
+      db: ctx.db,
+      userId: task.user_id,
+      userKey,
+      legacyFallback: (decryptedPayload && decryptedPayload.pushSubscription) ?? null
+    });
     const pushGate = { outboxed };
     const willPush = finalized.map((push) => shouldSendPush(push, pushGate));
     const lastPushIndex = willPush.lastIndexOf(true);
@@ -3313,6 +3416,7 @@ async function sendHookPushPayloads({
       if (willPush[i] && i < lastPushIndex) await sleep2(SLEEP_BETWEEN_MESSAGES_MS);
     }
   } catch (error) {
+    markUnrecoverablePartialDelivery(error, { outboxed, pushedCount });
     await markPushesDelivered({ db: ctx.db, userId: task.user_id, messageIds: sentIds });
     if (isTaskCancelledError(error)) {
       await discardUndeliveredPushes({
@@ -3322,12 +3426,40 @@ async function sendHookPushPayloads({
         sentIds
       });
     }
-    await notifyAfterSend(ctx, { ...afterSendBase, sentCount, pushedCount, error });
+    await notifyAfterSend(ctx, { ...afterSendBase, sentCount, pushedCount, outboxed, error });
     throw error;
   }
   await markPushesDelivered({ db: ctx.db, userId: task.user_id, messageIds: sentIds });
-  await notifyAfterSend(ctx, { ...afterSendBase, sentCount, pushedCount, error: null });
+  await notifyAfterSend(ctx, { ...afterSendBase, sentCount, pushedCount, outboxed, error: null });
   return total;
+}
+function accumulateUsage(total, usage) {
+  if (!usage || typeof usage !== "object") return total;
+  const prompt = readTokenCount(usage, ["prompt_tokens", "input_tokens"]);
+  const completion = readTokenCount(usage, ["completion_tokens", "output_tokens"]);
+  let totalTokens = readTokenCount(usage, ["total_tokens"]);
+  if (totalTokens === null && prompt !== null && completion !== null) totalTokens = prompt + completion;
+  if (prompt === null && completion === null && totalTokens === null) return total;
+  const base = total || { prompt_tokens: null, completion_tokens: null, total_tokens: null };
+  return {
+    prompt_tokens: addTokenCount(base.prompt_tokens, prompt),
+    completion_tokens: addTokenCount(base.completion_tokens, completion),
+    total_tokens: addTokenCount(base.total_tokens, totalTokens)
+  };
+}
+function readTokenCount(usage, keys) {
+  for (const key of keys) {
+    const value = (
+      /** @type {Record<string, unknown>} */
+      usage[key]
+    );
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  }
+  return null;
+}
+function addTokenCount(sum, value) {
+  if (value === null) return sum;
+  return (sum ?? 0) + value;
 }
 var DEFAULT_SPLIT_REGEX = /([。！？!?]+)/;
 var SLEEP_BETWEEN_MESSAGES_MS2 = 1500;
@@ -3444,7 +3576,41 @@ function positiveIntegerOr(value, fallback) {
     value
   ) : fallback;
 }
-async function processSingleMessage(task, ctx, providedMasterKey, predecrypted = null) {
+async function redeliverCommittedBatch(task, ctx, userKey, decryptedPayload, batch) {
+  const pending = batch.entries.filter((entry) => !entry.delivered && !entry.acked && shouldSendPush(entry.push, { outboxed: true })).map((entry) => entry.push);
+  const messagesSent = batch.entries.length;
+  if (pending.length === 0) {
+    return { success: true, messagesSent, redelivered: true, pushedCount: 0 };
+  }
+  if (!ctx.vapid || !ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
+    throw new Error("VAPID configuration missing - push notifications cannot be sent");
+  }
+  const pushSubscription = await resolvePushSubscription({
+    db: ctx.db,
+    userId: task.user_id,
+    userKey,
+    legacyFallback: decryptedPayload.pushSubscription ?? null
+  });
+  const sentIds = [];
+  let cancelled = false;
+  try {
+    for (let i = 0; i < pending.length; i++) {
+      await sendTaggedPush(ctx.webpush, pushSubscription, JSON.stringify(pending[i]));
+      sentIds.push(pending[i].messageId);
+      if (i < pending.length - 1) await sleepFor(ctx, SLEEP_BETWEEN_MESSAGES_MS2);
+    }
+  } catch (error) {
+    cancelled = isTaskCancelledError(error);
+    throw error;
+  } finally {
+    await markPushesDelivered({ db: ctx.db, userId: task.user_id, messageIds: sentIds });
+    if (cancelled) {
+      await discardUndeliveredPushes({ db: ctx.db, userId: task.user_id, pushes: pending, sentIds });
+    }
+  }
+  return { success: true, messagesSent, redelivered: true, pushedCount: sentIds.length };
+}
+async function processSingleMessage(task, ctx, providedMasterKey, predecrypted = null, options = {}) {
   try {
     const masterKey = providedMasterKey || ctx.masterKey;
     if (!masterKey) {
@@ -3452,6 +3618,17 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
     }
     const userKey = predecrypted && predecrypted.userKey || await deriveUserEncryptionKey(task.user_id, masterKey);
     const decryptedPayload = predecrypted && predecrypted.payload || JSON.parse(await decryptFromStorage(task.encrypted_payload, userKey));
+    const resumeCommittedBatch = options && typeof options.resumeCommittedBatch === "boolean" ? options.resumeCommittedBatch : (task.retry_count || 0) > 0;
+    if (resumeCommittedBatch) {
+      const committed = await findCommittedBatch({
+        db: ctx.db,
+        userId: task.user_id,
+        userKey,
+        taskUuid: task.uuid,
+        occurrenceMs: occurrenceMsOf(task)
+      });
+      if (committed) return await redeliverCommittedBatch(task, ctx, userKey, decryptedPayload, committed);
+    }
     if (ctx.hooks && typeof ctx.hooks.onBeforeFire === "function" && taskNeedsLlm(decryptedPayload)) {
       const agentic = await runAgenticFire({ task, decryptedPayload, userKey, ctx });
       if (agentic.handled) return agentic.result;
@@ -3465,7 +3642,7 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
       const hasChatSource = hasChatCredRef(decryptedPayload) || !!(decryptedPayload.apiUrl && decryptedPayload.apiKey && decryptedPayload.primaryModel);
       if (hasPrompt && hasChatSource) {
         const chatCred = await resolveFireCredentials({ db: ctx.db, userId: task.user_id, userKey, decryptedPayload });
-        const aiResult = await callLlm(chatCred ? { ...decryptedPayload, ...chatCred } : decryptedPayload);
+        const aiResult = await callLlm2(chatCred ? { ...decryptedPayload, ...chatCred } : decryptedPayload);
         messageContent = aiResult.content;
         llmResponse = aiResult.response;
       } else if (decryptedPayload.userMessage) {
@@ -3475,7 +3652,7 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
       }
     } else if (decryptedPayload.messageType === "prompted" || decryptedPayload.messageType === "auto") {
       const chatCred = await resolveFireCredentials({ db: ctx.db, userId: task.user_id, userKey, decryptedPayload });
-      const aiResult = await callLlm(chatCred ? { ...decryptedPayload, ...chatCred } : decryptedPayload);
+      const aiResult = await callLlm2(chatCred ? { ...decryptedPayload, ...chatCred } : decryptedPayload);
       messageContent = aiResult.content;
       llmResponse = aiResult.response;
     } else {
@@ -3486,15 +3663,6 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
       messageContent = stripReasoningTags(messageContent);
     }
     const messages = splitMessageIntoSentences(messageContent, decryptedPayload.splitPattern ?? null);
-    if (!ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
-      throw new Error("VAPID configuration missing - push notifications cannot be sent");
-    }
-    const pushSubscription = await resolvePushSubscription({
-      db: ctx.db,
-      userId: task.user_id,
-      userKey,
-      legacyFallback: decryptedPayload.pushSubscription ?? null
-    });
     const sessionId = task.id != null ? `sess_task_${task.id}${occurrenceSuffix(task)}` : `sess_${randomUUID()}`;
     const source = decryptedPayload.messageType === "instant" ? "instant" : "scheduled";
     const messageSubtype = decryptedPayload.messageSubtype || "chat";
@@ -3541,6 +3709,15 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
     }
     const pushesToSend = reasoningPush ? [reasoningPush, ...contentPushes] : contentPushes;
     const outboxed = await appendPushesToOutbox({ db: ctx.db, userId: task.user_id, userKey, pushes: pushesToSend });
+    if (!ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
+      throw new Error("VAPID configuration missing - push notifications cannot be sent");
+    }
+    const pushSubscription = await resolvePushSubscription({
+      db: ctx.db,
+      userId: task.user_id,
+      userKey,
+      legacyFallback: decryptedPayload.pushSubscription ?? null
+    });
     const pushGate = { outboxed };
     const contentToPush = contentPushes.filter((push) => shouldSendPush(push, pushGate));
     const sentIds = [];
@@ -3565,7 +3742,7 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
       }
     } catch (error) {
       cancelledMidBurst = isTaskCancelledError(error);
-      throw error;
+      throw markUnrecoverablePartialDelivery(error, { outboxed, pushedCount: sentIds.length });
     } finally {
       await markPushesDelivered({ db: ctx.db, userId: task.user_id, messageIds: sentIds });
       if (cancelledMidBurst) {
@@ -3620,7 +3797,9 @@ async function processMessagesByUuid(uuid, ctx, maxRetries = 2, userId, provided
     if (!task) {
       return { success: false, error: { code: "TASK_NOT_FOUND", message: "\u4EFB\u52A1\u4E0D\u5B58\u5728\u6216\u5DF2\u5904\u7406" } };
     }
-    const result = await processSingleMessage(task, ctx, masterKey);
+    const result = await processSingleMessage(task, ctx, masterKey, null, {
+      resumeCommittedBatch: retryCount > 0 || (task.retry_count || 0) > 0
+    });
     if (!result.success) {
       const permanent = isPermanentDeliveryFailure({
         permanent: result.permanent,
@@ -3943,6 +4122,7 @@ var CLAIM_LEASE_MARGIN_MS = 2 * 60 * 1e3;
 var DEFAULT_LEASE_HEARTBEAT_MS = 30 * 1e3;
 var DEFAULT_HEARTBEAT_LEASE_TTL_MS = 90 * 1e3;
 var STALE_AFTER_MS = 60 * 60 * 1e3;
+var DEFAULT_MAX_DELIVERY_RETRIES = 3;
 var adaptersWithoutLastErrorColumn = /* @__PURE__ */ new WeakSet();
 var lastErrorColumnSuspicions = /* @__PURE__ */ new WeakMap();
 var warnedAboutMissingLastErrorColumn = false;
@@ -3989,6 +4169,10 @@ function guardWebpushWithLease(webpush, lease) {
 }
 function resolveStaleAfterMs(ctx) {
   return positiveNumber(ctx.staleAfterMs) || STALE_AFTER_MS;
+}
+function resolveMaxDeliveryRetries(ctx) {
+  const value = ctx.maxDeliveryRetries;
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MAX_DELIVERY_RETRIES;
 }
 function isRecurringType(recurrenceType) {
   return recurrenceType === "daily" || recurrenceType === "weekly";
@@ -4059,6 +4243,7 @@ async function deliverTasks(ctx, tasks) {
   const masterKey = ctx.masterKey;
   const claimLeaseMs = resolveClaimLeaseMs(ctx);
   const staleAfterMs = resolveStaleAfterMs(ctx);
+  const maxDeliveryRetries = resolveMaxDeliveryRetries(ctx);
   const serializeBy = typeof ctx.serializeBy === "function" ? ctx.serializeBy : null;
   const heartbeatMs = ctx.leaseHeartbeatMs === 0 ? 0 : positiveNumber(ctx.leaseHeartbeatMs) || DEFAULT_LEASE_HEARTBEAT_MS;
   const heartbeatEnabled = heartbeatMs > 0 && typeof db.claimTask === "function" && typeof db.renewTaskLease === "function";
@@ -4076,6 +4261,7 @@ async function deliverTasks(ctx, tasks) {
     staleTasks: [],
     cancelledTasks: [],
     reasoningSkippedTasks: [],
+    redeliveredTasks: [],
     failedTasks: []
   };
   const groupsTakenThisTick = /* @__PURE__ */ new Set();
@@ -4250,7 +4436,7 @@ async function deliverTasks(ctx, tasks) {
     const permanent = isPermanentDeliveryFailure({ permanent: failure.permanent, errorCode, pushStatus });
     const errorExtra = buildErrorExtra(errorCode, pushStatus);
     try {
-      if (permanent || task.retry_count >= 3) {
+      if (permanent || task.retry_count >= maxDeliveryRetries) {
         const encrypted = await encryptPayloadWithLastError(task, decryptedPayload, userKey, reason, errorExtra);
         if (isRecurringType(recurrenceType)) {
           const nextSendAt = nextFutureOccurrence(Date.parse(task.next_send_at), recurrenceType, Date.now(), tzId);
@@ -4436,7 +4622,10 @@ async function deliverTasks(ctx, tasks) {
           isTaskCancelled: () => lease.lost
         },
         masterKey,
-        { userKey, payload: decryptedPayload }
+        { userKey, payload: decryptedPayload },
+        // 重试计数就记在这一列上：大于 0 说明这是同一次触发的重试，内容已经落
+        // 进 outbox 的话只补推送、不再生成（见 redeliverCommittedBatch）。
+        { resumeCommittedBatch: (task.retry_count || 0) > 0 }
       );
     } catch (error) {
       if (lease.lost) {
@@ -4467,6 +4656,9 @@ async function deliverTasks(ctx, tasks) {
         { errorCode: sendResult.errorCode || null, permanent: sendResult.permanent === true, pushStatus: sendResult.pushStatusCode }
       );
       return;
+    }
+    if (sendResult.redelivered) {
+      results.redeliveredTasks.push({ taskId: task.id, pushedCount: sendResult.pushedCount || 0 });
     }
     if (sendResult.reasoningError) {
       results.reasoningSkippedTasks.push({ taskId: task.id, reason: sendResult.reasoningError });
@@ -4549,6 +4741,10 @@ async function deliverTasks(ctx, tasks) {
       // 正文送到了、只有思考过程没发出去的任务（{ taskId, reason }）。这些任务
       // 照常计入 successCount——列在这里只是让「这次没有思考过程」看得见。
       reasoningSkippedTasks: results.reasoningSkippedTasks,
+      // 重试那一跳只补推送、没有重新生成的任务（{ taskId, pushedCount }）：上一跳
+      // 内容已经落进 outbox，只是推送没发完。照常计入 successCount。
+      // pushedCount 为 0 说明剩下的段客户端已经补收并 ack 了，这一跳什么都不用推。
+      redeliveredTasks: results.redeliveredTasks,
       failedTasks: results.failedTasks
     }
   };
@@ -6357,6 +6553,38 @@ var D1Adapter = class {
     return res.meta.changes || 0;
   }
   /**
+   * 某条任务名下、某个时刻之后落的行，**不论投递 / ack 状态**（payload 仍是密文）。
+   *
+   * 给「生成成功之后推送失败、重试只补推送」那条路用（见 lib/outbox-store.js 的
+   * findCommittedBatch）：重试那一跳先来这里看这次触发的整批是不是已经落定了。
+   * 已 ack 的行也要读——客户端在两次重试之间把整批补收并 ack 了，同样说明这次
+   * 触发的内容已经生成过，不该再生成一份。
+   *
+   * `+user_id` 的一元加号是故意的：它让这一项不参与选索引，查询改走
+   * idx_outbox_created 按 created_at 收窄。否则 SQLite 会挑 (user_id, message_id)
+   * 的唯一约束索引，单用户部署下 user_id 对每一行都成立，等于把整个收件箱扫一遍
+   * （D1 按扫过的行数计费）。idx_outbox_created 不在时照样查得出来，只是退回扫表。
+   *
+   * @param {string} userId
+   * @param {string} taskUuid
+   * @param {{ sinceMs?: number, limit?: number }} [options] - sinceMs：只要
+   *   created_at ≥ 它的行（epoch 毫秒）；limit：最多读几行（默认 500）
+   * @returns {Promise<Array<{ id: number, message_id: string, task_uuid: string|null,
+   *   session_id: string|null, message_index: number|null, total_messages: number|null,
+   *   payload: string, created_at: number, delivered_at: number|null, acked_at: number|null }>>}
+   */
+  async listOutboxForTask(userId, taskUuid, { sinceMs = 0, limit = 500 } = {}) {
+    const res = await this._db.prepare(
+      `SELECT id, message_id, task_uuid, session_id, message_index, total_messages, payload,
+              created_at, delivered_at, acked_at
+       FROM message_outbox
+       WHERE +user_id = ? AND task_uuid = ? AND created_at >= ?
+       ORDER BY created_at, id
+       LIMIT ?`
+    ).bind(userId, taskUuid, sinceMs, limit).all();
+    return res.results || [];
+  }
+  /**
    * 未 ack 的行（id 升序，游标翻页）。payload 仍是密文，解密在 handler。
    *
    * @param {string} userId
@@ -6747,7 +6975,7 @@ function createClientStateNamespacesHandler(ctx) {
   }
   return { GET };
 }
-var SERVER_VERSION = true ? "2.6.0-next.29" : "0.0.0-dev";
+var SERVER_VERSION = true ? "2.6.0-next.30" : "0.0.0-dev";
 var SERVER_FEATURES = Object.freeze([
   "client-state",
   "client-state-chunking",
@@ -6846,7 +7074,17 @@ var SERVER_FEATURES = Object.freeze([
   "llm-credentials-delete-prefix",
   // DELETE /outbox：主动删收件箱的行（{ messageIds } 或 { all: true }），不再只能
   // 等 cron 的 TTL 老化。
-  "outbox-delete"
+  "outbox-delete",
+  // LLM 上游明确拒了请求（400 / 401 / 402 / 403 / 404 / 405 / 413 / 422）一跳终
+  // 审，不再重试；fire hook 拿到的 error 上带 permanent: true。
+  "llm-permanent-errors",
+  // 生成成功、整批落进收件箱之后推送才失败的，重试只补推送、不重新生成；
+  // onAfterSend / onFireSettled 的载荷带 outboxed。
+  "redeliver-committed-batch",
+  // onAfterSend / onFireSettled 的载荷带整次 fire 的 usageTotal 与 llmCalls。
+  "hook-usage-total",
+  // 工厂配置认 maxDeliveryRetries（投递失败的重试次数上限，默认 3）。
+  "max-delivery-retries"
 ]);
 function createCapabilitiesHandler(ctx) {
   async function GET(url, headers) {
@@ -7052,7 +7290,10 @@ function createSingleUserServer(config) {
     // notifyFireSettled）。
     onFireSettled: config.onFireSettled,
     // hook 的 ctx.scheduleTask() 单次 fire 建任务的条数上限（默认 2）。
-    maxScheduledTasksPerFire: config.maxScheduledTasksPerFire
+    maxScheduledTasksPerFire: config.maxScheduledTasksPerFire,
+    // 定时任务投递失败后的重试次数上限（默认 3）。handlers 用不到，宿主拿这个
+    // ctx 去调 runScheduledTick 时它跟着走。
+    maxDeliveryRetries: config.maxDeliveryRetries
   };
   return {
     ctx,
@@ -7219,14 +7460,19 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
       //（action 'fast_forwarded'）都会调（凭据字段不透传；best-effort，
       // 见 lib/run-tick.js）。
       onStaleSkip: cfg.onStaleSkip,
-      // 推送发出（或发挂）之后的 hook：{ task, sentCount, total, error,
-      // scratch, readState, writeState }（best-effort，见 lib/agentic-fire.js）。
+      // 推送发出（或发挂）之后的 hook：{ task, sentCount, pushedCount, total,
+      // error, usage, usageTotal, llmCalls, outboxed, scratch, readState,
+      // writeState }（best-effort，见 lib/agentic-fire.js）。
       onAfterSend: cfg.onAfterSend,
-      // 一次 fire 收尾的 hook：{ task, status, skipReason, sentCount, total,
-      // iterations, error, scratch, readState, writeState }。发完 / 跳过 /
+      // 一次 fire 收尾的 hook：{ task, status, skipReason, sentCount,
+      // pushedCount, total, iterations, error, metadata, usage, usageTotal,
+      // llmCalls, outboxed, scratch, readState, writeState }。发完 / 跳过 /
       // 抛错都会调，宿主用它做「开始时占点什么、结束时放掉」那类收尾
       //（best-effort，见 lib/agentic-fire.js）。
       onFireSettled: cfg.onFireSettled,
+      // 一次触发投递失败后最多再重试几次（默认 3，0 = 第一次失败就终审；见
+      // lib/run-tick.js 的 DEFAULT_MAX_DELIVERY_RETRIES）。
+      maxDeliveryRetries: cfg.maxDeliveryRetries,
       // 分组串行：(task) => 分组标识 | null。同一分组的任务同时只跑一条，
       // 跨跳也算（见 lib/run-tick.js）。不配 = 全并发，与以前一致。
       serializeBy: cfg.serializeBy,
@@ -7383,7 +7629,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-09-21";
+var AMSG_BUNDLE_VERSION = "2026-09-22";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -7865,6 +8111,162 @@ var renderFireSceneBlock = (scene, nowMs, tz, options) => {
 ${lines.join("\n")}`;
 };
 
+// utils/amsgLimits.ts
+var DEFAULT_MAX_UNANSWERED_SENDS = 3;
+var DEFAULT_MIN_SEND_GAP_MINUTES = 10;
+var DEFAULT_DAILY_SEND_CAP = 0;
+var DEFAULT_RECURRING_STOP_AFTER = 3;
+var DEFAULT_MAX_ACTIVE_TASKS = 5;
+var MAX_ACTIVE_TASKS_CEILING = 10;
+var resolveCount = (value, fallback, ceiling) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback === 0 ? Infinity : fallback;
+  }
+  if (value === 0) return Infinity;
+  if (value < 1) return fallback === 0 ? Infinity : fallback;
+  return Math.min(ceiling, Math.floor(value));
+};
+var resolveMaxUnansweredSends = (value) => resolveCount(value, DEFAULT_MAX_UNANSWERED_SENDS, 99);
+var resolveAmsgLimits = (settings) => {
+  const s = settings ?? {};
+  const gap = s.minSendGapMinutes;
+  const gapMinutes = typeof gap === "number" && Number.isFinite(gap) && gap >= 0 ? Math.min(24 * 60, Math.floor(gap)) : DEFAULT_MIN_SEND_GAP_MINUTES;
+  const tasks = s.maxActiveTasks;
+  return {
+    maxUnansweredSends: resolveMaxUnansweredSends(s.maxUnansweredSends),
+    minSendGapMs: gapMinutes * 6e4,
+    dailySendCap: resolveCount(s.dailySendCap, DEFAULT_DAILY_SEND_CAP, 999),
+    recurringStopAfter: resolveCount(s.recurringStopAfter, DEFAULT_RECURRING_STOP_AFTER, 99),
+    // 任务名额没有「不限」这一档：挂太多等于把「同时有几件事在后台排队」这件事交出去了。
+    maxActiveTasks: typeof tasks === "number" && Number.isFinite(tasks) && tasks >= 1 ? Math.min(MAX_ACTIVE_TASKS_CEILING, Math.floor(tasks)) : DEFAULT_MAX_ACTIVE_TASKS,
+    allowSelfRecurring: s.allowSelfRecurring === true,
+    allowSelfForce: s.allowSelfForce === true
+  };
+};
+var AMSG_LIMITS_KEY = "limits";
+var parseAmsgLimitsRecord = (value) => {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && parsed.v === 1 && typeof parsed.selfScheduleEnabled === "boolean") {
+      return parsed;
+    }
+  } catch {
+  }
+  return null;
+};
+var AMSG_DAILY_SENDS_KEY = "daily_sends";
+var DAILY_COUNTED_KEEP = 20;
+var dayKeyInZone = (nowMs, tzId) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tzId,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(nowMs));
+  const map = {};
+  for (const p of parts) map[p.type] = p.value;
+  return `${map.year}-${map.month}-${map.day}`;
+};
+var parseDailySends = (value) => {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && parsed.v === 1 && typeof parsed.day === "string" && typeof parsed.sends === "number") {
+      return parsed;
+    }
+  } catch {
+  }
+  return null;
+};
+var sendsOnDay = (record, day) => record && record.day === day ? record.sends : 0;
+var bumpDailySends = (record, day, add) => {
+  const base = record && record.day === day ? record : { v: 1, day, sends: 0 };
+  const alreadyCounted = !!add.sentId && (base.counted ?? []).includes(add.sentId);
+  const sends = base.sends + (alreadyCounted ? 0 : add.sends ?? 0);
+  const llmCalls = add.llmCalls ? (base.llmCalls ?? 0) + add.llmCalls : base.llmCalls;
+  const counted = add.sentId && add.sends && !alreadyCounted ? [...base.counted ?? [], add.sentId].slice(-DAILY_COUNTED_KEEP) : base.counted;
+  return {
+    v: 1,
+    day,
+    sends,
+    ...llmCalls !== void 0 ? { llmCalls } : {},
+    ...counted ? { counted } : {}
+  };
+};
+var earliestSlotAfter = (fromMs, gapMs, busy) => {
+  if (gapMs <= 0) return fromMs;
+  const sorted = [...busy].filter(Number.isFinite).sort((a, b) => a - b);
+  let slot = fromMs;
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const b of sorted) {
+      if (Math.abs(slot - b) < gapMs) {
+        slot = b + gapMs;
+        moved = true;
+      }
+    }
+  }
+  return slot;
+};
+var findGapConflict = (sendAtMs, gapMs, busy) => {
+  if (gapMs <= 0) return null;
+  return busy.find((b) => Number.isFinite(b) && Math.abs(sendAtMs - b) < gapMs) ?? null;
+};
+var FIRE_GAP_TOLERANCE_MS = 3 * 6e4;
+var describeMinutes = (minutes) => {
+  if (minutes < 60) return `${minutes} \u5206\u949F`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} \u5C0F\u65F6 ${m} \u5206\u949F` : `${h} \u5C0F\u65F6`;
+};
+var checkSelfScheduleRules = (input) => {
+  const { limits } = input;
+  if (input.recurrence !== "none" && !limits.allowSelfRecurring) {
+    return {
+      ok: false,
+      reason: "recurring_not_allowed",
+      message: "\u7528\u6237\u6CA1\u6709\u8BA9\u4F60\u6392\u6BCF\u5929/\u6BCF\u5468\u91CD\u590D\u7684\u6D88\u606F\uFF0C\u8FD9\u6B21\u53EA\u80FD\u6392\u4E00\u6B21\u6027\u7684\uFF08\u53BB\u6389 recurrence \u518D\u6392\uFF09\u3002"
+    };
+  }
+  const conflict = findGapConflict(input.sendAtMs, limits.minSendGapMs, input.busy);
+  if (conflict !== null) {
+    const gapMinutes = Math.round(limits.minSendGapMs / 6e4);
+    const earliest = earliestSlotAfter(
+      Math.max(input.earliestMs, input.sendAtMs),
+      limits.minSendGapMs,
+      input.busy
+    );
+    return {
+      ok: false,
+      reason: "min_gap",
+      message: `\u79BB ${input.formatTime(conflict)} \u90A3\u6761\u592A\u8FD1\u4E86\uFF1A\u7528\u6237\u5B9A\u4E86\u4E24\u6761\u4E3B\u52A8\u6D88\u606F\u4E4B\u95F4\u81F3\u5C11\u9694 ${describeMinutes(gapMinutes)}\u3002\u8981\u6392\u7684\u8BDD\u6700\u65E9 ${input.formatTime(earliest)}\uFF1B\u6CA1\u90A3\u4E48\u8981\u7D27\u7684\u8BDD\uFF0C\u8FD9\u6B21\u5C31\u522B\u6392\u4E86\u3002`
+    };
+  }
+  return {
+    ok: true,
+    expirePolicy: input.expirePolicy === "force" && !limits.allowSelfForce ? "expire" : input.expirePolicy
+  };
+};
+var buildLimitsBrief = (input) => {
+  const { limits } = input;
+  const lines = [];
+  if (Number.isFinite(limits.maxUnansweredSends)) {
+    const left = Math.max(0, limits.maxUnansweredSends - input.committedSends);
+    lines.push(`- \u5BF9\u65B9\u6CA1\u56DE\u7684\u65F6\u5019\uFF0C\u4F60\u6700\u591A\u8FDE\u7740\u4E3B\u52A8\u53D1 ${limits.maxUnansweredSends} \u6761\uFF08\u6392\u597D\u8FD8\u6CA1\u53D1\u7684\u4E5F\u7B97\uFF09\uFF0C` + (left > 0 ? `\u73B0\u5728\u8FD8\u80FD\u518D\u6392 ${left} \u6761\u3002` : "\u73B0\u5728\u4E00\u6761\u90FD\u4E0D\u80FD\u518D\u6392\u4E86\uFF0C\u7B49\u5BF9\u65B9\u56DE\u590D\u3002"));
+  }
+  if (limits.minSendGapMs > 0) {
+    lines.push(`- \u4E24\u6761\u4E3B\u52A8\u6D88\u606F\u4E4B\u95F4\u81F3\u5C11\u9694 ${describeMinutes(Math.round(limits.minSendGapMs / 6e4))}` + (input.earliestText ? `\uFF0C\u8FD9\u6B21\u6700\u65E9\u6392\u5230 ${input.earliestText}\u3002` : "\u3002"));
+  }
+  if (input.dailyRemaining !== void 0 && Number.isFinite(limits.dailySendCap)) {
+    lines.push(input.dailyRemaining > 0 ? `- \u4ECA\u5929\u8FD8\u80FD\u518D\u4E3B\u52A8\u53D1 ${input.dailyRemaining} \u6761\u3002` : "- \u4ECA\u5929\u7684\u4E3B\u52A8\u6D88\u606F\u5DF2\u7ECF\u7528\u5B8C\u4E86\uFF0C\u8981\u6392\u5C31\u6392\u5230\u660E\u5929\u3002");
+  }
+  lines.push(`- \u540C\u65F6\u6700\u591A\u6392\u7740 ${limits.maxActiveTasks} \u6761\uFF0C\u73B0\u5728\u6392\u7740 ${input.activeTasks} \u6761\u3002`);
+  if (!limits.allowSelfRecurring) lines.push("- \u53EA\u80FD\u6392\u4E00\u6B21\u6027\u7684\uFF0C\u4E0D\u80FD\u6392\u6BCF\u5929/\u6BCF\u5468\u91CD\u590D\u7684\u3002");
+  if (!limits.allowSelfForce) lines.push("- \u6392\u7684\u6D88\u606F\u5230\u70B9\u78B0\u4E0A\u5BF9\u65B9\u6B63\u5728\u804A\u5929\u4F1A\u81EA\u52A8\u4F5C\u7F62\uFF08\u8F6C\u6210\u4F60\u5728\u804A\u5929\u91CC\u81EA\u7136\u5E26\u51FA\uFF09\uFF0C\u6CA1\u6709\u300C\u5230\u70B9\u5FC5\u53D1\u300D\u3002");
+  return ["\u7528\u6237\u7ED9\u4F60\u5B9A\u7684\u89C4\u77E9\uFF08\u7CFB\u7EDF\u7167\u7740\u6267\u884C\uFF1A\u8D85\u51FA\u7684\u6392\u4E0D\u4E0A\uFF0C\u6392\u4E0A\u4E86\u5230\u70B9\u4E5F\u4E0D\u53D1\uFF09\uFF1A", ...lines].join("\n");
+};
+
 // utils/amsgFirePack.ts
 var AMSG_STATE_NAMESPACE_PREFIX = "amsg:char:";
 var amsgStateNamespace = (charId) => `${AMSG_STATE_NAMESPACE_PREFIX}${charId}`;
@@ -7974,25 +8376,25 @@ var createSelfLog = (basePackAt, anchorUserMsgAt = null) => ({
   anchorUserMsgAt,
   entries: [],
   unansweredSends: 0,
+  recurringSends: {},
   tasks: []
 });
-var DEFAULT_MAX_UNANSWERED_SENDS = 3;
-var resolveMaxUnansweredSends = (value) => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_UNANSWERED_SENDS;
-  if (value === 0) return Infinity;
-  if (value < 1) return DEFAULT_MAX_UNANSWERED_SENDS;
-  return Math.min(99, Math.floor(value));
-};
 var countUnansweredSends = (log) => log ? log.unansweredSends : 0;
 var reconcileSelfLogWithPack = (stored, pack, lastUserMessageAt) => {
   let log = stored ?? createSelfLog(pack.builtAt, lastUserMessageAt);
   if (lastUserMessageAt != null && (log.anchorUserMsgAt == null || lastUserMessageAt > log.anchorUserMsgAt)) {
-    log = { ...log, anchorUserMsgAt: lastUserMessageAt, entries: [], unansweredSends: 0 };
+    log = { ...log, anchorUserMsgAt: lastUserMessageAt, entries: [], unansweredSends: 0, recurringSends: {} };
   }
   if (log.basePackAt !== pack.builtAt) {
     log = { ...log, basePackAt: pack.builtAt, tasks: [] };
   }
   return log;
+};
+var countRecurringSends = (log, clientTaskId) => clientTaskId && log?.recurringSends?.[clientTaskId] || 0;
+var bumpRecurringSend = (log, clientTaskId) => {
+  if (!clientTaskId) return log;
+  const counts = log.recurringSends ?? {};
+  return { ...log, recurringSends: { ...counts, [clientTaskId]: (counts[clientTaskId] ?? 0) + 1 } };
 };
 var appendSelfLogTask = (log, task) => ({
   ...log,
@@ -8012,7 +8414,7 @@ var appendSelfLogEntry = (log, entry) => {
 var parseSelfLog = (value) => {
   try {
     const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && parsed.v === 4 && typeof parsed.basePackAt === "number" && (parsed.anchorUserMsgAt === null || typeof parsed.anchorUserMsgAt === "number") && typeof parsed.unansweredSends === "number" && Array.isArray(parsed.tasks) && Array.isArray(parsed.entries) && parsed.entries.every((e) => {
+    if (parsed && typeof parsed === "object" && parsed.v === 4 && typeof parsed.basePackAt === "number" && (parsed.anchorUserMsgAt === null || typeof parsed.anchorUserMsgAt === "number") && typeof parsed.unansweredSends === "number" && (parsed.recurringSends === void 0 || !!parsed.recurringSends && typeof parsed.recurringSends === "object") && Array.isArray(parsed.tasks) && Array.isArray(parsed.entries) && parsed.entries.every((e) => {
       const entry = e;
       return !!entry && typeof entry.id === "string" && typeof entry.at === "number" && typeof entry.text === "string";
     })) {
@@ -8033,7 +8435,7 @@ var renderSelfLogBlock = (log, nowMs, tz, maxUnanswered = DEFAULT_MAX_UNANSWERED
   if (!log || log.entries.length === 0) return "";
   const fresh = log.entries.filter((e) => e.at > log.basePackAt);
   const sends = countUnansweredSends(log);
-  const limitHalf = Number.isFinite(maxUnanswered) ? `\uFF0C\u4E0A\u9650 ${maxUnanswered} \u6761\uFF0C\u5230\u4E0A\u9650\u540E\u4F60\u81EA\u5DF1\u6392\u7684\u540E\u7EED\u4F1A\u6682\u505C\u3001\u7B49\u5BF9\u65B9\u56DE\u590D\u624D\u6062\u590D` : "";
+  const limitHalf = Number.isFinite(maxUnanswered) ? `\uFF0C\u4E0A\u9650 ${maxUnanswered} \u6761\uFF0C\u5230\u4E0A\u9650\u540E\u4F60\u81EA\u5DF1\u6392\u7684\u540E\u7EED\u5230\u70B9\u4F1A\u76F4\u63A5\u8DF3\u8FC7\u3001\u4E0D\u8865\u53D1\uFF0C\u7B49\u5BF9\u65B9\u56DE\u590D\u624D\u91CD\u65B0\u8BA1\u6570` : "";
   if (fresh.length === 0) {
     if (sends === 0) return "";
     return [
@@ -8068,7 +8470,7 @@ var renderFirePack = (pack, nowMs, taskInstruction, extras) => {
     extras?.selfLog ?? null,
     nowMs,
     tz,
-    resolveMaxUnansweredSends(pack.maxUnansweredSends)
+    extras?.maxUnansweredSends ?? DEFAULT_MAX_UNANSWERED_SENDS
   ));
   out = fillSlot(out, AMSG_SLOT_TASK_LIST, extras?.taskListBlock ?? "");
   out = fillSlot(out, AMSG_SLOT_SCENE, renderFireSceneBlock(pack.scene, nowMs, tz, {
@@ -8111,7 +8513,7 @@ var chatFieldOk = (chat) => {
 var parseFirePack = (value) => {
   try {
     const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && parsed.v === FIRE_PACK_VERSION && chatFieldOk(parsed.chat) && typeof parsed.template === "string" && parsed.template.length > 0 && (parsed.lastUserMessageAt === null || typeof parsed.lastUserMessageAt === "number") && typeof parsed.tzId === "string" && parsed.tzId.length > 0 && typeof parsed.userTzId === "string" && parsed.userTzId.length > 0 && typeof parsed.targetName === "string" && typeof parsed.builtAt === "number" && Array.isArray(parsed.pendingTasks) && (parsed.scene === null || typeof parsed.scene === "object") && (parsed.maxUnansweredSends === void 0 || typeof parsed.maxUnansweredSends === "number" && Number.isFinite(parsed.maxUnansweredSends) && parsed.maxUnansweredSends >= 0) && typeof parsed.selfScheduleEnabled === "boolean") {
+    if (parsed && typeof parsed === "object" && parsed.v === FIRE_PACK_VERSION && chatFieldOk(parsed.chat) && typeof parsed.template === "string" && parsed.template.length > 0 && (parsed.lastUserMessageAt === null || typeof parsed.lastUserMessageAt === "number") && typeof parsed.tzId === "string" && parsed.tzId.length > 0 && typeof parsed.userTzId === "string" && parsed.userTzId.length > 0 && typeof parsed.targetName === "string" && typeof parsed.builtAt === "number" && Array.isArray(parsed.pendingTasks) && (parsed.scene === null || typeof parsed.scene === "object") && typeof parsed.selfScheduleEnabled === "boolean") {
       return parsed;
     }
   } catch {
@@ -8359,7 +8761,6 @@ function shouldExpireFire(input) {
 var DELIVERED_WINDOW_MS = 30 * 6e4;
 
 // utils/amsg2Tasks.ts
-var MAX_ACTIVE_TASKS_PER_CHAR = 5;
 var shortTaskId = (taskUuid) => taskUuid.slice(0, 8);
 var describeRecurrence = (recurrence) => recurrence === "daily" ? "\u6BCF\u5929" : recurrence === "weekly" ? "\u6BCF\u5468" : "\u4E00\u6B21\u6027";
 var AMSG2_SCHEDULE_SECRECY_NOTE = "\u4E0D\u8981\u5411\u7528\u6237\u590D\u8FF0\u6216\u63D0\u53CA\u8FD9\u4EFD\u6392\u7A0B\u4FE1\u606F\u672C\u8EAB\u7684\u5B58\u5728\u3002";
@@ -8428,34 +8829,40 @@ var FIRE_TOOL_DESCRIPTION = [
   `\u4E00\u6B21\u6700\u591A\u6392 ${MAX_FIRE_SCHEDULES} \u6761\uFF1B\u6BCF\u4E2A\u89D2\u8272\u540C\u65F6\u6302\u7684\u4EFB\u52A1\u4E5F\u6709\u4E0A\u9650\uFF0C\u6392\u4E0D\u4E0B\u65F6\u4F1A\u544A\u8BC9\u4F60\u3002`,
   "\u6CA1\u6709\u300C\u63A5\u7740\u8BF4\u300D\u7684\u5FC5\u8981\u5C31\u522B\u6392\u2014\u2014\u4E3A\u4E86\u6392\u800C\u6392\u51FA\u6765\u7684\u540E\u7EED\uFF0C\u7528\u6237\u8BFB\u8D77\u6765\u5C31\u662F\u6CA1\u8BDD\u627E\u8BDD\u3002"
 ].join("\n");
-var buildParameters = (example) => ({
+var buildScheduleParameters = (opts) => ({
   type: "object",
   properties: {
-    send_at: {
-      type: "string",
-      description: `\u5F00\u59CB\u751F\u6210\u7684\u65F6\u95F4\uFF0C\u5199\u4F60\u672C\u5730\u7684\u5899\u949F\u65F6\u95F4\u3001\u4E0D\u5E26\u65F6\u533A\u540E\u7F00\uFF08\u5982 ${example}\uFF09\uFF0C\u7CFB\u7EDF\u6309\u4F60\u6240\u5728\u7684\u65F6\u533A\u7406\u89E3\u3002\u81F3\u5C11\u6BD4\u5F53\u524D\u65F6\u95F4\u665A 1 \u5206\u949F\u3002\u6392\u4E4B\u524D\u5148\u60F3\u60F3\u5BF9\u65B9\u90A3\u8FB9\u662F\u51E0\u70B9\u2014\u2014\u4F60\u4EEC\u4E4B\u95F4\u53EF\u80FD\u6709\u65F6\u5DEE\uFF0C\u522B\u628A\u6D88\u606F\u6392\u5230\u5BF9\u65B9\u7684\u6DF1\u591C\u3002`
-    },
+    send_at: { type: "string", description: opts.sendAtDescription },
     mode: {
       type: "string",
       enum: ["auto", "prompted"],
-      description: "\u751F\u6210\u6A21\u5F0F\u3002auto=\u5230\u70B9\u6839\u636E\u90A3\u65F6\u7684\u4E0A\u4E0B\u6587\u81EA\u7531\u53D1\u6325\uFF1Bprompted=\u56F4\u7ED5 prompt_hint \u7684\u65B9\u5411\u8BF4\u3002\u9ED8\u8BA4 auto\u3002"
+      description: opts.modeDescription
     },
-    prompt_hint: {
-      type: "string",
-      description: '\u7ED9\u672A\u6765\u90A3\u6761\u6D88\u606F\u7684\u65B9\u5411\uFF0C\u5982"\u63A5\u7740\u521A\u624D\u90A3\u53EA\u732B\u7684\u8BDD\u5F80\u4E0B\u8BF4""\u544A\u8BC9\u4ED6\u6C64\u7096\u597D\u4E86"\u3002mode=prompted \u65F6\u5FC5\u586B\u3002'
-    },
-    recurrence: {
-      type: "string",
-      enum: ["none", "daily", "weekly"],
-      description: "\u91CD\u590D\u7C7B\u578B\u3002none=\u4E00\u6B21\u6027\uFF08\u9ED8\u8BA4\uFF09\uFF1Bdaily/weekly=\u6BCF\u5929/\u6BCF\u5468\u540C\u4E00\u65F6\u95F4\u3002"
-    },
-    expire_policy: {
-      type: "string",
-      enum: ["expire", "force"],
-      description: EXPIRE_POLICY_DESCRIPTION
-    }
+    prompt_hint: { type: "string", description: opts.promptHintDescription },
+    ...opts.abilities.allowRecurring ? {
+      recurrence: {
+        type: "string",
+        enum: ["none", "daily", "weekly"],
+        description: opts.recurrenceDescription
+      }
+    } : {},
+    ...opts.abilities.allowForce ? {
+      expire_policy: {
+        type: "string",
+        enum: ["expire", "force"],
+        // 与前台共用一份：同一个策略在两个入口说两套话，角色的选择会跟着入口漂。
+        description: EXPIRE_POLICY_DESCRIPTION
+      }
+    } : {}
   },
   required: ["send_at"]
+});
+var buildParameters = (example, abilities) => buildScheduleParameters({
+  sendAtDescription: `\u5F00\u59CB\u751F\u6210\u7684\u65F6\u95F4\uFF0C\u5199\u4F60\u672C\u5730\u7684\u5899\u949F\u65F6\u95F4\u3001\u4E0D\u5E26\u65F6\u533A\u540E\u7F00\uFF08\u5982 ${example}\uFF09\uFF0C\u7CFB\u7EDF\u6309\u4F60\u6240\u5728\u7684\u65F6\u533A\u7406\u89E3\u3002\u81F3\u5C11\u6BD4\u5F53\u524D\u65F6\u95F4\u665A 1 \u5206\u949F\u3002\u6392\u4E4B\u524D\u5148\u60F3\u60F3\u5BF9\u65B9\u90A3\u8FB9\u662F\u51E0\u70B9\u2014\u2014\u4F60\u4EEC\u4E4B\u95F4\u53EF\u80FD\u6709\u65F6\u5DEE\uFF0C\u522B\u628A\u6D88\u606F\u6392\u5230\u5BF9\u65B9\u7684\u6DF1\u591C\u3002`,
+  modeDescription: "\u751F\u6210\u6A21\u5F0F\u3002auto=\u5230\u70B9\u6839\u636E\u90A3\u65F6\u7684\u4E0A\u4E0B\u6587\u81EA\u7531\u53D1\u6325\uFF1Bprompted=\u56F4\u7ED5 prompt_hint \u7684\u65B9\u5411\u8BF4\u3002\u9ED8\u8BA4 auto\u3002",
+  promptHintDescription: '\u7ED9\u672A\u6765\u90A3\u6761\u6D88\u606F\u7684\u65B9\u5411\uFF0C\u5982"\u63A5\u7740\u521A\u624D\u90A3\u53EA\u732B\u7684\u8BDD\u5F80\u4E0B\u8BF4""\u544A\u8BC9\u4ED6\u6C64\u7096\u597D\u4E86"\u3002mode=prompted \u65F6\u5FC5\u586B\u3002',
+  recurrenceDescription: "\u91CD\u590D\u7C7B\u578B\u3002none=\u4E00\u6B21\u6027\uFF08\u9ED8\u8BA4\uFF09\uFF1Bdaily/weekly=\u6BCF\u5929/\u6BCF\u5468\u540C\u4E00\u65F6\u95F4\u3002",
+  abilities
 });
 var buildFireScheduleTool = (opts) => ({
   type: "function",
@@ -8463,7 +8870,8 @@ var buildFireScheduleTool = (opts) => ({
     name: AMSG_FIRE_SCHEDULE_TOOL,
     description: FIRE_TOOL_DESCRIPTION,
     parameters: buildParameters(
-      buildSendAtExample(opts.nowMs, opts.tz)
+      buildSendAtExample(opts.nowMs, opts.tz),
+      opts.abilities
     )
   }
 });
@@ -8516,7 +8924,8 @@ var buildFireScheduleBlock = (mode, opts) => {
     // 角色在 prompt 里只看得到自己那边的钟，很容易把「晚上聊两句」排到对方的凌晨三点。
     // 对方那边此刻几点写在【当前时刻补充】里（有时差时才有那一行）。
     "\u5B9A\u65F6\u95F4\u4E4B\u524D\u5148\u60F3\u60F3\u5BF9\u65B9\u90A3\u8FB9\u662F\u51E0\u70B9\uFF1A\u4F60\u4EEC\u4E4B\u95F4\u53EF\u80FD\u6709\u65F6\u5DEE\uFF0C\u522B\u628A\u6D88\u606F\u6392\u5230\u5BF9\u65B9\u7684\u6DF1\u591C\u3002",
-    "\u6CA1\u5FC5\u8981\u5C31\u522B\u6392\u3002\u4E3A\u4E86\u6392\u800C\u6392\u51FA\u6765\u7684\u540E\u7EED\uFF0C\u8BFB\u8D77\u6765\u5C31\u662F\u6CA1\u8BDD\u627E\u8BDD\u3002"
+    "\u6CA1\u5FC5\u8981\u5C31\u522B\u6392\u3002\u4E3A\u4E86\u6392\u800C\u6392\u51FA\u6765\u7684\u540E\u7EED\uFF0C\u8BFB\u8D77\u6765\u5C31\u662F\u6CA1\u8BDD\u627E\u8BDD\u3002",
+    ...opts.limitsBrief ? [opts.limitsBrief] : []
   ].join("\n");
 };
 var buildTaskInstruction = (mode, promptHint) => {
@@ -13841,7 +14250,23 @@ var sendInstantErrorPush = async (args) => {
 var amsgFireSettled = async (info) => {
   const stash = getFireStash(info.scratch);
   if (!stash) return;
-  if (stash.instant && info.status === "failed" && stash.taskUuid) {
+  const committed = info.outboxed === true;
+  const delivered = committed || (info.sentCount ?? 0) > 0;
+  const stateWrites = [];
+  if (!stash.instant && !stash.dailyCounted) {
+    stash.dailyCounted = true;
+    const sent = delivered ? 1 : 0;
+    const llmCalls = typeof info.llmCalls === "number" && info.llmCalls > 0 ? info.llmCalls : 0;
+    if (sent || llmCalls) {
+      stash.dailySends = bumpDailySends(stash.dailySends, stash.dailyDay, {
+        sends: sent,
+        llmCalls,
+        sentId: `${stash.clientTaskId || "task"}@${stash.occurrenceMs}`
+      });
+      stateWrites.push({ key: AMSG_DAILY_SENDS_KEY, value: JSON.stringify(stash.dailySends) });
+    }
+  }
+  if (stash.instant && info.status === "failed" && !committed && stash.taskUuid) {
     const failReason = info.error instanceof Error ? info.error.message : String(info.error ?? "\u672A\u77E5\u9519\u8BEF");
     const retryCount = typeof info.task?.retry_count === "number" ? info.task.retry_count : 0;
     const errorCode = readErrorCode(info.error);
@@ -13876,7 +14301,7 @@ var amsgFireSettled = async (info) => {
       }
     }
   }
-  if (stash.instant && stash.emotionLatePending && stash.emotionEvalPromise && stash.clientTaskId && (info.sentCount ?? 0) > 0) {
+  if (stash.instant && stash.emotionLatePending && stash.emotionEvalPromise && stash.clientTaskId && delivered) {
     stash.emotionLatePending = false;
     try {
       const outcome = await stash.emotionEvalPromise;
@@ -13893,12 +14318,15 @@ var amsgFireSettled = async (info) => {
   }
   const texts = stash.selfLogTexts;
   stash.selfLogTexts = null;
-  const sentCount = info.sentCount ?? 0;
+  const sentCount = committed && texts ? texts.length : info.sentCount ?? 0;
   if (texts && sentCount > 0) {
     const text = texts.slice(0, sentCount).filter((message) => message.trim()).join("\n");
+    const entryId = `${stash.clientTaskId || "task"}@${stash.occurrenceMs}`;
+    const rerun = stash.selfLog.entries.some((e) => e.id === entryId);
     const next = appendSelfLogEntry(stash.selfLog, {
-      id: `${stash.clientTaskId || "task"}@${stash.occurrenceMs}`,
+      id: entryId,
       at: Date.now(),
+      startedAt: stash.firedAt,
       text,
       // 即时对话是在答用户刚说的话——列进自述块保持连续性，但不占「主动连发」的额度
       // （带这个标记的条目不会让 selfLog.unansweredSends 加一）。
@@ -13908,15 +14336,20 @@ var amsgFireSettled = async (info) => {
       stash.selfLog = next;
       stash.selfLogDirty = true;
     }
+    if (!stash.instant && stash.recurring && stash.clientTaskId && !rerun) {
+      stash.selfLog = bumpRecurringSend(stash.selfLog, stash.clientTaskId);
+      stash.selfLogDirty = true;
+    }
   }
-  if (!stash.selfLogDirty) return;
-  stash.selfLogDirty = false;
+  if (stash.selfLogDirty) {
+    stash.selfLogDirty = false;
+    stateWrites.push({ key: AMSG_SELF_LOG_KEY, value: JSON.stringify(stash.selfLog) });
+  }
+  if (stateWrites.length === 0) return;
   try {
-    await info.writeState(amsgStateNamespace(stash.charId), [
-      { key: AMSG_SELF_LOG_KEY, value: JSON.stringify(stash.selfLog) }
-    ]);
+    await info.writeState(amsgStateNamespace(stash.charId), stateWrites);
   } catch (error) {
-    console.warn("[amsg:self-log] \u5199\u5165\u5931\u8D25\uFF08\u8FD9\u6B21\u7167\u5E38\u53D1\u9001\uFF0C\u4F46\u4E0B\u4E00\u6B21\u5230\u70B9\u89D2\u8272\u4E0D\u4F1A\u77E5\u9053\u8BF4\u8FC7\u8FD9\u53E5\uFF09", error);
+    console.warn("[amsg:self-log] \u5199\u5165\u5931\u8D25\uFF08\u8FD9\u6B21\u7167\u5E38\u53D1\u9001\uFF0C\u4F46\u4E0B\u4E00\u6B21\u5230\u70B9\u89D2\u8272\u4E0D\u4F1A\u77E5\u9053\u8BF4\u8FC7\u8FD9\u53E5\uFF0C\u6BCF\u65E5\u8BA1\u6570\u4E5F\u5C11\u8BB0\u4E00\u6B21\uFF09", error);
   }
 };
 var amsgStaleSkip = async (task, info) => {
@@ -13992,13 +14425,22 @@ var raceEmotionEval = (promise, lateNote = "\u8BC4\u4F30\u6CA1\u8D76\u4E0A\u8FD9
     if (timer !== void 0) clearTimeout(timer);
   });
 };
+var countCommittedSelfSends = (stash) => {
+  const refundedSends = stash.cancelledTasks.filter((uuid) => stash.plannedSelfSendUuids.includes(uuid)).length;
+  return countUnansweredSends(stash.selfLog) + stash.plannedSelfSends - refundedSends + stash.scheduledTasks.length + (stash.instant ? 0 : 1);
+};
+var selfScheduleBusyTimes = (stash, nowMs) => {
+  const busy = liveTaskView(stash).map((t) => currentOccurrenceMs(t, nowMs)).filter((ms) => ms != null);
+  if (stash.lastSelfSendAt != null) busy.push(stash.lastSelfSendAt);
+  if (!stash.instant) busy.push(nowMs);
+  return busy;
+};
 var runFireScheduleTool = async (stash, scheduleTask, args, nowMs) => {
   if (typeof scheduleTask !== "function") {
     return { ok: false, reason: "not_supported", message: "\u5F53\u524D\u540E\u53F0\u7248\u672C\u8FD8\u4E0D\u652F\u6301\u7ED9\u81EA\u5DF1\u6392\u540E\u7EED\uFF0C\u8FD9\u6B21\u5C31\u628A\u8BDD\u8BF4\u5B8C\u5427\u3002" };
   }
-  const unansweredLimit = stash.maxUnansweredSends;
-  const refundedSends = stash.cancelledTasks.filter((uuid2) => stash.plannedSelfSendUuids.includes(uuid2)).length;
-  const committedSends = countUnansweredSends(stash.selfLog) + stash.plannedSelfSends - refundedSends + stash.scheduledTasks.length;
+  const unansweredLimit = stash.limits.maxUnansweredSends;
+  const committedSends = countCommittedSelfSends(stash);
   if (committedSends + 1 > unansweredLimit) {
     return {
       ok: false,
@@ -14013,16 +14455,29 @@ var runFireScheduleTool = async (stash, scheduleTask, args, nowMs) => {
       message: `\u8FD9\u6B21\u5DF2\u7ECF\u6392\u4E86 ${MAX_FIRE_SCHEDULES} \u6761\uFF0C\u591F\u4E86\uFF0C\u5269\u4E0B\u7684\u8BDD\u76F4\u63A5\u5199\u8FDB\u8FD9\u6761\u6D88\u606F\u91CC\u3002`
     };
   }
-  const live = stash.pendingTaskCount + stash.scheduledTasks.length;
-  if (live >= MAX_ACTIVE_TASKS_PER_CHAR) {
+  const pendingUuids = new Set(stash.pendingTasks.map((t) => t.taskUuid));
+  const freedSlots = stash.cancelledTasks.filter((uuid2) => pendingUuids.has(uuid2)).length;
+  const live = stash.pendingTaskCount - freedSlots + stash.scheduledTasks.length;
+  if (live >= stash.limits.maxActiveTasks) {
     return {
       ok: false,
       reason: "task_limit",
-      message: `\u4F60\u540C\u65F6\u6302\u7740\u7684\u4EFB\u52A1\u5DF2\u7ECF\u6709 ${live} \u4E2A\uFF08\u4E0A\u9650 ${MAX_ACTIVE_TASKS_PER_CHAR}\uFF09\uFF0C\u8FD9\u6B21\u522B\u518D\u6392\u4E86\u3002`
+      message: `\u4F60\u540C\u65F6\u6302\u7740\u7684\u4EFB\u52A1\u5DF2\u7ECF\u6709 ${live} \u4E2A\uFF08\u7528\u6237\u8BBE\u7684\u4E0A\u9650\u662F ${stash.limits.maxActiveTasks}\uFF09\uFF0C\u8FD9\u6B21\u522B\u518D\u6392\u4E86\u3002`
     };
   }
   const parsed = parseFireScheduleArgs(args, nowMs, stash.tz);
   if ("ok" in parsed) return parsed;
+  const rules = checkSelfScheduleRules({
+    limits: stash.limits,
+    sendAtMs: Date.parse(parsed.sendAt),
+    recurrence: parsed.recurrence,
+    expirePolicy: parsed.expirePolicy,
+    busy: selfScheduleBusyTimes(stash, nowMs),
+    earliestMs: nowMs + MIN_SCHEDULE_LEAD_MS2,
+    formatTime: (ms) => formatFireTimeShort(ms, stash.tz)
+  });
+  if (!rules.ok) return rules;
+  parsed.expirePolicy = rules.expirePolicy;
   const seq = stash.selfScheduleSeq;
   const uuid = buildSelfScheduleUuid(stash.charId, stash.occurrenceMs, seq);
   const clientTaskId = `${uuid}-c`;
@@ -14245,7 +14700,9 @@ var amsgHooks = {
       }
     };
     const taskMeta = ctx.task.metadata ?? {};
-    const policy = typeof taskMeta.amsgExpirePolicy === "string" ? taskMeta.amsgExpirePolicy : void 0;
+    const taskPolicy = typeof taskMeta.amsgExpirePolicy === "string" ? taskMeta.amsgExpirePolicy : void 0;
+    const selfScheduled = taskMeta.amsgSelfScheduled === true;
+    const recurring = ctx.task.recurrenceType === "daily" || ctx.task.recurrenceType === "weekly";
     const emotionEvalSpec = takeEmotionEvalSpec(ctx.task.metadata);
     const taskKind = readTaskKind(taskMeta);
     if (taskKind) {
@@ -14270,6 +14727,9 @@ var amsgHooks = {
       };
     }
     const charRows = await ctx.readState(amsgStateNamespace(charId));
+    const limitsRecord = parseAmsgLimitsRecord(charRows.find((r) => r.key === AMSG_LIMITS_KEY)?.value);
+    const recordLimits = resolveAmsgLimits(limitsRecord);
+    const policy = selfScheduled && taskPolicy === "force" && !recordLimits.allowSelfForce ? "expire" : taskPolicy;
     const presence = parseAmsgChatPresence(
       charRows.find((r) => r.key === AMSG_CHAT_PRESENCE_KEY)?.value
     );
@@ -14292,6 +14752,8 @@ var amsgHooks = {
     const packJson = await unpackOrFail("fire_pack", packRow.value);
     const pack = parseFirePack(packJson);
     if (!pack) throw fail3(`fire_pack \u89E3\u6790\u5931\u8D25\uFF1A${describeFirePackVersion(packJson)}`);
+    const legacyUnanswered = pack.maxUnansweredSends;
+    const limits = limitsRecord || legacyUnanswered === void 0 ? recordLimits : { ...recordLimits, maxUnansweredSends: resolveMaxUnansweredSends(legacyUnanswered) };
     if (instant && !pack.chat) {
       throw fail3("\u5373\u65F6\u5BF9\u8BDD\u4EFB\u52A1\u7684 fire_pack \u91CC\u6CA1\u6709 chat \u6BB5\uFF08\u4E91\u7AEF\u72B6\u6001\u6CA1\u8DDF\u4E0A\uFF09");
     }
@@ -14345,8 +14807,22 @@ var amsgHooks = {
     const maxToolIterations = resolveToolIterationBudget(!!mcpResolve);
     const storedSelfLog = parseSelfLog(charRows.find((r) => r.key === AMSG_SELF_LOG_KEY)?.value ?? "");
     const selfLog = reconcileSelfLogWithPack(storedSelfLog, pack, expireInput.lastUserMessageAt);
-    const maxUnansweredSends = resolveMaxUnansweredSends(pack.maxUnansweredSends);
-    if (!instant && taskMeta.amsgSelfScheduled === true && countUnansweredSends(selfLog) >= maxUnansweredSends) {
+    const clientTaskId = typeof taskMeta.amsgClientTaskId === "string" ? taskMeta.amsgClientTaskId : "";
+    const nowMs = ctx.now.getTime();
+    const scheduleOff = !pack.selfScheduleEnabled || limitsRecord?.selfScheduleEnabled === false;
+    if (!instant && (scheduleOff || selfScheduled && recurring && !limits.allowSelfRecurring)) {
+      console.log("[amsg:schedule-off-skip]", {
+        taskId: ctx.task.id,
+        charId,
+        selfScheduled,
+        recurring,
+        scheduleOff
+      });
+      await recordSkip(ctx, charId, "schedule-off", occurrenceMs);
+      return { skip: true };
+    }
+    const maxUnansweredSends = limits.maxUnansweredSends;
+    if (!instant && selfScheduled && countUnansweredSends(selfLog) >= maxUnansweredSends) {
       console.log("[amsg:unanswered-limit-skip]", {
         taskId: ctx.task.id,
         charId,
@@ -14356,13 +14832,49 @@ var amsgHooks = {
       await recordSkip(ctx, charId, "unanswered-limit", occurrenceMs);
       return { skip: true };
     }
+    const occurrenceEntryId = `${clientTaskId || "task"}@${occurrenceMs}`;
+    const lastSelfSendAt = selfLog.entries.filter((e) => !e.reply && e.id !== occurrenceEntryId).map((e) => e.startedAt ?? e.at).reduce((latest, at) => latest == null || at > latest ? at : latest, null);
+    if (!instant && selfScheduled && limits.minSendGapMs > 0 && lastSelfSendAt != null && nowMs < lastSelfSendAt + limits.minSendGapMs - FIRE_GAP_TOLERANCE_MS) {
+      console.log("[amsg:min-gap-skip]", {
+        taskId: ctx.task.id,
+        charId,
+        lastSelfSendAt,
+        gapMs: limits.minSendGapMs
+      });
+      await recordSkip(ctx, charId, "min-gap", occurrenceMs);
+      return { skip: true };
+    }
+    if (!instant && recurring && Number.isFinite(limits.recurringStopAfter) && countRecurringSends(selfLog, clientTaskId) >= limits.recurringStopAfter) {
+      console.log("[amsg:recurring-unanswered-skip]", {
+        taskId: ctx.task.id,
+        charId,
+        sends: countRecurringSends(selfLog, clientTaskId),
+        stopAfter: limits.recurringStopAfter
+      });
+      await recordSkip(ctx, charId, "recurring-unanswered", occurrenceMs);
+      return { skip: true };
+    }
+    const dailyDay = dayKeyInZone(nowMs, pack.userTzId);
+    const dailySends = parseDailySends(charRows.find((r) => r.key === AMSG_DAILY_SENDS_KEY)?.value);
+    const sentToday = sendsOnDay(dailySends, dailyDay);
+    if (!instant && sentToday >= limits.dailySendCap) {
+      console.log("[amsg:daily-limit-skip]", {
+        taskId: ctx.task.id,
+        charId,
+        day: dailyDay,
+        sentToday,
+        cap: limits.dailySendCap
+      });
+      await recordSkip(ctx, charId, "daily-limit", occurrenceMs);
+      return { skip: true };
+    }
     const livePendingTasks = [...pack.pendingTasks, ...selfLog.tasks];
-    const selfScheduleAllowed = pack.selfScheduleEnabled;
+    const otherLiveTasks = livePendingTasks.filter((t) => recurring || t.taskUuid !== ctx.task.uuid && (!clientTaskId || t.clientTaskId !== clientTaskId));
+    const selfScheduleAllowed = !scheduleOff;
     const canSelfSchedule = typeof ctx.scheduleTask === "function" && selfScheduleAllowed;
     const tz = { tzId: pack.tzId };
-    const clientTaskId = typeof taskMeta.amsgClientTaskId === "string" ? taskMeta.amsgClientTaskId : "";
     const { toolCtx, proxyWorkerUrl, xhsCookie } = buildToolCtx(toolPack, toolConfig);
-    const plannedSelfSendTasks = livePendingTasks.filter((t) => t.source === "character" && isPendingTask(t, ctx.now.getTime()));
+    const plannedSelfSendTasks = otherLiveTasks.filter((t) => t.source === "character" && isPendingTask(t, ctx.now.getTime()) && t.taskUuid !== ctx.task.uuid);
     const stash = {
       session: createFireSessionState(),
       toolCtx,
@@ -14378,14 +14890,20 @@ var amsgHooks = {
       mcpSpentMs: 0,
       // 「还能不能再排」按客户端已知的 + 角色自己排过还没被认领的一起算，
       // 不然角色离线期间连排几次就能绕过每角色的任务上限。
-      pendingTaskCount: livePendingTasks.length,
+      pendingTaskCount: otherLiveTasks.length,
       pendingTasks: livePendingTasks,
       scheduledTasks: [],
       // 序号与 scheduledTasks 一样从空账起步；此后只增不减（取消不回退，见字段注释）。
       selfScheduleSeq: 0,
       cancelledTasks: [],
       renewedTasks: [],
-      maxUnansweredSends,
+      limits,
+      lastSelfSendAt,
+      recurring,
+      dailyDay,
+      dailySends,
+      dailyCounted: false,
+      firedAt: nowMs,
       plannedSelfSends: plannedSelfSendTasks.length,
       plannedSelfSendUuids: plannedSelfSendTasks.map((t) => t.taskUuid),
       charId,
@@ -14421,10 +14939,23 @@ var amsgHooks = {
       writeState: ctx.writeState
     });
     const mcpBlock = mcpResolve ? buildMcpFireBlock(mcpResolve, { mode: mcpNative ? "native" : "text" }) : "";
-    const scheduleBlock = canSelfSchedule ? buildFireScheduleBlock(mcpNative ? "native" : "text", { nowMs: ctx.now.getTime(), tz }) : "";
+    const limitsBrief = canSelfSchedule ? buildLimitsBrief({
+      limits,
+      committedSends: countCommittedSelfSends(stash),
+      activeTasks: otherLiveTasks.length,
+      earliestText: limits.minSendGapMs > 0 ? formatFireTimeShort(earliestSlotAfter(
+        nowMs + MIN_SCHEDULE_LEAD_MS2,
+        limits.minSendGapMs,
+        selfScheduleBusyTimes(stash, nowMs)
+      ), tz) : void 0,
+      // 正在发的这一条（定时触发）发完就占掉今天的一个名额。
+      dailyRemaining: Number.isFinite(limits.dailySendCap) ? Math.max(0, limits.dailySendCap - sentToday - (instant ? 0 : 1)) : void 0
+    }) : "";
+    const scheduleBlock = canSelfSchedule ? buildFireScheduleBlock(mcpNative ? "native" : "text", { nowMs: ctx.now.getTime(), tz, limitsBrief }) : "";
+    const abilities = { allowRecurring: limits.allowSelfRecurring, allowForce: limits.allowSelfForce };
     const fireTools = [
       ...mcpResolve && mcpNative ? buildMcpFireTools(mcpResolve) : [],
-      ...canSelfSchedule && mcpNative ? [buildFireScheduleTool({ nowMs: ctx.now.getTime(), tz })] : [],
+      ...canSelfSchedule && mcpNative ? [buildFireScheduleTool({ nowMs: ctx.now.getTime(), tz, abilities })] : [],
       ...canManageTasks ? [buildFireCancelTool(), buildFireRenewTool({ nowMs: ctx.now.getTime(), tz })] : []
     ];
     stash.fireToolNames = new Set(fireTools.map((t) => t?.function?.name).filter((n) => typeof n === "string" && !n.startsWith(MCP_FIRE_NAME_PREFIX)));
@@ -14485,6 +15016,7 @@ var amsgHooks = {
       };
     }
     const prompt = renderFirePack(pack, ctx.now.getTime(), taskMeta.amsgTaskInstruction, {
+      maxUnansweredSends,
       selfLog,
       taskListBlock,
       realtimeWorldBlock,
