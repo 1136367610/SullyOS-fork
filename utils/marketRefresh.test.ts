@@ -120,10 +120,22 @@ describe('路人一次模型调用',()=>{
  it('keeps long public text, titles and replies instead of rejecting or truncating them',()=>{
    const snapshot=prepareMarketNPCs(initial(),()=>.1),actions=dialogue(snapshot.visitors.map(v=>v.id));
    const long='长正文'.repeat(700)+'结尾保留';
+   if(!('title' in actions[0]))throw Error('expected post');
    actions[0].words=long;actions[0].title='长标题'.repeat(30);
    actions[1].words=long;
    const result=applyMarketNPCs(initial(),snapshot,plan(snapshot,actions));
    expect(result.state.requests[0].body).toBe(long);
    expect(result.state.requests[0].itemLabel).toBe(actions[0].title);
    expect(result.state.requests[0].comments[0].content).toBe(long);
+ });
+
+ it('exposes only the current failed response in memory and never persists its text',async()=>{
+   saveFishingMarketState(initial());const original='原始返回，不是JSON\n第二行';
+   vi.mocked(safeFetchJson).mockResolvedValueOnce({choices:[{message:{content:original},finish_reason:'stop'}],usage:{prompt_tokens:12}});
+   let caught:any;try{await runMarketNPCSession(api)}catch(e){caught=e}
+   const record=vi.mocked(logVRApiCall).mock.calls.at(-1)![0];
+   expect(record.ok).toBe(false);expect(record).not.toHaveProperty('responseText');
+   expect(JSON.parse(caught.responseText).content).toBe(original);
+   expect(caught.responseText).not.toContain('Authorization');expect(caught.responseText).not.toContain(api.baseUrl);
+   expect(localStorage.getItem('vr_fishing_market_v1')).not.toContain(original);
  });
