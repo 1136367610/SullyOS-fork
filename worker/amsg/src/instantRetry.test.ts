@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deriveUserEncryptionKey, encryptForStorage, runTask } from '@rei-standard/amsg-server/cloudflare';
-import { amsgFireSettled } from './index';
+import { amsgFireSettled, buildWorkerConfig } from './index';
 
-// 跑真实上游调度器，验证收尾策略改变的是任务终态，而不只是提前弹一条错误通知。
+// 跑真实上游调度器，验证正式重试配置决定任务终态，不靠收尾 hook 修改错误对象。
 const runFailedTurn = async (instant: boolean, status: number | 'network' | 'before-fire') => {
   const masterKey = 'a'.repeat(64);
   const userId = 'c6a804ad-46ea-4e4d-a26a-13c29e23bc55';
@@ -30,8 +30,10 @@ const runFailedTurn = async (instant: boolean, status: number | 'network' | 'bef
       status: typeof status === 'number' ? status : 500,
     });
   });
+  const onFireSettled = vi.fn(amsgFireSettled);
   const ctx = {
     db, masterKey, leaseHeartbeatMs: 0,
+    maxGenerationRetries: buildWorkerConfig({ AMSG_MASTER_KEY: masterKey } as any).maxGenerationRetries,
     hooks: {
       onBeforeFire: async () => {
         if (status === 'before-fire') throw new Error('读取云端上下文失败');
@@ -39,30 +41,36 @@ const runFailedTurn = async (instant: boolean, status: number | 'network' | 'bef
       },
       onLLMOutput: async () => ({ decision: 'skip-push' }),
     },
-    onFireSettled: amsgFireSettled,
+    onFireSettled,
   };
   const result = await runTask(ctx as any, task.uuid);
-  return { task, result, ctx, modelCalls: () => modelCalls };
+  return { task, result, ctx, onFireSettled, modelCalls: () => modelCalls };
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('instant 生成失败不进入定时任务重试', () => {
   it.each([200, 429, 500, 'network', 'before-fire'] as const)('%s 失败首次就结束任务', async (status) => {
-    const { task, result, ctx, modelCalls } = await runFailedTurn(true, status);
+    const { task, result, ctx, onFireSettled, modelCalls } = await runFailedTurn(true, status);
     expect(task.status).toBe('failed');
     expect(task.retry_count).toBe(0);
     expect(task.retry_after).toBeNull();
     expect(result).toMatchObject({ ran: true, summary: { failedCount: 1 } });
+    expect(onFireSettled).toHaveBeenCalledWith(expect.objectContaining({
+      willRetry: false, failureStage: 'generation',
+    }));
     await runTask(ctx as any, task.uuid);
     expect(modelCalls()).toBe(status === 'before-fire' ? 0 : 1);
   });
 
   it('定时消息的同类生成失败仍可重试', async () => {
-    const { task } = await runFailedTurn(false, 500);
+    const { task, onFireSettled } = await runFailedTurn(false, 500);
     expect(task.status).toBe('pending');
     expect(task.retry_count).toBe(1);
     expect(task.retry_after).not.toBeNull();
+    expect(onFireSettled).toHaveBeenCalledWith(expect.objectContaining({
+      willRetry: true, failureStage: 'generation',
+    }));
   });
 
   it('instant 整批已入收件箱的推送失败不标成永久失败', async () => {

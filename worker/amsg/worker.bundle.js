@@ -3,7 +3,7 @@
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.31_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1215,7 +1215,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-VBDBORLR.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.31_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-PG54W6B5.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -1929,58 +1929,6 @@ function createGetUserKeyHandler(ctx) {
   }
   return { GET };
 }
-var WEB_PUSH_MAX_BODY_BYTES = 4096;
-var WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES = 16 + 4 + 1 + 65 + 1 + 16;
-var MAX_PUSH_PAYLOAD_BYTES = WEB_PUSH_MAX_BODY_BYTES - WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES;
-var PUSH_ENVELOPE_RESERVED_BYTES = 384;
-var payloadEncoder = new TextEncoder();
-function measurePushPayload(payload, options) {
-  const reserveEnvelope = !!(options && options.reserveEnvelope);
-  const bytes = payloadEncoder.encode(typeof payload === "string" ? payload : String(payload)).length;
-  const envelopeReservedBytes = reserveEnvelope ? PUSH_ENVELOPE_RESERVED_BYTES : 0;
-  const maxBytes = MAX_PUSH_PAYLOAD_BYTES - envelopeReservedBytes;
-  return {
-    bytes,
-    maxBytes,
-    remainingBytes: maxBytes - bytes,
-    withinLimit: bytes <= maxBytes,
-    envelopeReservedBytes
-  };
-}
-async function sendWebPush2(args) {
-  const { payload } = args || {};
-  if (typeof payload === "string") {
-    const size = measurePushPayload(payload);
-    if (!size.withinLimit) {
-      const err6 = new Error(
-        `sendWebPush: payload is ${size.bytes} bytes, over the ${MAX_PUSH_PAYLOAD_BYTES}-byte limit (push services cap the encrypted body at ${WEB_PUSH_MAX_BODY_BYTES} bytes; aes128gcm adds ${WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES} bytes)`
-      );
-      err6.code = "PUSH_PAYLOAD_TOO_LARGE";
-      err6.bytes = size.bytes;
-      err6.maxBytes = MAX_PUSH_PAYLOAD_BYTES;
-      throw err6;
-    }
-  }
-  return sendWebPush(args);
-}
-var SCHEDULED_DEFAULT_TTL = 2419200;
-function createWebCryptoWebPush(vapid = {}, { ttl = SCHEDULED_DEFAULT_TTL } = {}) {
-  return {
-    async sendNotification(subscription, payload) {
-      return sendWebPush2({
-        subscription,
-        payload,
-        ttl,
-        vapid: {
-          email: vapid.email,
-          publicKey: vapid.publicKey,
-          privateKey: vapid.privateKey
-        },
-        fetch: globalThis.fetch
-      });
-    }
-  };
-}
 var NonRetryableError = class extends Error {
   /**
    * @param {string} message
@@ -2116,6 +2064,89 @@ function summarizeErrorCause(error, stage) {
     cause.code = sanitizeErrorSummary(raw.code).slice(0, 100);
   }
   return cause;
+}
+var DEFAULT_MAX_DELIVERY_RETRIES = 3;
+function resolveMaxDeliveryRetries(ctx) {
+  const value = ctx.maxDeliveryRetries;
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MAX_DELIVERY_RETRIES;
+}
+function resolveMaxGenerationRetries(ctx, safeTask) {
+  let value;
+  try {
+    value = typeof ctx.maxGenerationRetries === "function" ? ctx.maxGenerationRetries(safeTask) : ctx.maxGenerationRetries;
+  } catch (cause) {
+    throw new DeploymentConfigError("maxGenerationRetries callback failed", { code: "GENERATION_RETRY_POLICY_INVALID", cause });
+  }
+  if (value === void 0) return resolveMaxDeliveryRetries(ctx);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new DeploymentConfigError("maxGenerationRetries must return a non-negative integer or undefined", { code: "GENERATION_RETRY_POLICY_INVALID" });
+  }
+  return value;
+}
+function failureRetryDecision(state, error) {
+  const retryLimit = state.outboxed ? state.deliveryLimit : state.generationLimit;
+  const permanent = isPermanentDeliveryFailure({
+    permanent: isNonRetryableError(error),
+    errorCode: error?.code,
+    pushStatus: readPushStatusCode(error)
+  });
+  return {
+    failureStage: state.outboxed ? "delivery" : "generation",
+    retryLimit,
+    willRetry: !state.isCancelled?.() && !isTaskCancelledError(error) && !permanent && state.retryCount < retryLimit
+  };
+}
+var WEB_PUSH_MAX_BODY_BYTES = 4096;
+var WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES = 16 + 4 + 1 + 65 + 1 + 16;
+var MAX_PUSH_PAYLOAD_BYTES = WEB_PUSH_MAX_BODY_BYTES - WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES;
+var PUSH_ENVELOPE_RESERVED_BYTES = 384;
+var payloadEncoder = new TextEncoder();
+function measurePushPayload(payload, options) {
+  const reserveEnvelope = !!(options && options.reserveEnvelope);
+  const bytes = payloadEncoder.encode(typeof payload === "string" ? payload : String(payload)).length;
+  const envelopeReservedBytes = reserveEnvelope ? PUSH_ENVELOPE_RESERVED_BYTES : 0;
+  const maxBytes = MAX_PUSH_PAYLOAD_BYTES - envelopeReservedBytes;
+  return {
+    bytes,
+    maxBytes,
+    remainingBytes: maxBytes - bytes,
+    withinLimit: bytes <= maxBytes,
+    envelopeReservedBytes
+  };
+}
+async function sendWebPush2(args) {
+  const { payload } = args || {};
+  if (typeof payload === "string") {
+    const size = measurePushPayload(payload);
+    if (!size.withinLimit) {
+      const err6 = new Error(
+        `sendWebPush: payload is ${size.bytes} bytes, over the ${MAX_PUSH_PAYLOAD_BYTES}-byte limit (push services cap the encrypted body at ${WEB_PUSH_MAX_BODY_BYTES} bytes; aes128gcm adds ${WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES} bytes)`
+      );
+      err6.code = "PUSH_PAYLOAD_TOO_LARGE";
+      err6.bytes = size.bytes;
+      err6.maxBytes = MAX_PUSH_PAYLOAD_BYTES;
+      throw err6;
+    }
+  }
+  return sendWebPush(args);
+}
+var SCHEDULED_DEFAULT_TTL = 2419200;
+function createWebCryptoWebPush(vapid = {}, { ttl = SCHEDULED_DEFAULT_TTL } = {}) {
+  return {
+    async sendNotification(subscription, payload) {
+      return sendWebPush2({
+        subscription,
+        payload,
+        ttl,
+        vapid: {
+          email: vapid.email,
+          publicKey: vapid.publicKey,
+          privateKey: vapid.privateKey
+        },
+        fetch: globalThis.fetch
+      });
+    }
+  };
 }
 function isUniqueViolation(error) {
   if (!error || typeof error !== "object") return false;
@@ -3060,7 +3091,10 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
       retry_count: 0,
       ...typeof ctx.db.claimTask === "function" ? { retry_after: null } : {}
     });
-    if (!updated) return { renewed: false, reason: "not_found" };
+    if (!updated) {
+      const stillPending = await ctx.db.getTaskByUuid(uuid, task.user_id);
+      return { renewed: false, reason: stillPending ? "in_flight" : "not_found" };
+    }
     return { renewed: true, uuid, nextSendAt: nextSendAtIso };
   };
   const resolveLlmCredential2 = async (credId) => {
@@ -3129,6 +3163,7 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
     await notifyFireSettled(ctx, {
       task,
       status: settledStatus,
+      ...settledStatus === "failed" && ctx._deliveryState ? failureRetryDecision(ctx._deliveryState, settledError) : { willRetry: null, failureStage: null },
       skipReason: settledStatus === "skipped" ? progress.skipReason : null,
       sentCount: progress.sentCount,
       pushedCount: progress.pushedCount,
@@ -3392,6 +3427,7 @@ async function sendHookPushPayloads({
     }
     outboxed = await appendPushesToOutbox({ db: ctx.db, userId: task.user_id, userKey, pushes: finalized });
     progress.outboxed = outboxed;
+    if (ctx._deliveryState) ctx._deliveryState.outboxed = outboxed;
     if (!ctx.vapid || !ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
       throw new Error("VAPID configuration missing - push notifications cannot be sent");
     }
@@ -3550,7 +3586,7 @@ function resolveMultipartOptions(ctx) {
 function assertChunkBytesFitPushLimit({ maxChunkBytes, maxChunks, ttlMs }) {
   const PROBE_CHUNK_BYTES = 3;
   const [probe] = buildMultipartPushPayloads(
-    { messageKind: "reasoning" },
+    { messageKind: longestMessageKind() },
     { serializedPayload: "x".repeat(PROBE_CHUNK_BYTES), maxChunkBytes: PROBE_CHUNK_BYTES, ttlMs }
   );
   const digitHeadroom = 2 * (String(maxChunks).length - 1);
@@ -3568,6 +3604,9 @@ function assertChunkBytesFitPushLimit({ maxChunkBytes, maxChunks, ttlMs }) {
 }
 function base64UrlLength(n) {
   return Math.ceil(n * 4 / 3);
+}
+function longestMessageKind() {
+  return Object.values(MESSAGE_KIND).reduce((a, b) => b.length > a.length ? b : a);
 }
 function positiveIntegerOr(value, fallback) {
   return Number.isInteger(value) && /** @type {number} */
@@ -3610,7 +3649,15 @@ async function redeliverCommittedBatch(task, ctx, userKey, decryptedPayload, bat
   }
   return { success: true, messagesSent, redelivered: true, pushedCount: sentIds.length };
 }
-async function processSingleMessage(task, ctx, providedMasterKey, predecrypted = null, options = {}) {
+async function processSingleMessage(task, ctx, providedMasterKey, predecrypted = null) {
+  const deliveryState = {
+    outboxed: false,
+    deliveryLimit: resolveMaxDeliveryRetries(ctx),
+    generationLimit: resolveMaxDeliveryRetries(ctx),
+    retryCount: task.retry_count ?? 0,
+    isCancelled: ctx.isTaskCancelled
+  };
+  ctx = { ...ctx, _deliveryState: deliveryState };
   try {
     const masterKey = providedMasterKey || ctx.masterKey;
     if (!masterKey) {
@@ -3618,17 +3665,18 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
     }
     const userKey = predecrypted && predecrypted.userKey || await deriveUserEncryptionKey(task.user_id, masterKey);
     const decryptedPayload = predecrypted && predecrypted.payload || JSON.parse(await decryptFromStorage(task.encrypted_payload, userKey));
-    const resumeCommittedBatch = options && typeof options.resumeCommittedBatch === "boolean" ? options.resumeCommittedBatch : (task.retry_count || 0) > 0;
-    if (resumeCommittedBatch) {
-      const committed = await findCommittedBatch({
-        db: ctx.db,
-        userId: task.user_id,
-        userKey,
-        taskUuid: task.uuid,
-        occurrenceMs: occurrenceMsOf(task)
-      });
-      if (committed) return await redeliverCommittedBatch(task, ctx, userKey, decryptedPayload, committed);
+    const committed = await findCommittedBatch({
+      db: ctx.db,
+      userId: task.user_id,
+      userKey,
+      taskUuid: task.uuid,
+      occurrenceMs: occurrenceMsOf(task)
+    });
+    if (committed) {
+      deliveryState.outboxed = true;
+      return await redeliverCommittedBatch(task, ctx, userKey, decryptedPayload, committed);
     }
+    deliveryState.generationLimit = resolveMaxGenerationRetries(ctx, buildHookTask(task, decryptedPayload));
     if (ctx.hooks && typeof ctx.hooks.onBeforeFire === "function" && taskNeedsLlm(decryptedPayload)) {
       const agentic = await runAgenticFire({ task, decryptedPayload, userKey, ctx });
       if (agentic.handled) return agentic.result;
@@ -3709,6 +3757,7 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
     }
     const pushesToSend = reasoningPush ? [reasoningPush, ...contentPushes] : contentPushes;
     const outboxed = await appendPushesToOutbox({ db: ctx.db, userId: task.user_id, userKey, pushes: pushesToSend });
+    deliveryState.outboxed = outboxed;
     if (!ctx.vapid.email || !ctx.vapid.publicKey || !ctx.vapid.privateKey) {
       throw new Error("VAPID configuration missing - push notifications cannot be sent");
     }
@@ -3766,7 +3815,8 @@ async function processSingleMessage(task, ctx, providedMasterKey, predecrypted =
       error: error.message,
       errorCode: error.code || null,
       pushStatusCode: readPushStatusCode(error),
-      permanent: isNonRetryableError(error)
+      permanent: isNonRetryableError(error),
+      ...failureRetryDecision(deliveryState, error)
     };
   }
 }
@@ -3779,7 +3829,7 @@ async function processMessagesByUuid(uuid, ctx, maxRetries = 2, userId, provided
       error: { code: "TENANT_MASTER_KEY_MISSING", message: "\u79DF\u6237\u4E3B\u5BC6\u94A5\u4E0D\u5B58\u5728\u6216\u914D\u7F6E\u5F02\u5E38" }
     };
   }
-  while (retryCount <= maxRetries) {
+  while (true) {
     let task;
     try {
       task = userId ? await ctx.db.getTaskByUuid(uuid, userId) : await ctx.db.getTaskByUuidOnly(uuid);
@@ -3797,16 +3847,14 @@ async function processMessagesByUuid(uuid, ctx, maxRetries = 2, userId, provided
     if (!task) {
       return { success: false, error: { code: "TASK_NOT_FOUND", message: "\u4EFB\u52A1\u4E0D\u5B58\u5728\u6216\u5DF2\u5904\u7406" } };
     }
-    const result = await processSingleMessage(task, ctx, masterKey, null, {
-      resumeCommittedBatch: retryCount > 0 || (task.retry_count || 0) > 0
-    });
+    const result = await processSingleMessage({ ...task, retry_count: retryCount }, { ...ctx, maxDeliveryRetries: maxRetries }, masterKey, null);
     if (!result.success) {
       const permanent = isPermanentDeliveryFailure({
         permanent: result.permanent,
         errorCode: result.errorCode,
         pushStatus: result.pushStatusCode
       });
-      if (!permanent && retryCount < maxRetries) {
+      if (!permanent && result.willRetry !== false && retryCount < (result.retryLimit ?? maxRetries)) {
         retryCount++;
         await new Promise((resolve) => setTimeout(resolve, 1e3 * retryCount));
         continue;
@@ -4039,10 +4087,10 @@ function createScheduleMessageHandler(ctx) {
         dbResult = await db.createTaskSuperseding(createParams, supersedesUuid);
         superseded = !!(dbResult && dbResult.superseded);
       } else {
-        if (supersedesUuid) {
+        dbResult = await db.createTask(createParams);
+        if (supersedesUuid && dbResult) {
           superseded = await db.deleteTaskByUuid(supersedesUuid, userId);
         }
-        dbResult = await db.createTask(createParams);
       }
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -4122,7 +4170,6 @@ var CLAIM_LEASE_MARGIN_MS = 2 * 60 * 1e3;
 var DEFAULT_LEASE_HEARTBEAT_MS = 30 * 1e3;
 var DEFAULT_HEARTBEAT_LEASE_TTL_MS = 90 * 1e3;
 var STALE_AFTER_MS = 60 * 60 * 1e3;
-var DEFAULT_MAX_DELIVERY_RETRIES = 3;
 var adaptersWithoutLastErrorColumn = /* @__PURE__ */ new WeakSet();
 var lastErrorColumnSuspicions = /* @__PURE__ */ new WeakMap();
 var warnedAboutMissingLastErrorColumn = false;
@@ -4169,10 +4216,6 @@ function guardWebpushWithLease(webpush, lease) {
 }
 function resolveStaleAfterMs(ctx) {
   return positiveNumber(ctx.staleAfterMs) || STALE_AFTER_MS;
-}
-function resolveMaxDeliveryRetries(ctx) {
-  const value = ctx.maxDeliveryRetries;
-  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MAX_DELIVERY_RETRIES;
 }
 function isRecurringType(recurrenceType) {
   return recurrenceType === "daily" || recurrenceType === "weekly";
@@ -4436,7 +4479,7 @@ async function deliverTasks(ctx, tasks) {
     const permanent = isPermanentDeliveryFailure({ permanent: failure.permanent, errorCode, pushStatus });
     const errorExtra = buildErrorExtra(errorCode, pushStatus);
     try {
-      if (permanent || task.retry_count >= maxDeliveryRetries) {
+      if (permanent || failure.willRetry === false || task.retry_count >= (failure.retryLimit ?? maxDeliveryRetries)) {
         const encrypted = await encryptPayloadWithLastError(task, decryptedPayload, userKey, reason, errorExtra);
         if (isRecurringType(recurrenceType)) {
           const nextSendAt = nextFutureOccurrence(Date.parse(task.next_send_at), recurrenceType, Date.now(), tzId);
@@ -4622,10 +4665,7 @@ async function deliverTasks(ctx, tasks) {
           isTaskCancelled: () => lease.lost
         },
         masterKey,
-        { userKey, payload: decryptedPayload },
-        // 重试计数就记在这一列上：大于 0 说明这是同一次触发的重试，内容已经落
-        // 进 outbox 的话只补推送、不再生成（见 redeliverCommittedBatch）。
-        { resumeCommittedBatch: (task.retry_count || 0) > 0 }
+        { userKey, payload: decryptedPayload }
       );
     } catch (error) {
       if (lease.lost) {
@@ -4653,7 +4693,7 @@ async function deliverTasks(ctx, tasks) {
         recurrenceType,
         decryptedPayload,
         userKey,
-        { errorCode: sendResult.errorCode || null, permanent: sendResult.permanent === true, pushStatus: sendResult.pushStatusCode }
+        { errorCode: sendResult.errorCode || null, permanent: sendResult.permanent === true, pushStatus: sendResult.pushStatusCode, willRetry: sendResult.willRetry, retryLimit: sendResult.retryLimit }
       );
       return;
     }
@@ -4932,6 +4972,16 @@ function createUpdateMessageHandler(ctx) {
     };
     const result = await db.updateTaskByUuid(taskUuid, userId, encryptedPayload, extraFields);
     if (!result) {
+      const inFlight2 = updates.nextSendAt && typeof db.getTaskByUuid === "function" && !!await db.getTaskByUuid(taskUuid, userId);
+      if (inFlight2) {
+        return {
+          status: 409,
+          body: {
+            success: false,
+            error: { code: "TASK_IN_FLIGHT", message: "\u8FD9\u6761\u4EFB\u52A1\u6B63\u5728\u6295\u9012\uFF0C\u7B49\u8FD9\u6B21\u53D1\u5B8C\u518D\u6539\u6392\u671F" }
+          }
+        };
+      }
       return { status: 409, body: { success: false, error: { code: "UPDATE_CONFLICT", message: "\u4EFB\u52A1\u66F4\u65B0\u5931\u8D25\uFF0C\u4EFB\u52A1\u53EF\u80FD\u5DF2\u88AB\u4FEE\u6539\u6216\u5220\u9664" } } };
     }
     const applied = /* @__PURE__ */ new Set([
@@ -5854,6 +5904,15 @@ var D1Adapter = class {
     ).bind(...values).run();
     return this._db.prepare("SELECT * FROM scheduled_messages WHERE id = ?").bind(taskId).first();
   }
+  /**
+   * 按 uuid 改一条 pending 任务（PUT /update-message、fire hook 的 renewTask）。
+   *
+   * 改排期（extraFields 里带 next_send_at）时多一道租约门：这条任务正被一次投递
+   * 占着的话不改，返回 null。投递收尾会按自己领取时看到的排期推进下一次（一次性
+   * 任务干脆标成已发送），这期间写进去的新时刻随后就被盖掉，接口却已经回了成功
+   * ——用户以为改期生效了，实际什么都没留下。正文这类字段不受这道门约束：它们
+   * 只影响以后的触发，收尾那边本来就不会覆盖（见 run-tick 的收尾守卫）。
+   */
   async updateTaskByUuid(uuid, userId, encryptedPayload, extraFields) {
     const now = this._now();
     const sets = ["encrypted_payload = ?", "updated_at = ?"];
@@ -5868,9 +5927,14 @@ var D1Adapter = class {
       }
     }
     values.push(uuid, userId);
+    let leaseGate = "";
+    if (extraFields && Object.prototype.hasOwnProperty.call(extraFields, "next_send_at")) {
+      leaseGate = " AND (lease_until IS NULL OR lease_until <= ?)";
+      values.push(now);
+    }
     const res = await this._db.prepare(
       `UPDATE scheduled_messages SET ${sets.join(", ")}
-       WHERE uuid = ? AND user_id = ? AND status = 'pending'`
+       WHERE uuid = ? AND user_id = ? AND status = 'pending'${leaseGate}`
     ).bind(...values).run();
     if (!res.meta.changes) return null;
     return { uuid, updated_at: now };
@@ -6975,7 +7039,7 @@ function createClientStateNamespacesHandler(ctx) {
   }
   return { GET };
 }
-var SERVER_VERSION = true ? "2.6.0-next.30" : "0.0.0-dev";
+var SERVER_VERSION = true ? "2.6.0-next.31" : "0.0.0-dev";
 var SERVER_FEATURES = Object.freeze([
   "client-state",
   "client-state-chunking",
@@ -7084,7 +7148,9 @@ var SERVER_FEATURES = Object.freeze([
   // onAfterSend / onFireSettled 的载荷带整次 fire 的 usageTotal 与 llmCalls。
   "hook-usage-total",
   // 工厂配置认 maxDeliveryRetries（投递失败的重试次数上限，默认 3）。
-  "max-delivery-retries"
+  "max-delivery-retries",
+  // Per-task pre-commit retry limit and fire receipt retry decision.
+  "max-generation-retries"
 ]);
 function createCapabilitiesHandler(ctx) {
   async function GET(url, headers) {
@@ -7293,6 +7359,7 @@ function createSingleUserServer(config) {
     maxScheduledTasksPerFire: config.maxScheduledTasksPerFire,
     // 定时任务投递失败后的重试次数上限（默认 3）。handlers 用不到，宿主拿这个
     // ctx 去调 runScheduledTick 时它跟着走。
+    maxGenerationRetries: config.maxGenerationRetries,
     maxDeliveryRetries: config.maxDeliveryRetries
   };
   return {
@@ -7472,6 +7539,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
       onFireSettled: cfg.onFireSettled,
       // 一次触发投递失败后最多再重试几次（默认 3，0 = 第一次失败就终审；见
       // lib/run-tick.js 的 DEFAULT_MAX_DELIVERY_RETRIES）。
+      maxGenerationRetries: cfg.maxGenerationRetries,
       maxDeliveryRetries: cfg.maxDeliveryRetries,
       // 分组串行：(task) => 分组标识 | null。同一分组的任务同时只跑一条，
       // 跨跳也算（见 lib/run-tick.js）。不配 = 全并发，与以前一致。
@@ -7629,7 +7697,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-09-30";
+var AMSG_BUNDLE_VERSION = "2026-10-01";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -15120,9 +15188,6 @@ var sendInstantErrorPush = async (args) => {
 };
 var amsgFireSettled = async (info) => {
   const stash = getFireStash(info.scratch);
-  if ((stash?.instant || isInstantChatTask(info.metadata)) && info.status === "failed" && info.outboxed !== true && info.error && typeof info.error === "object") {
-    info.error.permanent = true;
-  }
   if (!stash) return;
   const committed = info.outboxed === true;
   const delivered = committed || (info.sentCount ?? 0) > 0;
@@ -15140,7 +15205,7 @@ var amsgFireSettled = async (info) => {
       stateWrites.push({ key: AMSG_DAILY_SENDS_KEY, value: JSON.stringify(stash.dailySends) });
     }
   }
-  if (stash.instant && info.status === "failed" && !committed && stash.taskUuid) {
+  if (stash.instant && info.status === "failed" && info.willRetry === false && !committed && stash.taskUuid) {
     const failReason = info.error instanceof Error ? info.error.message : String(info.error ?? "\u672A\u77E5\u9519\u8BEF");
     const retryCount = typeof info.task?.retry_count === "number" ? info.task.retry_count : 0;
     const errorCode = readErrorCode(info.error);
@@ -16204,6 +16269,9 @@ var buildWorkerConfig = (env) => {
     // executeToolCalls 服务端工具循环）；总超时用库默认 240s，轮数由 onBeforeFire 按
     // 是否接入 MCP 返回 5 / 12；即时对话再把总超时抬到 INSTANT_TOTAL_TIMEOUT_MS。
     hooks: amsgHooks,
+    // 用户主动触发的即时对话：生成失败本轮就结束，由用户决定是否重发。
+    // 策略由上游在 onBeforeFire 前解析，读取上下文失败也覆盖；整批入箱后仍可补推原文。
+    maxGenerationRetries: (task) => isInstantChatTask(task.metadata) ? 0 : void 0,
     // 租约不再显式配：amsg-server 2.6.0-next.15 起投递期间按心跳滚动续租（30s 一跳、
     // 90s TTL），fire 跑多久租约就滚多久——以前为了盖住即时对话 600s 的 fire 把
     // claimLeaseMs 定格在 12 分钟，代价是 isolate 中途死掉后任务要干等 12 分钟才被

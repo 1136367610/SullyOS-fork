@@ -884,7 +884,7 @@ const instantErrorNotificationBody = (reason: string): string => {
 /**
  * 即时对话的**终态**失败直发一条 `messageKind:'error'` 的 push（best-effort）。
  *
- * 只许在「这条任务不会再跑」的场合调：生成失败已标 permanent、
+ * 只许在「这条任务不会再跑」的场合调：上游确认生成失败不会重试、
  * skip-push（行被当成功消费）、stale 跳过。还会重试补推的
  * 失败绝不发——「报错完回复又到了」这种误报比晚知道更伤（SSE↔push 双通道的老教训）。
  *
@@ -966,8 +966,8 @@ export const amsgFireSettled = async (
     task?: { retry_count?: unknown } | null;
     /** 这一跳抛出的错误（status 'failed' 时才有）。 */
     error?: unknown;
-    /** 上游透传的解密 metadata；onBeforeFire 尚未挂 stash 时也能辨认 instant。 */
-    metadata?: Record<string, unknown> | null;
+    /** 上游调度器的重试决定；非失败结局为 null，收尾只读取、不修改这个决定。 */
+    willRetry?: boolean | null;
     /**
      * 这一跳实际发出去的 LLM 请求次数（含失败的那次）。上游 amsg-server 新版才报，
      * 老版本上没有——那样每日计数里就只有「发了几次」，没有「调了几次模型」。
@@ -984,15 +984,6 @@ export const amsgFireSettled = async (
   },
 ): Promise<void> => {
   const stash = getFireStash(info.scratch);
-  // instant 的失败由用户决定是否重发，不走定时任务的 2/4/6 分钟重试。
-  // 上游在 await 此 hook 后才读取原错误的 permanent 标记并更新任务终态；必须原地
-  // 标记，不能只提前通知客户端。已整批入 outbox 的失败只需补推原文，保留它的重试。
-  // 放在 stash 检查之前：读取上下文失败时还没有 stash，但同样不该重跑本轮。
-  if ((stash?.instant || isInstantChatTask(info.metadata))
-      && info.status === 'failed' && info.outboxed !== true
-      && info.error && typeof info.error === 'object') {
-    (info.error as { permanent?: boolean }).permanent = true;
-  }
   if (!stash) return;   // onBeforeFire 没走到挂 stash 那步（比如取 fire_pack 就失败了）
 
   // 内容已经落定（见 info.outboxed）：之后的重试只补推送，而且补推那一跳不会再调任何
@@ -1025,7 +1016,7 @@ export const amsgFireSettled = async (
   // best-effort：写不进去只是失败原因退化成笼统的一句，不能连累收尾其他动作。
   // 内容已经落定的不算失败：回复随后就会补推到、或被客户端补收，这时候留一句「没发出去」
   // 或者发失败通知，用户会在回复已经到了之后还看到报错。
-  if (stash.instant && info.status === 'failed' && !committed && stash.taskUuid) {
+  if (stash.instant && info.status === 'failed' && info.willRetry === false && !committed && stash.taskUuid) {
     const failReason = info.error instanceof Error ? info.error.message : String(info.error ?? '未知错误');
     const retryCount = typeof info.task?.retry_count === 'number' ? info.task.retry_count : 0;
     // 上游 amsg-server 2.6.0-next.21 起给这一族错误挂了稳定的 code（LLM 上游拒了请求是
@@ -2256,10 +2247,8 @@ export const amsgHooks = {
       // 里已经没有「现在几点」了（那部分留给到点现填），只喂原串的话评估模型连时间都
       // 不知道，判出来的情绪跟角色刚说的话对不上。
       //
-      // fire 重试（2/4/6 分钟梯子）会整轮重跑到这里。上一跳评估已经出了结果的话，
-      // 失败收尾（amsgFireSettled）把它写在旁路键 amsgEmotionUpdateKey 下——重试跨
-      // tick 唯一能带过来的位置。读到就直接包成 resolved promise 复用，别再白烧一次
-      // 副 API；读不到才起新评估。
+      // 即时对话生成失败不会重试；租约恢复或旧版本留下的评估仍可能在旁路键里。
+      // 有现成结果就复用，读不到才起新评估，避免重复调用副 API。
       if (emotionEvalSpec) {
         const storedEvalRaw = clientTaskId
           ? charRows.find((r) => r.key === amsgEmotionUpdateKey(clientTaskId))?.value
@@ -2800,6 +2789,10 @@ export const buildWorkerConfig = (env: Env) => {
     // executeToolCalls 服务端工具循环）；总超时用库默认 240s，轮数由 onBeforeFire 按
     // 是否接入 MCP 返回 5 / 12；即时对话再把总超时抬到 INSTANT_TOTAL_TIMEOUT_MS。
     hooks: amsgHooks,
+    // 用户主动触发的即时对话：生成失败本轮就结束，由用户决定是否重发。
+    // 策略由上游在 onBeforeFire 前解析，读取上下文失败也覆盖；整批入箱后仍可补推原文。
+    maxGenerationRetries: (task: { metadata?: Record<string, unknown> | null }) =>
+      isInstantChatTask(task.metadata) ? 0 : undefined,
     // 租约不再显式配：amsg-server 2.6.0-next.15 起投递期间按心跳滚动续租（30s 一跳、
     // 90s TTL），fire 跑多久租约就滚多久——以前为了盖住即时对话 600s 的 fire 把
     // claimLeaseMs 定格在 12 分钟，代价是 isolate 中途死掉后任务要干等 12 分钟才被
