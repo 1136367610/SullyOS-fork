@@ -200,6 +200,14 @@ fire 时的处理规则：
 
 ## 失败路径
 
+- 即时对话的生成失败**不自动重试**，不按 API 的 HTTP 状态或供应商错误码枚举。
+  Worker 的 `amsgFireSettled` 在上游判定重试之前，把 instant 且尚未整批入 outbox
+  的 fire 错误原地标为 `permanent`，本轮直接失败；已挂 stash 的失败沿用 error push
+  立即通知，状态轮询负责兜底。未挂 stash 时按收尾 metadata 识别 instant。
+  该顺序由真实 `amsg-server.runTask` 集成测试约束，升级依赖时必须继续验证。
+  整批已入 outbox 的推送失败仍可补推原文，不重新生成；定时消息的重试策略不变。
+  此规则针对有明确失败结局的 fire；执行环境中断、没有机会收尾时，租约恢复仍保留。
+
 - 客户端「正在输入」的主判定是**云端任务状态**：还欠着回复时每 60s 查一次
   `GET /message?id=<uuid>`，`pending` 就继续等，行已失败 / 行没了才收尾；
   查询本身失败不立刻下结论，等下一跳。下结论前先拉一次 outbox。

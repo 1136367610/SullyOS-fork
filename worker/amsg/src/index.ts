@@ -884,8 +884,8 @@ const instantErrorNotificationBody = (reason: string): string => {
 /**
  * 即时对话的**终态**失败直发一条 `messageKind:'error'` 的 push（best-effort）。
  *
- * 只许在「这条任务不会再跑」的场合调：重试打光（retry_count 判定与上游
- * handleDeliveryFailure 同源）、skip-push（行被当成功消费）、stale 跳过。还会重试的
+ * 只许在「这条任务不会再跑」的场合调：生成失败已标 permanent、
+ * skip-push（行被当成功消费）、stale 跳过。还会重试补推的
  * 失败绝不发——「报错完回复又到了」这种误报比晚知道更伤（SSE↔push 双通道的老教训）。
  *
  * 通知打 `show: 'always'` + 按角色折叠 + 静音：这条是自己直发的 push，不经库的收件箱，
@@ -966,6 +966,8 @@ export const amsgFireSettled = async (
     task?: { retry_count?: unknown } | null;
     /** 这一跳抛出的错误（status 'failed' 时才有）。 */
     error?: unknown;
+    /** 上游透传的解密 metadata；onBeforeFire 尚未挂 stash 时也能辨认 instant。 */
+    metadata?: Record<string, unknown> | null;
     /**
      * 这一跳实际发出去的 LLM 请求次数（含失败的那次）。上游 amsg-server 新版才报，
      * 老版本上没有——那样每日计数里就只有「发了几次」，没有「调了几次模型」。
@@ -982,6 +984,15 @@ export const amsgFireSettled = async (
   },
 ): Promise<void> => {
   const stash = getFireStash(info.scratch);
+  // instant 的失败由用户决定是否重发，不走定时任务的 2/4/6 分钟重试。
+  // 上游在 await 此 hook 后才读取原错误的 permanent 标记并更新任务终态；必须原地
+  // 标记，不能只提前通知客户端。已整批入 outbox 的失败只需补推原文，保留它的重试。
+  // 放在 stash 检查之前：读取上下文失败时还没有 stash，但同样不该重跑本轮。
+  if ((stash?.instant || isInstantChatTask(info.metadata))
+      && info.status === 'failed' && info.outboxed !== true
+      && info.error && typeof info.error === 'object') {
+    (info.error as { permanent?: boolean }).permanent = true;
+  }
   if (!stash) return;   // onBeforeFire 没走到挂 stash 那步（比如取 fire_pack 就失败了）
 
   // 内容已经落定（见 info.outboxed）：之后的重试只补推送，而且补推那一跳不会再调任何
@@ -1008,8 +1019,8 @@ export const amsgFireSettled = async (
     }
   }
 
-  // 即时对话这一跳挂了 → 失败原因留痕（chat_fail），每次失败尝试覆盖写，最终留下的
-  // 就是最后一跳的原因。客户端 60s 点名判到「行已出清」后一次点名读回这份，向用户
+  // 即时对话这一跳挂了 → 失败原因留痕（chat_fail），本轮不再生成重试。
+  // 客户端 60s 点名判到「行已出清」后一次点名读回这份，向用户
   // 交代为什么没发出去——不用再按角色扫全量任务列表逐条解密（几秒起步）。
   // best-effort：写不进去只是失败原因退化成笼统的一句，不能连累收尾其他动作。
   // 内容已经落定的不算失败：回复随后就会补推到、或被客户端补收，这时候留一句「没发出去」
@@ -1027,46 +1038,21 @@ export const amsgFireSettled = async (
       retryCount,
       errorCode,
     });
-    // 终态判定与上游同源，两种都算：retry_count >= 3 的这跳失败后行转 failed
-    // （handleDeliveryFailure 的梯子打光）；permanent 标记的错误（fireStateError 那族）
-    // 上游一跳就终审。info.error 就是 fire 里抛出的那个对象，permanent 属性原样带过来
-    // ——挂上 stash 之后才炸出的 permanent 只有这里看得到（挂 stash 之前的那族由
-    // onBeforeFire 的 fail() 直发，那时没有 stash、走不到这里，两条机制天然互斥）。
-    // 还会重试的失败绝不发通知（回复可能随后就到）。
-    const permanent = info.error instanceof Error
-      && (info.error as Error & { permanent?: boolean }).permanent === true;
-    if (retryCount >= 3 || permanent) {
-      await sendInstantErrorPush({
-        charId: stash.charId,
-        taskUuid: stash.taskUuid,
-        reason: failReason,
-        errorCode,
-        userId: typeof (info.task as Record<string, unknown> | null | undefined)?.user_id === 'string'
-          ? (info.task as Record<string, unknown>).user_id as string
-          : null,
-      });
-    } else if (stash.emotionEvalPromise && stash.clientTaskId) {
-      // 还会重试的失败：这一跳的情绪评估结果写进旁路键留给下一跳——重试会整轮重跑
-      // onBeforeFire，读到这份就不再白烧一次副 API（见那边的复用逻辑）。等待有界：
-      // 只等搭车窗口那么久，评估还没跑完就算了，下一跳重新评估。
-      try {
-        const outcome = await raceEmotionEval(
-          stash.emotionEvalPromise, '评估没赶上这跳收尾，重试那轮只好重新评估');
-        if (outcome?.raw) {
-          await info.writeState(amsgStateNamespace(stash.charId), [
-            { key: amsgEmotionUpdateKey(stash.clientTaskId), value: outcome.raw },
-          ]);
-        }
-      } catch (error) {
-        console.warn('[amsg:emotion] 重试前留不下评估结果（下一跳会重新评估）', error);
-      }
-    }
+    await sendInstantErrorPush({
+      charId: stash.charId,
+      taskUuid: stash.taskUuid,
+      reason: failReason,
+      errorCode,
+      userId: typeof (info.task as Record<string, unknown> | null | undefined)?.user_id === 'string'
+        ? (info.task as Record<string, unknown>).user_id as string
+        : null,
+    });
   }
 
   // 情绪评估没赶上顺风车、回复已经先发出去了 → 在这里等它出结果，写进旁路存储
   // （push 上已挂引用键 + pending 标记，客户端对着键轮询补落）。上游 await 这个 hook，
-  // 评估自带 EMOTION_EVAL_TIMEOUT_MS，续等是有界的。只在真送出去过（sentCount > 0）
-  // 时等：一段都没出去的话客户端根本没收到 pending 标记，任务还会整轮重跑。
+  // 评估自带 EMOTION_EVAL_TIMEOUT_MS，续等是有界的。只在已送出或整批入收件箱时等：
+  // 本轮已经失败且没有可补收的回复时，客户端没有 pending 标记，不再留晚投结果。
   // 评估失败或超时什么都不写——旁路只存 applyEmotionEvalRaw 认识的评估原文，
   // 客户端轮询到点自会按「最终没等到」收尾。
   if (stash.instant && stash.emotionLatePending && stash.emotionEvalPromise

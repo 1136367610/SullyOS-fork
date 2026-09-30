@@ -3,7 +3,7 @@
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_e6f2312f5e9a7bcdb7f479ab757e7745/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1215,7 +1215,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2_e6f2312f5e9a7bcdb7f479ab757e7745/node_modules/@rei-standard/amsg-server/dist/chunk-VBDBORLR.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.30_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-VBDBORLR.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -7629,7 +7629,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-09-27.2";
+var AMSG_BUNDLE_VERSION = "2026-09-30";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -13448,6 +13448,24 @@ var buildDuplicateToolMessage = (name) => [
   "\u6216\u8005\u6362\u4E00\u4E2A\u8FD8\u6CA1\u7528\u8FC7\u7684\u5DE5\u5177\u3002\u524D\u9762\u5DF2\u7ECF\u8BF4\u51FA\u53BB\u7684\u5185\u5BB9\u548C\u6807\u7B7E\u4E0D\u8981\u91CD\u5199\uFF0C\u63A5\u7740\u5F80\u4E0B\u5199\u5C31\u884C\u3002]"
 ].join("\n");
 
+// utils/voiceTextDedup.ts
+function deduplicateVoiceText(text) {
+  if (/\[html\]|<翻[译譯]>|```/i.test(text)) return text;
+  const normalize2 = (s) => s.replace(/[\s\p{P}\p{S}]/gu, "").toLowerCase();
+  const blocks = [];
+  const spoken = [];
+  const protectedText = text.replace(/<[语語]音[^>]*>([\s\S]*?)<\/[语語]音>(?:\s*<字幕>([\s\S]*?)<\/字幕>)?/g, (block, voice, subtitle) => {
+    spoken.push(normalize2(voice), ...subtitle ? [normalize2(subtitle)] : []);
+    return "\nVOICE" + (blocks.push(block) - 1) + "\n";
+  });
+  if (!blocks.length) return text;
+  return protectedText.split(/\r?\n/).filter((line) => {
+    if (/[<>\[\]\u0002]/.test(line)) return true;
+    const plain = normalize2(line);
+    return plain.length < 12 || !spoken.some((voice) => voice.includes(plain));
+  }).join("\n").replace(/\u0002VOICE(\d+)\u0002/g, (_, i) => blocks[Number(i)]).trim();
+}
+
 // node_modules/.pnpm/@rei-standard+amsg-instant@0.11.0-next.6/node_modules/@rei-standard/amsg-instant/dist/index.mjs
 var PUSH_PAYLOAD_BYTE_ENCODER = new TextEncoder();
 function segmentTextWithProtectedBlocks(text, options) {
@@ -13687,7 +13705,7 @@ function sanitizeForNotification(text) {
 function sanitizeIntoSegments(text) {
   let cleaned = stripLiteralBackslashN(text);
   cleaned = stripThinkBlocks(cleaned);
-  cleaned = normalizeVoiceTags(cleaned);
+  cleaned = deduplicateVoiceText(normalizeVoiceTags(cleaned));
   cleaned = normalizeTranslationTags(cleaned);
   const ATOM_MARKER = String.fromCharCode(2);
   const atomBlocks = [];
@@ -15102,6 +15120,9 @@ var sendInstantErrorPush = async (args) => {
 };
 var amsgFireSettled = async (info) => {
   const stash = getFireStash(info.scratch);
+  if ((stash?.instant || isInstantChatTask(info.metadata)) && info.status === "failed" && info.outboxed !== true && info.error && typeof info.error === "object") {
+    info.error.permanent = true;
+  }
   if (!stash) return;
   const committed = info.outboxed === true;
   const delivered = committed || (info.sentCount ?? 0) > 0;
@@ -15129,30 +15150,13 @@ var amsgFireSettled = async (info) => {
       retryCount,
       errorCode
     });
-    const permanent = info.error instanceof Error && info.error.permanent === true;
-    if (retryCount >= 3 || permanent) {
-      await sendInstantErrorPush({
-        charId: stash.charId,
-        taskUuid: stash.taskUuid,
-        reason: failReason,
-        errorCode,
-        userId: typeof info.task?.user_id === "string" ? info.task.user_id : null
-      });
-    } else if (stash.emotionEvalPromise && stash.clientTaskId) {
-      try {
-        const outcome = await raceEmotionEval(
-          stash.emotionEvalPromise,
-          "\u8BC4\u4F30\u6CA1\u8D76\u4E0A\u8FD9\u8DF3\u6536\u5C3E\uFF0C\u91CD\u8BD5\u90A3\u8F6E\u53EA\u597D\u91CD\u65B0\u8BC4\u4F30"
-        );
-        if (outcome?.raw) {
-          await info.writeState(amsgStateNamespace(stash.charId), [
-            { key: amsgEmotionUpdateKey(stash.clientTaskId), value: outcome.raw }
-          ]);
-        }
-      } catch (error) {
-        console.warn("[amsg:emotion] \u91CD\u8BD5\u524D\u7559\u4E0D\u4E0B\u8BC4\u4F30\u7ED3\u679C\uFF08\u4E0B\u4E00\u8DF3\u4F1A\u91CD\u65B0\u8BC4\u4F30\uFF09", error);
-      }
-    }
+    await sendInstantErrorPush({
+      charId: stash.charId,
+      taskUuid: stash.taskUuid,
+      reason: failReason,
+      errorCode,
+      userId: typeof info.task?.user_id === "string" ? info.task.user_id : null
+    });
   }
   if (stash.instant && stash.emotionLatePending && stash.emotionEvalPromise && stash.clientTaskId && delivered) {
     stash.emotionLatePending = false;
