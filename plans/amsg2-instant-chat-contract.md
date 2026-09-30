@@ -259,3 +259,13 @@ fire 时的处理规则：
 - 新行为配回归守卫测试（旧行为下会挂、修好后过）。
 - 测试 fixture 里的用户名用「小明」，不写真实姓名。
 - UTF-8；注释密度与风格跟随周边代码。
+
+## 停止契约（2026-10-01）
+
+- `/instant-chat` 加密任务体允许传 `uuid`，由客户端在发请求之前生成。202 仍以服务端回传 UUID 为准。
+- 使用既有 `DELETE /cancel-message?id=<uuid>`。客户端立即停止接收；云端通过 1 秒租约心跳感知取消，实际耗时还受网络影响。早于建行的 DELETE 不能阻止未来建行，因此 POST 收尾仍需再取消一次。
+- `onBeforeFire` / `onLLMOutput` / `executeToolCalls` 的 `ctx.signal` 和 `ctx.throwIfCancelled()` 来自上游。LLM、可取消工具请求共享取消信号；工具 catch 必须先检查取消，禁止误吞。
+- `onFireSettled` 的 `cancelled` 是独立结束原因，不触发 instant 失败消息或生成重试。已完成的副作用不回滚。
+- `amsg:char:<charId>` 新增独立键 `chat_stop:<uuid>`，值为裸 JSON `{ "text": "已显示的正文" }`，空串表示没有正文上屏。客户端停止记录与回执持久化；下一次状态上传会带上回执。Worker 开始 instant 前遇到对应键直接 skip，读取 self_log 时用回执替换/移除对应 `taskUuid` 条目。
+- 聊天气泡 `metadata.activeMsg2.taskUuid` 记录轮次归属，用于停止后的落库清理。停止不新增消息类型，不生成“已停止”气泡。
+- 收件箱遇到已停止的 UUID：丢弃并 ACK，禁止原稿降级、重试与副作用重放。若迟到末段带用量，可补记 API 用量，但不会恢复正文或把停止改成成功。

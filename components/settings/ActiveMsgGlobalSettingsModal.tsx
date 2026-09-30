@@ -135,9 +135,10 @@ const REQUIRED_WORKER_FEATURES = [
 //   next.31 — 正式支持按任务配置生成重试次数。即时对话设为 0，失败立即结束；
 //            已整批入箱的内容仍可补推。收尾通过 willRetry 读取上游决定，不修改错误对象。
 //            旧部署缺少这项策略，会继续让用户等自动重试，需更新 Worker。
+//   next.32 — 执行中的即时对话可取消，模型请求与工具循环共享取消信号。
 // 不比版本的话，旧粘贴部署会被误判为最新，问题全在 worker 侧静默发生。
 //
-const REQUIRED_WORKER_VERSION = '2.6.0-next.31';
+const REQUIRED_WORKER_VERSION = '2.6.0-next.32';
 
 /** 装着打包好的 worker 代码的部署仓库：fork 它 → 在 Cloudflare 连上 → 以后点 Sync fork 更新。 */
 const WORKERS_REPO_URL = 'https://github.com/Tosd0/sullyos-workers';

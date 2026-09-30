@@ -186,6 +186,18 @@ const makeCtx = (opts: {
   };
 };
 
+describe('取消中的 instant hook', () => {
+  it('已取消的请求不读上下文、不继续处理模型输出', async () => {
+    const { ctx, readState, writeState } = makeCtx({ metadata: { amsgInstantChat: true } });
+    const cancelled = new DOMException('Stopped', 'AbortError');
+    ctx.throwIfCancelled = () => { throw cancelled; };
+    await expect(amsgHooks.onBeforeFire(ctx)).rejects.toBe(cancelled);
+    await expect(amsgHooks.onLLMOutput(ctx)).rejects.toBe(cancelled);
+    expect(readState).not.toHaveBeenCalled();
+    expect(writeState).not.toHaveBeenCalled();
+  });
+});
+
 /** onBeforeFire 生成路径的返回值：{ messages, tools? }（skip 那一支各测各的）。 */
 interface FiredResult {
   messages: Array<{ role: string; content: string }>;

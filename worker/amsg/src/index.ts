@@ -1,3 +1,4 @@
+import { reconcileStoppedReplies, stoppedReplyKey } from '../../../utils/amsgStoppedReply';
 /**
  * SullyOS 主动消息 2.0（amsg2）— 单用户 Cloudflare Worker 入口。
  *
@@ -246,6 +247,8 @@ interface Env extends NativeFcmEnv {
 // 正文里的 <think> 标签照旧 strip，只是剥之前先抄一份当思考链。
 
 interface FireCtx {
+  signal?: AbortSignal;
+  throwIfCancelled?: () => void;
   task: {
     id?: string | number | null;
     /** 任务行 uuid（客户端清单里的那个）；跳过时留痕要拿它对上是哪一条。 */
@@ -330,6 +333,8 @@ type RenewTask = (uuid: string, nextSendAt: string) => Promise<
 >;
 
 interface SessionCtx {
+  signal?: AbortSignal;
+  throwIfCancelled?: () => void;
   /** 日志与去重用的不透明串。任务身份读下面三个字段，别拿它切。 */
   sessionId: string;
   llmResponse: unknown;
@@ -988,7 +993,9 @@ export const amsgFireSettled = async (
 
   // 内容已经落定（见 info.outboxed）：之后的重试只补推送，而且补推那一跳不会再调任何
   // hook——这是记账的最后机会，按「全部发出去了」记，别等一个不会来的回执。
-  const committed = info.outboxed === true;
+  const cancelled = info.status === 'cancelled';
+  if (cancelled) stash.selfLogTexts = null;
+  const committed = !cancelled && info.outboxed === true;
   const delivered = committed || (info.sentCount ?? 0) > 0;
 
   // 这一轮往云端回写的条目攒在一起，收尾一次写完。
@@ -1046,7 +1053,7 @@ export const amsgFireSettled = async (
   // 本轮已经失败且没有可补收的回复时，客户端没有 pending 标记，不再留晚投结果。
   // 评估失败或超时什么都不写——旁路只存 applyEmotionEvalRaw 认识的评估原文，
   // 客户端轮询到点自会按「最终没等到」收尾。
-  if (stash.instant && stash.emotionLatePending && stash.emotionEvalPromise
+  if (!cancelled && stash.instant && stash.emotionLatePending && stash.emotionEvalPromise
       && stash.clientTaskId && delivered) {
     stash.emotionLatePending = false;   // 认领掉，重复调用不会写两遍
     try {
@@ -1080,6 +1087,7 @@ export const amsgFireSettled = async (
     const rerun = stash.selfLog.entries.some((e) => e.id === entryId);
     const next = appendSelfLogEntry(stash.selfLog, {
       id: entryId,
+      taskUuid: stash.taskUuid ?? undefined,
       at: Date.now(),
       startedAt: stash.firedAt,
       text,
@@ -1630,6 +1638,7 @@ export const runMcpFireTool = async (
   stash: Pick<FireStash, 'mcpResolve' | 'mcpSessions' | 'mcpSpentMs'>,
   name: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> => {
   const exposed = name.slice(MCP_FIRE_NAME_PREFIX.length);
   const hit = stash.mcpResolve?.get(exposed);
@@ -1665,6 +1674,7 @@ export const runMcpFireTool = async (
     args as Record<string, any>,
     {
       // 剩余预算比单次上限还少时按剩余的来，最后一个调用不会越过总线。
+      signal,
       timeoutMs: Math.min(MCP_CALL_TIMEOUT_MS, remaining),
       inputSchema: hit.tool.inputSchema,
       serverLabel: hit.server.name,
@@ -1681,6 +1691,7 @@ export const runMcpFireTool = async (
 // 决策路径，一个判断写错位就是「该拦的没拦」或「全都不发」，必须有回归守卫钉住。
 export const amsgHooks = {
   async onBeforeFire(ctx: FireCtx) {
+    ctx.throwIfCancelled?.();
     const charId = ctx.task?.metadata?.charId;
     if (typeof charId !== 'string' || !charId) {
       throw fireStateError('task metadata 缺 charId', { taskId: ctx.task.id });
@@ -1695,6 +1706,7 @@ export const amsgHooks = {
     // stash、一条都写不了，用户等完全部重试只会得到「云端没记下原因」。fire-and-forget，
     // 不拦 throw；挂 stash 之后的失败会被收尾那份用最后一跳的原因覆盖，语义不变。
     const fail = (reason: string, extra?: Record<string, unknown>) => {
+      ctx.throwIfCancelled?.();
       if (instant && typeof ctx.task.uuid === 'string' && ctx.task.uuid) {
         // writeState 在老版本上游的 FireCtx 上可能不存在——那就退回没有留痕的老行为。
         if (typeof ctx.writeState === 'function') {
@@ -1952,7 +1964,10 @@ export const amsgHooks = {
     // 角色上次到点自己说了什么：对齐到本次的 fire_pack 与用户发言状态。
     // 连发记录（entries）只在用户开口时清零，fire_pack 换代只作废 tasks 段
     // ——两段生死分开的理由见 amsgFirePack 的 reconcileSelfLogWithPack。
-    const storedSelfLog = parseSelfLog(charRows.find((r) => r.key === AMSG_SELF_LOG_KEY)?.value ?? '');
+    if (instant && ctx.task.uuid && charRows.some(row => row.key === stoppedReplyKey(ctx.task.uuid!))) {
+      return { skip: true } as const;
+    }
+    const storedSelfLog = reconcileStoppedReplies(parseSelfLog(charRows.find((r) => r.key === AMSG_SELF_LOG_KEY)?.value ?? ''), charRows);
     const selfLog = reconcileSelfLogWithPack(storedSelfLog, pack, expireInput.lastUserMessageAt);
 
     // 连发上限·到点兜底闸（用户主权）：用户未回复期间，角色自己排的任务最多响这么多次。
@@ -2270,6 +2285,7 @@ export const amsgHooks = {
             return runAmsgEmotionEval(
               emotionEvalSpec, evalApi, instantMessages,
               toolPack.charName || ctx.task.contactName || '角色',
+              undefined, ctx.signal,
             );
           })();
       }
@@ -2300,6 +2316,7 @@ export const amsgHooks = {
   },
 
   async onLLMOutput(ctx: SessionCtx) {
+    ctx.throwIfCancelled?.();
     // 非聊天任务在这里就被接走，排在下面所有聊天语义（stash、分段、self_log、推送）
     // 之前——它们一条都不适用，而 stash 那道断言更是会直接把这一轮判死。
     const kindFire = getKindFireStash(ctx.scratch);
@@ -2665,6 +2682,7 @@ export const amsgHooks = {
 
     const results = [];
     for (const toolCall of toolCalls) {
+      ctx.throwIfCancelled?.();
       const name = toolCall?.function?.name || '';
       let content: string;
       try {
@@ -2705,8 +2723,8 @@ export const amsgHooks = {
             : name === AMSG_FIRE_RENEW_TOOL
               ? await runFireRenewTool(stash, ctx, args, Date.now())
               : name.startsWith(MCP_FIRE_NAME_PREFIX)
-                ? await runMcpFireTool(stash, name, args)
-                : await dispatchAgenticTool(name, args, stash.toolCtx);
+                ? await runMcpFireTool(stash, name, args, ctx.signal)
+                : await dispatchAgenticTool(name, args, { ...stash.toolCtx, signal: ctx.signal });
         // duplicateToolCalls 语义是「连续打转」；任何一个新调用跑过都说明任务仍在推进，
         // 立刻清零。否则两次不相邻的合法重复也会累计到阈值，提前误杀游戏流程。
         stash.session.duplicateToolCalls = 0;
@@ -2719,6 +2737,8 @@ export const amsgHooks = {
         content = buildToolResultMessage({ name, result, history: stash.session.toolCalls });
         console.log('[amsg:agentic]', { type: 'tool_done', sessionId: ctx.sessionId, tool: name });
       } catch (error) {
+        ctx.throwIfCancelled?.();
+        ctx.signal?.throwIfAborted();
         content = JSON.stringify({
           ok: false,
           reason: 'tool_error',
@@ -2789,14 +2809,12 @@ export const buildWorkerConfig = (env: Env) => {
     // executeToolCalls 服务端工具循环）；总超时用库默认 240s，轮数由 onBeforeFire 按
     // 是否接入 MCP 返回 5 / 12；即时对话再把总超时抬到 INSTANT_TOTAL_TIMEOUT_MS。
     hooks: amsgHooks,
+    leaseHeartbeatMs: 1000,
     // 用户主动触发的即时对话：生成失败本轮就结束，由用户决定是否重发。
     // 策略由上游在 onBeforeFire 前解析，读取上下文失败也覆盖；整批入箱后仍可补推原文。
     maxGenerationRetries: (task: { metadata?: Record<string, unknown> | null }) =>
       isInstantChatTask(task.metadata) ? 0 : undefined,
-    // 租约不再显式配：amsg-server 2.6.0-next.15 起投递期间按心跳滚动续租（30s 一跳、
-    // 90s TTL），fire 跑多久租约就滚多久——以前为了盖住即时对话 600s 的 fire 把
-    // claimLeaseMs 定格在 12 分钟，代价是 isolate 中途死掉后任务要干等 12 分钟才被
-    // 下一跳接手；心跳租约把这个恢复窗压到 ~90s，还不用管单条超时抬到多高。
+    // 取消通过租约心跳通知执行中的 Worker；1 秒检测一次，TTL 仍由上游管理。
     // 收尾回执 + 过期跳过回执（config 级 hook）。
     // onFireSettled: 无论这次 fire 是发出去了、跳过了还是抛错了都会调一次，self_log
     //   在这里统一落盘（见 amsgFireSettled）。不用 onAfterSend——它只在真发出去那条路
