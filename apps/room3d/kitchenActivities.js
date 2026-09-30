@@ -17,10 +17,10 @@ export function kitchenActions(room,catalog,itemId){
  return [{action:'chibi-kitchen',id:itemId,kind,label:KITCHEN_LABELS[kind],reason:kind==='wash'&&!sink?'同一个房间需要摆放水槽':''}];
 }
 export function kitchenFingerprint(room,ids){return JSON.stringify(ids.map(id=>{const i=room?.items.find(i=>i.id===id);return i?[i.id,i.assetId,i.x,i.y,i.z,i.rotation,!!i.stored,i.supportId]:null;}));}
-export function planKitchenAction(home,room,catalog,itemId,start,headWidth=1.5){
+export function planKitchenAction(home,room,catalog,itemId,start,headWidth=1.5,navigationMap){
  const item=room.items.find(i=>i.id===itemId&&!i.stored),kind=KITCHEN_CAPABILITIES[item?.assetId];
  if(!KITCHEN_LABELS[kind])return {reason:'这件家具没有这个动作'};
- const map=walkingMap(home,room.level,catalog,{headWidth}),offset=[room.x*ROOM_STEP.x,room.z*ROOM_STEP.z];
+ const map=navigationMap??walkingMap(home,room.level,catalog,{headWidth}),offset=[room.x*ROOM_STEP.x,room.z*ROOM_STEP.z];
  function station(i,from){
   const parent=room.items.find(p=>p.id===i.supportId&&!p.stored)||i,a=catalog.find(a=>a.id===parent.assetId);
   // Counter fronts remain the approach side; never walk through a cupboard.

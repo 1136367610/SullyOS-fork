@@ -1,3 +1,5 @@
+// Preserve the calibrated seat distance when the whole computer desk is scaled.
+export const computerSeatOffset=a=>Math.max(1.04*a.size[0]/3.4,a.boxes[0][5]+.28);
 // A chair is linked to a table, independently of tabletop support. No scene
 // objects or animation state are stored in the layout.
 export const isDockChair=a=>a?.surface==='floor'&&(a.id==='chair'||a.seats?.length===1);
@@ -14,7 +16,7 @@ export function dockSlots(table,chair,room,catalog){
  if(!slots&&a.id==='gaming_desk'&&c.id==='gaming_chair'){
   const seat=c.seats[0].position,k=room.items.find(i=>!i.stored&&i.supportId===table.id&&i.assetId==='gaming_keyboard'),t=table.rotation*Math.PI/180;
   const x=k?Math.cos(t)*(k.x-table.x)-Math.sin(t)*(k.z-table.z):0;
-  slots=[{id:'front',position:[x+seat[0],0,1.04+seat[2]],rotation:180}];
+  slots=[{id:'front',position:[x+seat[0],0,computerSeatOffset(a)+seat[2]],rotation:180}];
  }
  if(!slots){
   const z=a.size[2]/2+c.size[2]/2+.10,x=a.size[0]/2+c.size[2]/2+.10;

@@ -21,13 +21,12 @@ try{
     if(actual.some((p,j)=>p!==reference[j]))throw Error(`${upper}/${state}: closed eye leaked a hidden layer`);
     checks++;
    }else{
-    // Native 07 deliberately has no highlight. Test an explicitly selected
-    // highlight here, without forcing one into its original preset preview.
-    const probe={...settings,highlight:'01'},probeImages=await loadFaceImages(probe);
+    // With authored placement a half-closed lid may cover a highlight.
+    // Adding one must never expand the eye silhouette.
+    const probe={...settings,highlight:'classic-01'},probeImages=await loadFaceImages(probe);
     const plain=composeFace({...probe,highlight:'none'},probeImages,state).eyes.getContext('2d')!.getImageData(0,0,472,472).data;
     const actual=composeFace(probe,probeImages,state).eyes.getContext('2d')!.getImageData(0,0,472,472).data;
-    let changed=0;for(let j=0;j<actual.length;j+=4)if(actual[j]!==plain[j]||actual[j+1]!==plain[j+1]||actual[j+2]!==plain[j+2])changed++;
-    if(changed<5)throw Error(`${upper}/${state}: highlight is obscured`);
+    for(let j=3;j<actual.length;j+=4)if(actual[j]!==plain[j])throw Error(`${upper}/${state}: highlight escaped the iris`);
     checks++;
    }
   }
@@ -61,3 +60,5 @@ try{
  }
  document.querySelector('#result')!.textContent=`通过：${count} 个预览；${checks} 项实际像素检查（包括 01–07 与旧图逐像素位置/轮廓对照）。`;
 }catch(error){document.querySelector('#result')!.textContent=String(error);throw error;}
+
+(window as any).render_game_to_text=()=>JSON.stringify({result:document.querySelector('#result')!.textContent,count,checks});

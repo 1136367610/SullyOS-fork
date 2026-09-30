@@ -1,5 +1,11 @@
 Original prompt: 先继续优化都市人生 simsapp：去掉 pics 里的丑像素家具/房屋贴图，改成自己画的像素图；并把“吃瓜”从单纯调用 API 引导 char 行动，升级为随机触发“角色剧情”或“主线剧情”，主线剧情要有明显标题和附件栏，附件可包含图片、道具、证据、同人文等。
 
+2026-09-29 — Bed entry contact correction
+- User identified sitting in midair before lying down. Confirmed the old simultaneous floor-to-sleep root interpolation bent the legs outside the bed. Added approved-walk approach with a reachable bedside endpoint, followed by separate turn, edge contact, dangling legs, lift, inboard transfer and recline phases (4.8s; reverse for rise).
+- Visual QA caught a second error: catalog half-width includes the draped blanket; its outer edge is not a sitting surface. Measured shipped GLB by raycast and calibrated show_bed edge x=±1.30, y=.85. Excluded rounded foot-end entry. Root height compensates the pelvis pivot throughout contact; no skeleton rescale or new motion assets.
+- 19 targeted motion/seating tests passed, including actual GLB contact rays, both sides/four furniture rotations, ordered leg lift/recline, fixed bone lengths and pose reset. Comparison fixture production build passed. Browser left/right selections, walk-to-bed, edge sit, leg lift, recline, rise, interrupted rise/resize and actor reuse passed without page errors; right selection can approach from the reachable opposite side. Inspected .tmp/bed-contact-*.png and bed-contact-skill/shot-0.png; skill Playwright loop passed.
+- This fixes bed entry placement, not a new approved sleep animation. Existing final sleep style remains a placeholder awaiting user review. Only reviewed show_bed body-2 profile uses this path; classic/other beds unchanged. No commit/push.
+
 2026-09-17 — Finished showrooms, windows/doors and source fidelity
 - Added five wall-snapping daylight windows, three animated panel/lattice door styles, independent wall/tabletop decor and two geometry rugs. Five presets are furnished, 9–14 items, and styles can be applied without replacing furniture.
 - User corrected over-simplification: coarse splitting must preserve original shapes. Kept original flower/cat cushion geometry; restored wood cabinet tones, actual extracted curtain folds, wall frame depth, rugs and equipment. No source image/UV/color baking. Original image-painted patterns are intentionally not reproduced.
@@ -1553,3 +1559,129 @@ TODO — Qixi rewrite
 - 同款半睁使用配套眼白，固定眼睛下缘，不叠加眼珠底部上缩与上睫毛下移；混搭仍可自动配准/重建。
 - 点击原款编号清理旧眼部补偿与覆盖，保留嘴型；颜色和部件仍可编辑。
 - 14 项单测、28 个状态预览和 44 项像素检查通过，含 7 款旧原图逐像素 alpha/位置/轮廓对照。Scoped TS 仍仅原有 4 个 JS 类型声明问题。
+
+## 2026-09-29 眼部原位置组合、统一染色与六款白色高光
+- 用户要求暂时取消眼睛必须跟随睫毛位置的自动组合，使用原始画布坐标；核对拆分灰度染色差异，并照原 01–07 整理六款白色高光。
+- 查明原完整眼型局部 65% 混色与拆分眼珠整层 65% 叠色不一致。新增共享 faceTint，复用旧 applyEyesTint 的 HSL/黑白保护/柔和过渡规则；原图空间染色后才变换，完整图中覆盖虹膜的睫毛排除染色。
+- 取消 eyePairOffset、半睁下缘补偿、下睫毛跟随眼珠位移、以及高光自动贴齐/缩放；按原 PNG 坐标和独立手动微调绘制，保留可见虹膜裁切与闭眼隐藏。
+- 从原 01/02/03/05/06/07 提取六款纯白高光（classic-01..06），过滤眼白边缘；07 只有下方淡灰亮点，转白作为第六款，不改原款默认。来源/哈希、可重复发布脚本已保存。新菜单显示六款并用灰紫底展示白色；旧 PSD 款收在“其他高光”，旧设置仍有效。
+- 验证：14 项单测通过；灰阶 0–255 直接与旧 HTML applyEyesTint 对照。浏览器 156 项原位置检查 / 274039 个可见源像素通过；28 个状态预览 / 44 项像素检查通过。六款菜单、换色、眼珠/高光上下滑杆、换睫毛保留手调、睁眼/半睁/闭眼切换均通过，body UUID 未变，页面错误为空。
+- 检查真实截图 .tmp/face-native-verified/shot-0.png、.tmp/face-native-ui.png 和全状态预览。衣橱预览生产构建通过，仅原有包体提示。开发服务在 127.0.0.1:5173；已请求在应用侧打开衣橱页。未提交/推送；未改用户草稿。原位置的半睁效果留待用户挑选，不自行恢复自动补偿。
+
+## 2026-09-29 固定测试角色 + 样板房双体型对照
+- 用户要求先逐间查看样板房，让原版 Chibi 与二号素体同房，作为后续房间动作适配基准。本轮先搭建对照场景，不宣称已完成所有动作适配或双人互动。
+- 新入口 test/fixtures/room3d-body-comparison.html。固定角色小栗：明确部件选择、栗棕头发、绿眼睛，复用同一分层图给两种身体，刷新不随机。五间房顺序为客厅/卧室/书房/厨房/浴室，使用内存模板，不读写用户房屋或外观草稿。
+- 编辑器新增可选双角色对照接口，当前体型沿用真实家具动作，另一只在安全空地等待。换人停止动作/道具并站立，模型 UUID 不变；等待者作为导航障碍，地图随布置变化缓存失效，销毁释放两只角色。
+- 浏览器发现并修复骨骼对象换父级时旧 bindMatrixInverse/包围盒导致 3.3 错误头宽、无法落地而消失的问题：测量前更新 world matrix + skeleton，并重算 skinned bounding box。增加带缩放和换父级的真实骨骼回归测试。
+- 验证：16 项房间/厨房/浴室/等待占地单测通过，随后新增骨骼回归的 3 项对照测试通过；五间房双方可见、反复切换不重建、家具数据不变，客厅双方真实点击沙发试坐通过，切换退出坐姿，page errors 为空。报告 .tmp/room-comparison-report.json；已看客厅、浴室、试坐截图。预览独立生产构建检查中。
+- 下一步：用户从客厅起逐项看接触姿势，再根据具体反馈调整二号动作。未提交/推送，先前五官修改保留。
+- 补充验收：双体型对照页独立生产构建通过（5.13s）；应用侧已请求打开客厅对照页。
+
+## 2026-09-29 二号独立客厅动作第一组
+- 用户确认二号应有自己的动作，先落地客厅坐下/起身/走路/浇水，不复制圆团手脚轨迹。新增 roomMotionFrame/seatChange，用现有 48 骨 FK 与手部挂点编写，无新增外部动作素材；此前五段试衣动作和来源保持不变。
+- 坐位前检测空地，1.05s 屈膝前倾进入/离开接触点；无空间或 reduced motion 时保持旧静态姿势。尚未做远处走到座位的完整入座旅程。行走低幅摆臂、屈膝脚踝配合，二号速度 1.05；浇水抬壶/倾倒/收壶共享阶段，真实右手带动水壶，双腕距离修正到约 .294 房间单位，倾倒才出水。
+- 分开二号头部和躯干的导航高度，浇水增加斜向候选。客厅龟背竹可用，墙角枝叶树仍因空间不足不可用。头顶改按实际角色与头发包围盒测量；小栗约 2.45，旧门净高 2.35，不能直立穿门：后续需低头屈膝过门，未缩小角色/改家具。
+- 增加近座/浇水俯视近景；相机不打断过渡。动作/换人/布置取消时清理姿势与道具，修复半蹲停留。原版壶位和步速不变。
+- 22 项单测通过（三档身高骨长/有效矩阵/中断恢复、座位变换、道具阶段、分层碰撞与原有家具交互）；当前对照页生产构建通过 4.45s。技能 Playwright client 运行并检查截图。实际家具点击验证二号坐下/起身、浇水结束/中断、半途换人/进入布置；房内点地走动并停止单独复测通过，页面错误为空。
+- 近景截图已查：.tmp/living-sit-mid.png、living-seated.png、living-rise-mid.png、living-water.png、living-walk.png。浏览器脚本 .tmp/living-motion-qa.mjs（最初误用低门洞作行走目标，现改为房内地板），末项实际通过 .tmp/living-walk-final.mjs。图像检查发现第一次左右手隔太宽后已校准。
+- 下一步由用户验收客厅动作，再做卧室/书房/厨房/浴室，以及二号低门洞的低头通行。并非全房间动作已完成。未提交/推送，之前五官和双体型对照工作保留。
+
+2026-09-29 — Body 2 flower-cushion sitting
+- User simplified the proposal: forward, parallel relaxed legs with level feet; no side folding. Explicit floor profile only for bedroom_ref_flower_pouf; classic/sofa unchanged and 172% scale preserved.
+- Separate 2.2s entry/rise and persistent seat context; Three CCDIKSolver reused for ground/hand contact, with virtual targets outside the shipped skeleton. Reach adapts to real leg length. Visitor exposes inner seatScale to convert room units correctly.
+- 25 targeted tests and comparison Vite production build passed. Browser captures .tmp/floor-front.png, floor-side.png, floor-lower.png, floor-rise.png; skill loop .tmp/floor-final-skill.
+- Other seat assets still need explicit pose registration and visual review; no general cloth collision, no imported external motion asset, and walk-to-seat remains a separate future step.
+
+2026-09-29 — Cushion resting hands follow-up
+- User requested both hands naturally at the sides. Removed floor-seat lap-reaching overrides; reuse the relaxed hip-side arm pose. The temporary right-hand support gesture blends from/to that same rest pose.
+
+2026-09-29 — Live comparison character size slider
+- Added per-actor size control next to body switch: classic 100% / body2 172% defaults, reset button. Values survive room/actor switches within this fixture session; user data is untouched.
+- setScaleMultiplier updates the existing hierarchy and navigation heights; dynamic seatScale keeps cushion contact conversion correct. Editor refreshes clearance without rebuilding actors or changing camera zoom.
+- Browser QA .tmp/size-slider-qa.mjs passed UUID/camera stability, seated resize, independent actor values/reset and mobile no-overflow; inspected screenshots .tmp/size-slider-room.png and size-slider-mobile.png. 9 related tests and fixture production build passed.
+
+2026-09-29 — User chose 200% as the provisional body-2 home default
+- Updated NEW_BODY_HOME_PERCENT from 172 to 200; comparison initial/reset values follow it. Classic stays 100%. Slider lower multiplier permits its existing 90% endpoint against the new baseline.
+- Validation: 9 motion/comparison checks passed at the updated floor-seat scale; browser confirmed 200% initial/reset values, live resize and actor-switch independence.
+
+2026-09-29 — Body 2 bedroom actions
+- Registered a reviewed show_bed-only rest profile: actual crown-to-hip distance positions the head inside the pillow region, with pelvis-centered 2.6s recline/rise, legs extended above the mattress and hands relaxed at the sides. Default 200% and original bone lengths preserved; other beds keep their previous behavior.
+- Fixed split-face sleeping precedence; eyes close once reclined and open while rising. Interrupted rise + resize returns to the valid bed rest pose; switching actors resets standing without rebuilding either model.
+- Turned new-bedroom dresser and supported mirror toward the room (270 degrees), using body-specific vertical clearance and navigation-safe approach points. Comparison spectator avoids mirror/wardrobe endpoints.
+- Found wardrobe endpoint rounding into furniture despite the precise point being safe. Navigation now connects precise endpoints to reachable adjacent grid nodes; collision checks remain. Browser verified both wardrobe/mirror round trips use walking, no teleport fallback, with body-2 speed 1.05.
+- Validation: 30 initial targeted tests, then 44 navigation/layout/mirror regression tests passed (overlapping suites); comparison production build passed. Browser .tmp/bedroom-full-qa.mjs and bedroom-right-qa.mjs verified left/right rest, entry/rise, resize interruption, actor reset, stable UUIDs, dresser and outfit route without page errors. Reviewed entry, recline, sleep front/side, rise, right bed and dresser screenshots.
+- Scope: bed transition starts at a safe bedside point; distant approach/full climb is not implemented. Bench with cat/books still has no seat, flower pouf reuses approved forward-leg pose. No new external animation assets; no new general cloth collision or toon-material conversion. Prior wardrobe/facial work preserved; no commit/push.
+
+2026-09-29 — User rejected the sleep look; prefer existing open motion assets
+- User wants room actions assembled from open animation libraries rather than more authored FK motions. Current bed pose is explicitly unapproved/placeholder despite functional tests; preserve selected wardrobe five clips and credits.
+- Researched primary sources: Overte/Hanami Apache-2.0 slow/normal walks, turns, starts/stops with exact filenames; sashii's CC0 Walk/SlowRun/Run conversion of Jen Jell's Josie (both author pages verified); inspected pinned Mesh2Motion GLB for Walk, Walk_Formal, Walk_Carry and sitting clips as fallback. Do not infer sleep from LayToIdle filename.
+- Recorded candidates and asset-first policy in docs/chibi-motion-sources.md. No new assets downloaded/imported this turn, no runtime replacement claimed. Sleep candidate remains unverified; next implementation should audition source clips on body 2, preserve root/foot contacts and attribution.
+
+2026-09-29 — Four source walking cycles available for live selection
+- User requested direct integration. Imported pinned Hanami/Overte world-walk-slow and world-walk (Apache-2.0, hashes checked), plus existing pinned Mesh2Motion Walk and Walk_Formal (CC0). Reused the VRMA and GLB retarget generators; GLB generator accepts optional output/catalog without changing its wardrobe defaults. Exact sources, hashes, modifications and commands: art/chibi/motion-sources/ROOM-WALK-CREDITS.md.
+- Fixture buttons 1–4 switch body 2 to an in-place audition, with author/license links, stop and a navigation-backed short-walk button. Choices survive room switches in the page; no saved character/house changes. Normal app keeps previous walk unless a clip is explicitly assigned; generated audition data only imported by the fixture.
+- Clip sampler preserves source full-body rotations and cadence, uses existing finger/twist adaptation. Lower ankle is returned to the standing plane; room movement speed estimated from target rig stride and current world scale. This is not a full foot-lock IK/cloth collision solution. No new sleep/start/stop asset was imported. Sashii download requires BOOTH login, so not listed as playable.
+- Verified 11 motion tests including three body heights, all four cycles, fixed bone lengths, finite matrices, ankle contact and idle restoration. Browser checks compare candidate screenshots at two phases, stable actor UUIDs, stop and actual travel. Initial QA caught focusResident cancelling preview and residual vertical blending; both fixed before final checks.
+- Final browser QA passed all four switches, actual navigation movement/arrival, stop, actor reuse and mobile no-overflow. Inspected .tmp/walk-candidate-*.png, walk-mobile.png and walk-final-skill/shot-0.png. Skill client reused with a longer click-ready timeout for model loading. Final comparison production build passed. No commit/push; user now chooses 1–4 in the existing room comparison page.
+
+2026-09-29 — User chose candidate 2: 日常走路
+- Promoted the exact Overte world-walk clip to approvedRoomWalk.json and made it the default for body-2 visitors in every room. Classic remains unchanged. Comparison default is now 2 with 已选为默认 status; other candidates are temporary comparisons.
+- Updated selected credits and source records; Apache license, NOTICE and upstream Hanami conversion notice are included under public/room3d/motions for distribution. Sleep is still unapproved. No character saves or remote changes.
+
+2026-09-30 — User Meshy motion pack audition
+- Inspected user-supplied Meshy_AI_current_body_unrigged_biped.zip: 14 GLBs, 15 animation clips, all with 28-joint Meshy skins. Original user body shape is retained in the exports, but this is not the project's 48-joint rig. Sleep (5.708s) visibly starts seated with hand support and reclines; not a standing-to-bed sequence.
+- Added test/fixtures/meshy-motion-audition.html/.ts/.css: 14 numbered choices, original full tracks/root travel, default end hold, optional loop, pause/replay/scrub/speed, front/side/fit, skeleton and adjustable reference bed. The unnamed UUID file preserves both clips, including its 0.083s extra. No approved room/wardrobe animations replaced.
+- Original assets and runtime manifest live in ignored output/meshy-motion-audition; no commercial raw GLBs in public or product imports. File/ZIP SHA256, exact names, durations and metadata recorded in art/chibi/motion-sources/meshy-user-pack-20260930.json and docs/chibi-motion-sources.md. No license file in the supplied pack; do not label it CC0/open source or assume public redistribution permission.
+- Browser QA exercised all 14 + extra clip, end hold, scrub, speed, restart, loop, skeleton/reference bed and mobile. Caught candidate-reload race in test/UI readiness and mobile camera clipping, fixed both. Playwright skill loop passed without errors; inspected mid/end samples, sleep side view and corrected mobile screenshot. Standalone fixture build passes; git diff --check clean. UI open request queued for audition URL.
+- Next: user picks candidates by number, then retarget selected motions onto current 48-bone character and adapt furniture contact/clothing. Source playback is verified; product retargeting and final acceptance are not done. No commit/push.
+
+2026-09-30 — Eight selected Meshy motions integrated
+- User mappings preserved exactly: 01 sleep, 04 seated alternate, 06 successful clothing-equip once, 07 coffee sip, 08/09 wave alternatives, 10 default body-2 walk, 13 yoga-mat crunch. Precise source names/hash/ZIP provenance retained in meshy-user-pack-20260930.json and MESHY-SELECTED-CREDITS.md. No uploads, commits or pushes.
+- New deterministic Meshy importer derives rest world orientations from inverse bind matrices (export node transforms are posed), converts selected rotations plus normalized hip displacement to existing 48-bone rig. No replacement meshes or bone-length changes. Raw GLBs remain ignored local output.
+- 10 becomes body-2 default, with older walks still selectable in comparison. 01 replaces final bed recline with full 5.708 s source and endpoint hold/reverse rise; existing walk-to-bed/edge phases preserved, minimal Three CCD IK prevents feet crossing mattress. 04 adds explicit floor-pouf alternate with the prior relaxed pose retained.
+- 06 fires after a successful non-empty slot change, never initial load/removal/recolor/fit, completes once and resumes chosen wardrobe idle. Verified stable character UUID. 07 follows 8 s brewing with a full 8.875 s left-hand sip and prop cleanup. Fixed kitchen planning to use the actual navigation map, including the comparison spectator, instead of claiming departure after a mismatched route fails.
+- 13 uses four cycles on a temporary green mat, grounded against actual posed skin. Searches reachable clear space without teleport; interruption/end removes mat. Existing furnished rooms can refuse when crowded; comparison now has a separate empty motion practice room with green/white/black palette. Mat is not a persistent furniture asset. No separate source down-to-mat/get-up animations yet; no universal cloth collision added.
+- Validation: 44 targeted checks passed (7 files), plus new kitchen navigation-map regression checked separately. Browser verified actual source-retarget poses, 01 bed entry/end/rise, 04 alternate flag, 08/09 triggers, 13 approach/mat/end and crowded refusal, 06 equip-once/removal/UUID, 07 approach→work→sip→cleanup with assertions. Inspected .tmp/meshy-retarget-*.png, bed-contact-{recline,sleep,rise}.png, meshy-yoga-ui.png, meshy-equip-once.png, meshy-coffee-ui.png. Skill client .tmp/meshy-selected-skill passed and shot/state inspected. Comparison production build passes; final build rerun after routing fix.
+- Whole-repo tsc was attempted but took too long without diagnostics and was stopped; no clean whole-repo typecheck claimed. Failed early browser attempts included live-reload/timeouts during concurrent edits, then rerun against stable code. Coffee's initial null task was a real navigation mismatch and was fixed; final QA asserts both work and sip rather than only checking cleanup.
+- Next visual acceptance belongs to the user, especially outfit clearance under big arm motions and gym entry/exit. Vite remains running on 127.0.0.1:5173; no user character/house saves changed by test fixtures.
+
+2026-09-30 — Single daily walk and authored mirror grooming
+- User requested keeping only Meshy 10 Walking. Removed four older walking candidates, their UI selector, generated sample JSON and walk-only manifests; comparison and runtime use approvedRoomWalk.ts → meshyMotions.walk. Preserved shared wardrobe attribution and historical source credits.
+- Researched official Three CCDIKSolver, Unity Two Bone IK and iClone pose-to-pose workflows; no exact reusable clothing-grooming asset was verified. User explicitly authorized making this gesture. New mirrorGrooming.ts authors an 8.8 s look-down → two-hand hem tidy → chest brush → mirror check → rest sequence. Existing Three CCD IK targets actual front garment vertices with clearance; virtual target bones never join the 48-bone skin. Reduced wrist rotation and lowered hem targets after visual review. No cloth simulation or universal clothing collision claim.
+- Hooked only body-2 mirror-admire; Classic duration and Meshy 06 dress-once remain. Mirror activity finishes once and restores idle.
+- Validation: 16 targeted tests pass across room walk, mirror, body room motion and new grooming regression (three heights, fixed feet/bone lengths, finite transforms, interruption recovery). Comparison Vite build passes. Browser mirror trigger/duration/finish assertions pass without page errors. Captured and inspected final garment poses .tmp/groom-stage-{1.9,4.6}.png; skill client verifies retained Meshy walking and state meshy-walk. First mirror camera view was obstructed by a wall; used empty motion room to inspect identical pose on actual clothed visitor. Initial fixture cleanup typo was caught and fixed by build; no remaining runtime import of removed walking files.
+- This is a first authored gesture for user aesthetic review, not user-approved final animation. No commit/push or saved character/house mutation.
+
+2026-09-30 — Study computer chair uniformly reduced
+- User explicitly requested uniform scaling. gaming_chair catalog dimensions, all collision boxes and seat anchor scaled by 5/6 (width 1.50 → 1.25). Existing GLB loader normalizes against catalog width; source generator target synchronized. No per-axis edits or character scaling changes.
+- Existing gaming, study layout and seating checks passed (24); docking's strict floating-point equality exposed a 1e-16 addition difference, changed position assertions to 10-decimal tolerance, all 7 docking checks pass. No new implementation-mirroring test.
+- User clarified desk AND chair must shrink together. Desk plus its five tabletop devices now uniformly scale by 5/6; catalog contact/support/collision coordinates and generator widths/hardcoded desk clearances synchronized. Preset tabletop offsets scale with desk width; study lamp moves inward. Shared computerSeatOffset preserves a .28 body gap beyond table collision front; blind scaling had made the unchanged avatar torso overlap the desk, caught by existing tests and fixed. Existing precise microphone migration uses scaled destination. 25 gaming/docking/study checks pass after the complete set change (seating 6 already passed).
+
+2026-09-30 — Body-2 computer interaction
+- User froze furniture sizing and requested focusing on motion. Existing blankMotion had no computer/stream branch: body 2 only sat idle. Added computerMotion.ts with existing Three CCD IK, virtual wrist goals outside the 48-bone skin, gentle typing/mouse phase, finger curl and small screen-directed head movement. Actual mouse target comes from gaming activity; visitor passes explicit legacy-to-body coordinate scale.
+- Seated hips and bone lengths remain fixed, existing slight seated ankle sway retained; no body rebuild or new third-party animation asset. Classic behavior unchanged. Stream currently shares the computer gesture.
+- 22 focused tests passed, including three-height contact/mouse progression, finite transforms, fixed lengths and interruption restoration. Comparison production build passed. Actual UI selects computer, captures typing and mouse phase, and asserts completion without page errors; screenshots .tmp/computer-typing.png and computer-mouse.png inspected. Skill client also run for study scene. No furniture size changes in this step, no commit/push.
+
+2026-09-30 — Lower computer chair seat
+- User requested lower seat height. Kept the approved furniture width/depth; shortened gas-lift zone y=.20–.55 by .14, with wheels fixed and complete upper chair translated down. Seat .847625 → .707625; actual normalized GLB, catalog size/boxes/seats and generator share chair-seat-height.mjs. Preserved materials. Added cache revision and idempotent targeted asset repair; second execution confirmed no extra lowering.
+- All 31 existing gaming/docking/study/seating checks passed. Browser rechecks typing/mouse/end on the lowered chair; no source animation changes, no commit/push.
+
+2026-09-30 — Chair height fine adjustment
+- User requested a little lower again: seat .707625 → .647625, another .06 drop, cumulative .20. Wheel hub unchanged; same upper dimensions. Height repair now inverts the prior deformation before applying the new one and uses a numeric drop marker; second run confirmed idempotent. Revision v2 invalidates old asset cache. 18 gaming/study checks pass; browser typing/mouse recheck and skill captures rerun. No furniture width/desk changes.
+
+2026-09-30 — Complete existing study interactions
+- User accepted final chair height, requested study motions complete. Added a distinct livestream greeting using approved Meshy 08 left upper-body tracks only (explicitly exclude thigh/shin/foot/toe), blended with keyboard contact; seated hips/legs remain unchanged. Attribution remains MESHY-SELECTED-CREDITS.
+- Body-2 computer/stream now seek a genuinely reachable chair-side/diagonal landing on the current nav map, walk there, run seat transition, then start timed activity. Same-chair switching starts immediately; seat exit can find side clearance when desk blocks front. Refuse blocked approach instead of teleport. Expanded candidate radius to 2 room units after actual crowded study rejected closer landings.
+- 31 focused checks passed across computer motion (now covers stream at three heights), gaming, seating, room motion and study. Final comparison build passes. Browser verifies actual approach/walk → seat → computer → rest → rise, separately stream approach → greeting → controls, no page errors. Inspected typing/mouse and stream screenshots; skill client run and inspected. Remaining bookshelf/printer props have no claimed action. No size changes, commits or pushes.
+- Final study-specific browser pass also verified relaxed flower-pouf sitting, Meshy 04 alternate selection, standing back up, and monstera watering through completion. Inspected .tmp/study-pouf.png and study-water.png. Early pointer selection attempts were occluded at the default angle; rotating view and selecting visible furniture surface resolved QA without product changes.
+
+2026-09-30 — Coffee mug grip
+- User reported the mug was not held. The previous prop tracked only the left wrist translation, kept a fixed world orientation, and added an independent upward bob after pickup. Added coffeeGrip.js using the actual left index/middle finger joints and a calibrated hand-to-mug orientation; kitchen effects align the handle contact, blend pickup orientation, and remove the body-2 bob once held. Legacy body and other kitchen props retain their trajectories.
+- 9 targeted tests passed: complete imported sip and brew at 3 sizes × 3 headings, exact handle/finger contact, unchanged bone lengths, resource lifecycle, and reset on next brew. Comparison fixture build passed (208 modules). Real browser approach → brew → sip → cleanup passed twice with no page errors; inspected near views .tmp/coffee-grip-{work,early,sip}.png and coffee-grip-front-*.png. Skill client ran .tmp/coffee-grip-skill.
+- This corrects mug attachment, not the source Meshy arm retargeting or a general hand/object contact solver. No new motion asset or source credit changes.
+
+2026-09-30 — Body 2 bathroom actions
+- Kept four existing actions and clothes. Added bathroomJourney.js: reachable front candidates use actual navMap incl spectator, tub rim sit → turn/lift legs → lower (3.6 s), seated toilet entry, shower/laundry entry, timed work then reverse exit. stopWalking cancels to front; camera focus explicitly preserves the journey; invalidated/moved furniture clears it. Corrected bathtub body-2 orientation along the long axis so feet stay inside.
+- Added bathroomMotion.ts reusing Three CCDIKSolver: palms near head for gentle shampoo, tub rim contact, washer button press then wait. Existing effects only run during work for body 2, washer shakes after 3.3 s and restores on exit. Legacy body unchanged; no new external motion assets, Meshy 10 approach credits unchanged.
+- 15 bathroom/motion/layout tests passed; comparison build passed (210 modules). .tmp/bathroom-final-qa.mjs completed all four real interactions, camera continuity, exit and unchanged saved state with no page errors. .tmp/bathroom-cancel-qa.mjs passed interrupt during entry and work. Inspected final-bath-soak/shower/toilet; washer additional wall-hidden view inspected and its flow passed too. Skill client .tmp/bathroom-skill.
+- Limits: reviewed furniture anchors and staged transitions, not swept cloth/furniture collision; no undressing or washer-door/loose-clothes model added. Keep current furniture sizes. No commit/push.

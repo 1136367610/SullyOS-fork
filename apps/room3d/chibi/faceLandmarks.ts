@@ -36,13 +36,6 @@ export function measureFaceLandmarks(width:number,height:number,pixels:ArrayLike
   return {left,right,top,bottom,x,anchor:median(central.map(c=>c.top)),outer:endpoint(side?.88:.12),inner:endpoint(side?.12:.88),edge};
  });
 }
-export function eyePairOffset(lash:FaceSide[],iris:FaceSide[],authored:{lash:FaceSide[];iris:FaceSide[]},manual=0){
- // The PSD layers already share a registered canvas. Preserve the native
- // lash-to-iris gap; only compensate for a different lid or edited dimensions.
- // In particular, an untouched matching pair must have exactly zero offset.
- return lash.reduce((sum,l,i)=>sum+l.anchor-iris[i].anchor-(authored.lash[i].anchor-authored.iris[i].anchor),0)/2+manual;
-}
-
 export type EyePoint=[number,number];
 /** Closed eye aperture: lash A→D, soft flank D→C, iris C→B, flank B→A.
  * A/B/C/D here refer to the user's sclera diagram, not the earlier alignment anchors.
@@ -78,30 +71,4 @@ export function detailBounds(width:number,height:number,pixels:ArrayLike<number>
  let left=width,top=height,right=-1,bottom=-1;
  for(let y=0;y<height;y++)for(let x=side?width/2:0;x<(side?width:width/2);x++)if(pixels[(y*width+x)*4+3]>16){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
  return right<left?undefined:{left,top,right,bottom};
-}
-/** Largest undistorted highlight that fits below the eyelid, one eye at a time. */
-export function fitHighlight(width:number,height:number,mask:ArrayLike<number>,source:DetailBounds,side:number){
- const columns:Array<{x:number;top:number;bottom:number}>=[];
- for(let x=side?width/2:0;x<(side?width:width/2);x++){
-  let top=height,bottom=-1;
-  for(let y=0;y<height;y++)if(mask[(y*width+x)*4+3]>128){top=Math.min(top,y);bottom=Math.max(bottom,y);}
-  if(bottom>=top)columns.push({x,top,bottom});
- }
- if(!columns.length)return undefined;
- const sw=source.right-source.left+1,sh=source.bottom-source.top+1;
- const eyeCenter=(columns[0].x+columns.at(-1)!.x)/2;
- const originalCenter=(source.left+source.right)/2;
- // Try the original size first; prefer its authored horizontal placement.
- // Only a genuinely shorter aperture (e.g. half closed) reduces both axes.
- for(let step=0;step<=49;step++){
-  const scale=1-step*.02,dw=sw*scale,dh=sh*scale;
-  for(const center of [originalCenter,eyeCenter,eyeCenter-3,eyeCenter+3]){
-   const left=Math.round(center-dw/2),right=Math.ceil(left+dw);
-   const span=columns.filter(c=>c.x>=left&&c.x<=right);
-   if(span.length<right-left+1)continue;
-   const top=Math.max(...span.map(c=>c.top))+1,bottom=Math.min(...span.map(c=>c.bottom))-1;
-   if(top+dh<=bottom)return {x:left,y:top,width:dw,height:dh,scale};
-  }
- }
- return undefined;
 }

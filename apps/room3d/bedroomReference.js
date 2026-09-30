@@ -22,7 +22,7 @@ export function furnishReferenceBedroom(room,catalog){
  bed.materialColors={'pillow-left':'#82917d','pillow-right':'#d9c5b7'};
  const wardrobe=floor('bedroom_ref_wardrobe',-3.18,-3.10);
  const sideboard=floor('bedroom_ref_sideboard',-4.04,-.24,90);
- const dresser=floor('bedroom_ref_dresser',3.70,.92,90);
+ const dresser=floor('bedroom_ref_dresser',3.70,.92,270);
  const bench=floor('bedroom_ref_bench',.55,.21);
  floor('suite_floor_mirror',-4.06,2.56,90);
  floor('suite_plant_large',2.74,2.93);

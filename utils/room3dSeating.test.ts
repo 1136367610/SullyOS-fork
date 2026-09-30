@@ -6,6 +6,15 @@ const catalog=[{id:'sofa',name:'沙发',seats:[{id:'center',label:'中间',posit
 const item={id:'one',assetId:'sofa',x:1,y:.15,z:-1,rotation:90,stored:false};
 const room={id:'room',items:[item]},selection={roomId:'room',itemId:'one',seatId:'center'};
 describe('furniture-local seating',()=>{
+ it('uses a reviewed cushion pose only for body 2, with its contact offset rotated with the seat',()=>{
+  const assets=[{...catalog[0],id:'bedroom_ref_flower_pouf'}],r={...room,items:[{...item,assetId:assets[0].id}]};
+  const classic=seatTransform(r,assets,selection)!,blank=seatTransform(r,assets,selection,true)!;
+  expect(classic.pose).toBe('chair');expect(blank.pose).toBe('floor');
+  expect(blank.position[0]-classic.position[0]).toBeCloseTo(Math.sin(blank.rotation)*.20);
+  expect(blank.position[2]-classic.position[2]).toBeCloseTo(Math.cos(blank.rotation)*.20);
+  expect(blank.height).toBeCloseTo(.60);
+  expect(seatTransform(room,catalog,selection,true)!.pose).toBe('chair');
+ });
  it('rotates and translates the seat with its furniture, including the facing offset',()=>{
   const seat=seatTransform(room,catalog,selection)!;
   expect(seat.position[0]).toBeCloseTo(1.43);expect(seat.position[1]).toBeCloseTo(.78);expect(seat.position[2]).toBeCloseTo(-1.2);expect(seat.rotation).toBeCloseTo(105*Math.PI/180);

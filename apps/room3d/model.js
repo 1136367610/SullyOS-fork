@@ -72,7 +72,8 @@ export function validateHome(raw,catalog){
    const angle=desk.rotation*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),dx=mic.x-desk.x,dz=mic.z-desk.z;
    if(Math.abs(c*dx-s*dz+.96)>.005||Math.abs(s*dx+c*dz-.29)>.005)continue;
    if(!room.items.some(i=>!i.stored&&i.supportId===desk.id&&i.assetId==='gaming_monitors')||!placementError(mic,room,catalog))continue;
-   const next={...mic,x:desk.x-c*.925+s*.575,z:desk.z+s*.925+c*.575};
+   const scale=catalog.find(a=>a.id===desk.assetId).size[0]/3.4;
+   const next={...mic,x:desk.x+(-c*.925+s*.575)*scale,z:desk.z+(s*.925+c*.575)*scale};
    if(!placementError(next,room,catalog))Object.assign(mic,next);
   }
   // The petal sofa grew wider. Keep valid old placements; relocate only those

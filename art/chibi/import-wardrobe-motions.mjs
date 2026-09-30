@@ -18,7 +18,7 @@ for(const side of ['L','R'])for(const [target,source,parent] of [['clavicle','cl
 const nodes=Object.fromEntries(Object.entries(mapping).map(([name,source])=>[name,gltf.scene.getObjectByName(source)]));
 const rest=Object.fromEntries(Object.entries(nodes).map(([name,b])=>[name,b.getWorldQuaternion(new T.Quaternion()).invert()]));
 const mixer=new T.AnimationMixer(gltf.scene),output={};
-const catalog=JSON.parse(fs.readFileSync('apps/room3d/chibi/wardrobeMotionCatalog.json','utf8'));
+const catalog=JSON.parse(fs.readFileSync(process.argv[4]??'apps/room3d/chibi/wardrobeMotionCatalog.json','utf8'));
 for(const [id,{sourceName}] of Object.entries(catalog).filter(([,entry])=>!entry.provider)){
  const source=gltf.animations.find(a=>a.name===sourceName);if(!source)throw Error(sourceName);
  mixer.stopAllAction();const action=mixer.clipAction(source);action.setLoop(T.LoopOnce,1);action.clampWhenFinished=true;action.play();
@@ -35,5 +35,5 @@ for(const [id,{sourceName}] of Object.entries(catalog).filter(([,entry])=>!entry
  }
  output[id]={sourceName,duration:source.duration,times,tracks};
 }
-fs.writeFileSync('experiments/chibi/wardrobeMotions.json',JSON.stringify(output)+'\n');
+fs.writeFileSync(process.argv[3]??'experiments/chibi/wardrobeMotions.json',JSON.stringify(output)+'\n');
 console.log(Object.fromEntries(Object.entries(output).map(([id,c])=>[id,{duration:c.duration,frames:c.times.length}])));

@@ -1,5 +1,9 @@
 # 已选动作署名清单
 
+## 房间走路（2026-09-29 新确认）
+
+用户选择 **2 日常走路 / overte-walk** 作为二号素体默认走路。Overte / High Fidelity 的 `walk_fwd.fbx`，经 Hanami / Undi95 转为 `world-walk.vrma`，Apache-2.0；完整来源、固定版本、哈希与本地修改见 [走路致谢](ROOM-WALK-CREDITS.md)。发布许可与 NOTICE 同步到 `public/room3d/motions/`。下面五段衣橱已选动作保持不变。
+
 用户于 2026-09-23 确认保留 **1、12、14、16、17**。编号固定，菜单统一放入「已选动作」，另保留普通站姿。交互触发方式尚未确定，不代表这些动作已接入点击/触摸事件。
 
 ## 1 · 轻轻待机 / sachi-idle
@@ -48,6 +52,8 @@
 - 随附完整 [Apache-2.0 许可证](./Overte-LICENSE-Apache-2.0.txt)及 [Hanami NOTICE](./Hanami-NOTICE.md)，发布时需一起保留。
 
 ## 后续致谢页可直接使用
+
+2026-09-30 新增的 Meshy 用户导出动作（01、04、06、07、08、09、10、13）单独登记于 [MESHY-SELECTED-CREDITS.md](MESHY-SELECTED-CREDITS.md)。衣橱原先选定的五段仍保留；Meshy 06 作为穿衣后单次动作。
 
 角色动作素材：Sachi VRMA 1 — sashii（CC0）；Eyedart & Breath motion — DiSK（CC0）；Idle_Talking — Mesh2Motion（CC0）；侧头放松与转头动作 — Overte / High Fidelity 系列，经 Hanami / Undi95 转为 VRMA（Apache-2.0）。以上动作已针对本项目骨架适配，其中交谈、侧头放松、转头动作调整为窄站姿；具体源文件、修改说明与许可见本清单。
 

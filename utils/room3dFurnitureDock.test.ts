@@ -11,7 +11,7 @@ function setup(){const h=createHome(catalog),r=h.rooms[0];r.items=gamingPreset('
 describe('table and chair magnetic grouping',()=>{
  it('snaps near the calibrated computer slot, then moves and rotates the full group',()=>{
   const {h,r,desk,chair}=setup();chair.dockId=null;chair.dockSlot=null;const desired={...chair};chair.x+=.4;chair.z+=.1;chair.rotation=0;
-  moveFurniture(r,chair.id,{x:chair.x},catalog);expect(r.items.find(i=>i.id===chair.id)).toMatchObject({x:desired.x,z:desired.z,rotation:180,dockId:desk.id,dockSlot:'front'});
+  moveFurniture(r,chair.id,{x:chair.x},catalog);const snapped=r.items.find(i=>i.id===chair.id)!;expect(snapped.x).toBeCloseTo(desired.x,10);expect(snapped.z).toBeCloseTo(desired.z,10);expect(snapped).toMatchObject({rotation:180,dockId:desk.id,dockSlot:'front'});
   for(const rotation of [90,180,270,0]){moveFurniture(r,desk.id,{rotation,x:.2,z:-.5},catalog);expect(gamingActivities(r,catalog).find(a=>a.kind==='computer')?.reason).toBe('');expect(furnitureGroup(r,desk.id)).toHaveLength(5);}
   expect(validateHome(h,catalog)).toEqual(h);
  });

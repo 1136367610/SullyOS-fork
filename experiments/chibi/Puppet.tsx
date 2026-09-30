@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useRef,useState} from 'react';
 import * as T from 'three';
 import {buildBody,loadBody} from './FbxBody';
 import {createWardrobePose} from './wardrobePose';
+import {meshyMotions} from '../../apps/room3d/chibi/meshyMotions';
 import {prepareHoodie} from '../../apps/room3d/chibi/hoodieClothes';
 import {prepareApprovedWardrobe} from '../../apps/room3d/chibi/approvedClothing';
 import {BLANK_SCALE} from '../../apps/room3d/chibi/blankBody';
@@ -22,6 +23,8 @@ export function Puppet({parts,yaw,motion,wire,playing,appearance='outfit',hair,f
  const outfitSettings=useMemo(()=>({wardrobe:hair?.wardrobe,fits:hair?.wardrobeFits,layering:hair?.wardrobeLayering}),[outfitKey]);
  const controls=useRef({yaw,motion,wire,playing,focus});controls.current={yaw,motion,wire,playing,focus};
  const posing=useRef<{root:T.Group;sample:(t:number)=>void}>();
+ const equipPose=useRef<{root:T.Group;start?:number}>();
+ const equipped=useRef<{root:T.Group;wardrobe:HairSettings['wardrobe']}>();
  const [source,setSource]=useState<T.Group>(),[body,setBody]=useState<ReturnType<typeof buildBody>>(),[error,setError]=useState(''),[dressing,setDressing]=useState(false);
  useEffect(()=>{let cancelled=false,loaded:T.Group|undefined;const release=()=>loaded?.traverse(o=>{if(o instanceof T.Mesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});loadBody().then(m=>{loaded=m;if(cancelled)release();else setSource(m);}).catch(e=>{if(!cancelled)setError(String(e));});return()=>{cancelled=true;release();};},[]);
  const scene=useRef<T.Scene>();
@@ -42,7 +45,16 @@ export function Puppet({parts,yaw,motion,wire,playing,appearance='outfit',hair,f
   function draw(stamp:number){frame=0;if(disposed||document.hidden)return;const c=controls.current,r=rig.current,animate=c.playing&&!reduced.matches;
    const dt=previous?Math.min((stamp-previous)/1000,.05):0;previous=stamp;if(animate)time+=dt;
    if(dirty||stamp-lastDraw>=1000/30){
-    if(r){if(c.motion!==lastMotion){time=0;}if(posing.current?.root===r.root&&c.motion==='idle'){posing.current.sample(time);}else if(r!==lastRig||c.motion!==lastMotion||animate){r.animate(time,c.motion);}r.updateFace(time);r.root.rotation.y=c.yaw*Math.PI/180;outfitRef.current?.updatePose?.();r.root.traverse(o=>{if(o instanceof T.Mesh)for(const m of Array.isArray(o.material)?o.material:[o.material])m.wireframe=c.wire;});lastRig=r;lastMotion=c.motion;}
+    if(r){if(c.motion!==lastMotion){time=0;equipPose.current=undefined;}
+     const one=equipPose.current;let equipping=false;
+     if(one?.root===r.root&&!reduced.matches&&c.motion==='idle'){
+      one.start??=time;const age=time-one.start;
+      if(age<meshyMotions['dress-once'].duration){r.animate(age,'dress-once');equipping=true;}else equipPose.current=undefined;
+     }
+     if(!equipping){if(posing.current?.root===r.root&&c.motion==='idle'){r.animate(0,'idle');posing.current.sample(time);}else if(r!==lastRig||c.motion!==lastMotion||animate){r.animate(time,c.motion);}}
+     r.updateFace(time);r.root.rotation.y=c.yaw*Math.PI/180;outfitRef.current?.updatePose?.();r.root.traverse(o=>{if(o instanceof T.Mesh)for(const m of Array.isArray(o.material)?o.material:[o.material])m.wireframe=c.wire;});lastRig=r;lastMotion=c.motion;
+     element.dataset.equipMotion=equipping?'06':'none';
+    }
     const targetY=c.focus==='head'?(r?.rig? (r.root.updateMatrixWorld(true),r.rig.bones.head.getWorldPosition(new T.Vector3()).y+.25):1.9):1.18;
     const targetHalf=c.focus==='head'?Math.max(.61,.46/aspect):Math.max(1.48,1.22/aspect);
     const ease=reduced.matches?1:1-Math.exp(-Math.max(dt,1/60)*12);framing=T.MathUtils.lerp(framing,targetY,ease);viewHalf=T.MathUtils.lerp(viewHalf,targetHalf,ease);
@@ -86,6 +98,11 @@ export function Puppet({parts,yaw,motion,wire,playing,appearance='outfit',hair,f
    // No frame can see a half-loaded outfit. Pending/failed loads leave the
    // current clothes, skin mask, skeleton and footwear support in place.
    outfitRef.current?.dispose();outfit.attach();outfitRef.current=outfit;
+   const previous=equipped.current,next=outfitSettings.wardrobe;
+   // Trigger only after a successful clothing equip, not loading a character,
+   // taking clothes off, recoloring them or adjusting their fit.
+   if(previous?.root===body.root&&next&&Object.entries(next).some(([slot,id])=>id&&id!==(previous.wardrobe as Record<string,unknown>|undefined)?.[slot]))equipPose.current={root:body.root};
+   equipped.current={root:body.root,wardrobe:next};
    reportRef.current?.(outfit.layeringReport);setDressing(false);wake.current();
   })().catch(e=>{if(!cancelled){setError(String(e));setDressing(false);}});
   return()=>{cancelled=true;};

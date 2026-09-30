@@ -20,3 +20,7 @@
 - `utils/room3dKitchenActions.test.ts`：样板房四种触发点可达、跨房间水槽排除、阻挡拒绝、依赖改变、道具资源复用和清理。
 - `art/jellyfish-home/kitchen-actions-qa.mjs`：真实点击三种家具，逐段推进，检查往返、存档不变、主动休息和收纳水槽取消、控制台错误及近景截图。`KITCHEN_BLANK=1` 另验新骨骼体型。
 - 隔离预览 `test/fixtures/room3d-showrooms.html?room=kitchen&fresh=1`；附加 `&blank=1` 查看新骨骼体型。正式应用同样使用 editor，不需重新建立已有房间。
+
+2026-09-30：咖啡在二号素体上为 approach → work（8 秒萃取/拿杯）→ sip（Meshy 07 `Stand_and_Drink`，8.875 秒）→ 结束。喝咖啡时杯子改随实际左手；旧体型继续原流程。来源见 `art/chibi/motion-sources/MESHY-SELECTED-CREDITS.md`。
+
+2026-09-30：二号素体咖啡杯使用左手食指／中指的实际指节握持点，杯把对准握持点，杯口朝向拇指方向；完整手掌旋转转换到 resident 坐标。萃取后平滑拿杯，拿稳后取消独立上浮。旧体型位置轨迹保留，洗碗／煮饭不受影响。`utils/chibiCoffeeGrip.test.ts` 检查不同体型缩放、朝向和整段喝咖啡动画的杯把接触，以及再次萃取时恢复杯子朝向。

@@ -1,3 +1,4 @@
+import {CHAIR_SEAT_DROP,loweredChairY,lowerChairGeometry} from './chair-seat-height.mjs';
 import {furniturePaintMaterials} from '../../apps/room3d/furniturePaint.js';
 // Reviewed geometry-only Meshy sources. Colors are authored here, never sampled
 // from source images or baked into vertex colors.
@@ -19,10 +20,11 @@ async function emit(id,name,r,width,surface,{yscale=1,...extra}={}){
  const result=root();for(const {mat,role,gs}of buckets.values()){const mesh=new T.Mesh(mergeGeometries(gs),mat);if(role)mesh.userData.gamingRole=role;result.add(mesh);}
  const b=new T.Box3().setFromObject(result),size=b.getSize(new T.Vector3()),c=b.getCenter(new T.Vector3()),scale=width/size.x;
  result.traverse(o=>{if(o.isMesh)o.geometry.translate(-c.x,-b.min.y,-c.z).scale(scale,scale*yscale,scale);});size.multiply(new T.Vector3(scale,scale*yscale,scale));
+ if(id==='gaming_chair'){result.traverse(o=>{if(o.isMesh)lowerChairGeometry(o.geometry);});result.userData.loweredSeat=CHAIR_SEAT_DROP;size.y=loweredChairY(size.y);}
  const bytes=await saveGlb(result,`public/room3d/${id}.glb`),a={id,name,surface,url:`${id}.glb`,size:size.toArray(),default:[0,.15,0],boxes:[[-size.x/2,0,-size.z/2,size.x/2,size.y,size.z/2]],paintMaterials:['gaming-accent'],collection:'gaming',...extra};
  const names=[];result.traverse(o=>{if(o.isMesh)names.push(o.material.name)});a.paintMaterials=furniturePaintMaterials(a,names);
  const old=catalog.findIndex(a=>a.id===id);if(old<0)catalog.push(a);else catalog[old]=a;
- let triangles=0;result.traverse(o=>{if(o.isMesh)triangles+=o.geometry.index.count/3;});report.push({id,name,bytes,triangles,materials:buckets.size,size:a.size});return {a,point:([x,y,z])=>[(x-c.x)*scale,(y-b.min.y)*scale*yscale,(z-c.z)*scale],scale,sy:scale*yscale};
+ let triangles=0;result.traverse(o=>{if(o.isMesh)triangles+=o.geometry.index.count/3;});report.push({id,name,bytes,triangles,materials:buckets.size,size:a.size});return {a,point:([x,y,z])=>[(x-c.x)*scale,id==='gaming_chair'?loweredChairY((y-b.min.y)*scale*yscale):(y-b.min.y)*scale*yscale,(z-c.z)*scale],scale,sy:scale*yscale};
 }
 // 1: Preserve the braced legs and upper riser. Rebuild only the uneven support
 // planes, so accessories contact flat wood instead of the original wavy mesh.
@@ -30,11 +32,12 @@ async function emit(id,name,r,width,surface,{yscale=1,...extra}={}){
  const {g,parts}=await load(1),r=root();
  for(const p of parts){if([2101,2112,1889,1185,1179,1965].includes(p.id))continue;const c=p.center;await part(r,g,p,c.y<-.25?m.rubber:Math.abs(c.x)>.38?m.accent:m.metal);}
  box(r,[1,.052,.46],[0,.143,.007],m.wood,.008);box(r,[.87,.023,.184],[.002,.231,-.138],m.wood,.006);
- const {a,point,scale}=await emit('gaming_desk','双层电竞桌',r,3.4,'floor',{yscale:.78});
+ const {a,point,scale}=await emit('gaming_desk','双层电竞桌',r,3.4*5/6,'floor',{yscale:.78});
  const low=point([0,.169,.007]),high=point([.002,.2425,-.138]);
- a.support={shape:'rect',width:3.24,depth:.46*scale-.06,height:low[1],center:[low[0],low[2]],areas:[{shape:'rect',width:.87*scale-.06,depth:.184*scale-.025,height:high[1],center:[high[0],high[2]]}]};
+ a.support={shape:'rect',width:3.24*5/6,depth:.46*scale-.06*5/6,height:low[1],center:[low[0],low[2]],areas:[{shape:'rect',width:.87*scale-.06*5/6,depth:.184*scale-.025*5/6,height:high[1],center:[high[0],high[2]]}]};
  // Keep a walkable knee recess; collision slabs and legs follow actual geometry.
- a.boxes=[[-1.7,low[1]-.18,-.76,1.7,low[1],.79],[-1.58,0,-1.0,-1.28,low[1],1.0],[1.28,0,-1.0,1.58,low[1],1.0],[-1.48,high[1]-.09,high[2]-.34,1.48,high[1],high[2]+.34]];
+ const f=5/6;
+ a.boxes=[[-1.7*f,low[1]-.18*f,-.76*f,1.7*f,low[1],.79*f],[-1.58*f,0,-f,-1.28*f,low[1],f],[1.28*f,0,-f,1.58*f,low[1],f],[-1.48*f,high[1]-.09*f,high[2]-.34*f,1.48*f,high[1],high[2]+.34*f]];
 }
 // 2: Independent triple display, keyboard, mouse+pad, and one repeatable speaker.
 {
@@ -58,9 +61,9 @@ async function emit(id,name,r,width,surface,{yscale=1,...extra}={}){
  // aspect ratios and the tabletop contact footprint stay unchanged.
  const monitorHeight=y=>y-(.42/2.32)*T.MathUtils.clamp((y+.2431640625)/(.2431640625-.055),0,1);
  monitor.traverse(o=>{if(!o.isMesh)return;const p=o.geometry.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,monitorHeight(p.getY(i)));p.needsUpdate=true;o.geometry.computeVertexNormals();});
- const monitorAsset=await emit('gaming_monitors','三屏显示器',monitor,2.32,'tabletop'),base=monitorAsset.point([0,-.303,-.297]);monitorAsset.a.contact={width:.20*monitorAsset.scale,depth:.203*monitorAsset.scale,center:[base[0],base[2]]};
+ const monitorAsset=await emit('gaming_monitors','三屏显示器',monitor,2.32*5/6,'tabletop'),base=monitorAsset.point([0,-.303,-.297]);monitorAsset.a.contact={width:.20*monitorAsset.scale,depth:.203*monitorAsset.scale,center:[base[0],base[2]]};
  monitorAsset.a.boxes=[2131,2080,1881,2068,2130,2175,2187,2007].map(id=>{const p=parts.find(p=>p.id===id),point=v=>monitorAsset.point([v.x,monitorHeight(v.y),v.z]);return [...point(p.box.min),...point(p.box.max)];});
- await emit('gaming_keyboard','奶油机械键盘',keyboard,.95,'tabletop');await emit('gaming_mouse','鼠标与桌垫',mouse,.60,'tabletop');await emit('gaming_speaker','桌面小音箱',speaker,.35,'tabletop',{paintMaterials:['gaming-shell']});
+ await emit('gaming_keyboard','奶油机械键盘',keyboard,.95*5/6,'tabletop');await emit('gaming_mouse','鼠标与桌垫',mouse,.60*5/6,'tabletop');await emit('gaming_speaker','桌面小音箱',speaker,.35,'tabletop',{paintMaterials:['gaming-shell']});
 }
 // 3: Shelf props remain an intentional display collection inside the cabinet.
 {
@@ -115,7 +118,7 @@ async function emit(id,name,r,width,surface,{yscale=1,...extra}={}){
   if(c.x<-.30||c.y>.095){await part(mic,g,p,[1858,1979,2208].includes(p.id)?m.dark:m.accent);continue;}
   await part(headphones,g,p,[1744,2134].includes(p.id)?m.rubber:[1838,2002].includes(p.id)?m.accent:m.cream);
  }
- const micAsset=await emit('gaming_microphone','悬臂麦克风',mic,.76,'tabletop');micAsset.a.boxes=mic.children.map(mesh=>{mesh.geometry.computeBoundingBox();const b=mesh.geometry.boundingBox;return [...micAsset.point(b.min.toArray()),...micAsset.point(b.max.toArray())];});await emit('gaming_headphones','耳机与支架',headphones,.48,'tabletop');await emit('gaming_webcam','桌面摄像头',camera,.29,'tabletop');await emit('gaming_controller_dock','双手柄充电座',dock,.64,'tabletop');
+ const micAsset=await emit('gaming_microphone','悬臂麦克风',mic,.76*5/6,'tabletop');micAsset.a.boxes=mic.children.map(mesh=>{mesh.geometry.computeBoundingBox();const b=mesh.geometry.boundingBox;return [...micAsset.point(b.min.toArray()),...micAsset.point(b.max.toArray())];});await emit('gaming_headphones','耳机与支架',headphones,.48,'tabletop');await emit('gaming_webcam','桌面摄像头',camera,.29*5/6,'tabletop');await emit('gaming_controller_dock','双手柄充电座',dock,.64,'tabletop');
 }
 // 8/9 are the only original files carrying image maps. Only their clean geometry
 // enters the repository; the electronics and light colors are all chosen above.
@@ -142,7 +145,8 @@ async function emit(id,name,r,width,surface,{yscale=1,...extra}={}){
   else if(p.id===2011||p.id===2137)mat=m.cream;
   await part(r,g,p,mat);
  }
- const chair=await emit('gaming_chair','猫耳电竞椅',r,1.50,'floor');
+ const chair=await emit('gaming_chair','猫耳电竞椅',r,1.25,'floor');
+ chair.a.revision='seat-low-20260930-v2';
  chair.a.boxes=parts.map(p=>[...chair.point(p.box.min.toArray()),...chair.point(p.box.max.toArray())]);
  chair.a.seats=[{id:'center',label:'座位',position:chair.point([-.016,-.104,.17]),rotation:0}];
 }

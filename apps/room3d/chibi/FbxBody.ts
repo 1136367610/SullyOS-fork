@@ -362,11 +362,14 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         rig=bindBlankBody(mesh,hairPivot,true);keep(rig.skeleton);
     }
     const smooth=(a:number,b:number,v:number)=>T.MathUtils.smoothstep(v,a,b);
-    const blankAnimate=rig?createBlankMotion(rig,body):undefined;
+    const roomMotion:{walk?:import('./roomWalk').RoomWalkClip}={};
+    const blankAnimate=rig?createBlankMotion(rig,body,roomMotion):undefined;
+    const setWalkMotion=(clip?:import('./roomWalk').RoomWalkClip)=>{roomMotion.walk=clip;};
     const animate=(time:number,motion:Motion,posture:Posture='standing',activity?:ActivityPose)=>{
         if(blankAnimate){
             blankAnimate(time,motion,posture,activity);
-            if(faceSettings?.enabled)updateFace(time);else front.map=motion==='sleep'?asleepMap:motion==='wave-cute'?cuteMap:awakeMap;
+            const sleeping=motion==='sleep'&&(activity?.kind!=='bed-change'||(activity.bedRecline??0)>.85);
+            if(sleeping)front.map=asleepMap;else if(faceSettings?.enabled)updateFace(time);else front.map=motion==='wave-cute'?cuteMap:awakeMap;
             return;
         }
         const cute=motion==='wave-cute',calm=motion==='wave-calm'||motion==='wave';
@@ -392,7 +395,7 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         if(motion==='bath-laundry'){hairPivot.rotation.set(Math.sin(time*2.5)*.08,Math.sin(time*1.8)*.16,Math.sin(time*2)*.08);body.rotation.z=Math.sin(time*2)*.04;}
         if(motion==='bath-shower'){hairPivot.rotation.x=.08;body.rotation.y=Math.sin(time*2)*.06;}
         if(mirror){body.rotation.y=mirror.yaw;hairPivot.rotation.z=mirror.tilt;hairPivot.rotation.x=mirror.nod;}
-        if(faceSettings?.enabled)updateFace(time);else {const faceMap=sleeping?asleepMap:cute?cuteMap:awakeMap;if(front.map!==faceMap){front.map=faceMap;front.needsUpdate=true;}}
+        if(sleeping)front.map=asleepMap;else if(faceSettings?.enabled)updateFace(time);else {const faceMap=sleeping?asleepMap:cute?cuteMap:awakeMap;if(front.map!==faceMap){front.map=faceMap;front.needsUpdate=true;}}
         for(const {mesh,side} of hands){
             mesh.visible=!floatingLimbs;
             const waving=(cute||calm)&&side>0;
@@ -450,5 +453,5 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         }
     };
     animate(0,'idle');
-    return {root,resources,animate,rig,setFacePlacement,setFaceSettings,updateFace};
+    return {root,resources,animate,rig,setFacePlacement,setFaceSettings,updateFace,setWalkMotion};
 }

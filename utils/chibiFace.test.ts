@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import manifest from '../apps/room3d/chibi/faceAssets.json';
 import {faceAssets,defaultFace,cleanFace,applyEyePreset,eyeStyles,upperStyles,faceLayerIds} from '../apps/room3d/chibi/faceAppearance';
 import originals from '../apps/room3d/chibi/faceOriginals.json';
-import {eyePairOffset,scleraContour,browExpressionRotation,measureFaceLandmarks,fitHighlight} from '../apps/room3d/chibi/faceLandmarks';
+import {scleraContour,browExpressionRotation,measureFaceLandmarks} from '../apps/room3d/chibi/faceLandmarks';
 import {cleanAdjustment,transformFaceSide} from '../apps/room3d/chibi/faceAdjustments';
 describe('Authored face asset contract',()=>{
  it('restores the original preset rather than retaining a previous mixed or adjusted eye',()=>{
@@ -47,22 +47,10 @@ describe('Authored face asset contract',()=>{
    expect(faceAssets[`iris-${style}-${state}`].sides).toHaveLength(2);
   }
  });
- it('aligns all lash/eye combinations with one shared offset plus manual adjustment',()=>{
-  for(const upper of upperStyles.filter(s=>s!=='04'))for(const eye of eyeStyles)for(const state of ['open','half']){
-   const a=faceAssets[`upper-${upper}-${state}`].sides!,b=faceAssets[`iris-${eye}-${state}`].sides!;
-   const reference={lash:faceAssets[`upper-${eye}-${state}`].sides!,iris:b};
-   const shift=eyePairOffset(a,b,reference),manual=eyePairOffset(a,b,reference,3.5);
-   expect(Math.abs(shift)).toBeLessThan(40);
-   expect(manual-shift).toBeCloseTo(3.5);
-   const nativeGap=reference.lash.reduce((n,l,i)=>n+l.anchor-b[i].anchor,0)/2;
-   expect((b[0].anchor+b[1].anchor)/2+shift).toBeCloseTo((a[0].anchor+a[1].anchor)/2-nativeGap);
-   if(upper===eye)expect(shift).toBe(0);
-  }
- });
  it('reconstructs sclera from the selected lid corners and iris bottom, including manual migration',()=>{
   for(const upper of upperStyles.filter(s=>s!=='04'))for(const eye of eyeStyles)for(const state of ['open','half']){
    const lashes=faceAssets[`upper-${upper}-${state}`].sides!,irises=faceAssets[`iris-${eye}-${state}`].sides!;
-   const dy=eyePairOffset(lashes,irises,{lash:faceAssets[`upper-${eye}-${state}`].sides!,iris:irises});
+   const dy=0;
    for(let i=0;i<2;i++){
     const c=scleraContour(lashes[i],irises[i],dy),m=scleraContour(lashes[i],irises[i],dy+4);
     expect(c.A[0]).toBeLessThan(c.D[0]);expect(c.B[0]).toBeLessThan(c.C[0]);
@@ -93,15 +81,5 @@ describe('Authored face asset contract',()=>{
   const w=100,h=100,p=new Uint8ClampedArray(w*h*4);
   for(const left of [10,60])for(let x=left;x<left+25;x++){p[(10*w+x)*4+3]=255;for(let y=30;y<=35;y++)p[(y*w+x)*4+3]=255;}
   for(const side of measureFaceLandmarks(w,h,p)){expect(side.anchor).toBe(30);expect(side.edge.every(y=>y===35)).toBe(true);}
- });
- it('places the highlight below the eyelid, translating before shrinking proportionally',()=>{
-  const mask=(bottom:number)=>{const p=new Uint8ClampedArray(100*100*4);for(let x=10;x<=40;x++)for(let y=30;y<=bottom;y++)p[(y*100+x)*4+3]=255;return p;};
-  const source={left:20,right:29,top:5,bottom:24};
-  const open=fitHighlight(100,100,mask(65),source,0)!;
-  expect(open.scale).toBe(1);expect(open.y).toBe(31);expect(open.width).toBe(10);expect(open.height).toBe(20);
-  const half=fitHighlight(100,100,mask(43),source,0)!;
-  expect(half.scale).toBeLessThan(1);expect(half.y).toBe(31);expect(half.y+half.height).toBeLessThanOrEqual(42);
-  expect(half.width/half.height).toBeCloseTo(.5);
-  expect(fitHighlight(100,100,new Uint8ClampedArray(100*100*4),source,0)).toBeUndefined();
  });
 });

@@ -39,7 +39,7 @@ export function furnishGamingStudy(room,catalog,{compact=false}={}){
   put('bedroom_ref_flower_pouf',-1.1,1.15,0,'#eee3cf');
   put('study_ref_entry_mat',0,3.40);
   const desk=room.items.find(i=>i.assetId==='gaming_desk');
-  const lamp=prop('study_ref_task_lamp',desk,-1.43,.26);lamp.color='#858d67';
+  const lamp=prop('study_ref_task_lamp',desk,-1.43*(catalog.find(a=>a.id==='gaming_desk').size[0]/3.4),.26);lamp.color='#858d67';
   Object.assign(lamp,snapToSupport(lamp,room,catalog));
  }
  for(const item of room.items){if(item.assetId.startsWith('gaming_'))item.materialColors=Object.fromEntries((catalog.find(a=>a.id===item.assetId).colorParts||[]).filter(p=>p.material!=='gaming-accent').map(p=>[p.material,p.color]));const error=placementError(item,room,catalog);if(error)throw Error(item.assetId+'：'+error);}

@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {COFFEE_HANDLE_GRIP} from './coffeeGrip.js';
 // Allocated once, reused by every action, disposed with the room editor.
 export function createKitchenWorkEffects(resident){
  const root=new T.Group();root.name='kitchen-work';root.visible=false;resident.add(root);
@@ -8,7 +9,7 @@ export function createKitchenWorkEffects(resident){
  const plate=new T.Group();root.add(plate);mesh(plate,new T.CylinderGeometry(.22,.19,.025,24),white);
  const rim=mesh(plate,new T.TorusGeometry(.20,.012,4,24),white);rim.rotation.x=Math.PI/2;rim.position.y=.018;
  const sponge=mesh(root,new T.BoxGeometry(.11,.045,.08),food);
- const cup=new T.Group();root.add(cup);mesh(cup,new T.CylinderGeometry(.09,.075,.15,16),white);
+ const cup=new T.Group();cup.name='coffee-cup';root.add(cup);mesh(cup,new T.CylinderGeometry(.09,.075,.15,16),white);
  const coffee=mesh(cup,new T.CircleGeometry(.08,16),wood);coffee.rotation.x=-Math.PI/2;coffee.position.y=.077;
  const handle=mesh(cup,new T.TorusGeometry(.052,.012,5,12),white);handle.position.x=.09;
  const pan=new T.Group();root.add(pan);mesh(pan,new T.CylinderGeometry(.22,.18,.12,16),ink);
@@ -23,21 +24,26 @@ export function createKitchenWorkEffects(resident){
  const v=new T.Vector3(),up=new T.Vector3(0,1,0);
  function local(point){resident.updateWorldMatrix(true,false);return resident.worldToLocal(new T.Vector3(...point));}
  function segment(o,a,b){v.copy(b).sub(a);o.position.copy(a).add(b).multiplyScalar(.5);o.scale.y=v.length();o.quaternion.setFromUnitVectors(up,v.normalize());}
- return {root,update(task,time,hands){
-  root.visible=!!task?.carrying||['work','pickup','putback'].includes(task?.stage);if(!root.visible)return;
+ return {root,update(task,time,hands,grip){
+  root.visible=!!task?.carrying||['work','sip','pickup','putback'].includes(task?.stage);if(!root.visible)return;
   stool.visible=(task.lift||0)>.01;stool.position.set(0,-(task.lift||0),0);
   plate.visible=task.kind==='wash';cup.visible=task.kind==='coffee';pan.visible=task.kind==='cook';
   sponge.visible=task.kind==='wash'&&task.stage==='work';ladle.visible=task.kind==='cook';flow.visible=task.stage==='work'&&(task.kind==='wash'||task.kind==='coffee'&&time<4);
   const left=new T.Vector3(...hands[0]),right=new T.Vector3(...hands[1]),center=left.clone().add(right).multiplyScalar(.5);
   plate.position.copy(center);plate.rotation.x=.2;cup.position.copy(left);cup.position.y+=.02;
+  cup.quaternion.identity();
+  const held=grip?grip.point.clone().sub(COFFEE_HANDLE_GRIP.clone().applyQuaternion(grip.quaternion)):left;
+  if(grip){cup.position.copy(held);cup.quaternion.copy(grip.quaternion);}
   sponge.position.copy(right);sponge.position.y+=.02;
   const point=task.kind==='wash'?task.sink.point:task.source.point;
   const at=local(point);pan.position.copy(at);pan.position.y+=.07;
   if(task.kind==='coffee'&&task.stage==='work'){
    // Fill the cup at the machine, then pick it up for a small satisfied sip.
    const brew=at.clone();brew.y+=.035;
-   cup.position.copy(brew).lerp(left,Math.min(1,Math.max(0,(time-4)/1.2)));
-   if(time>6)cup.position.y+=Math.sin(Math.min(1,(time-6)/2)*Math.PI)*.10;
+   const pickup=T.MathUtils.smootherstep(time,4,5.2);
+   cup.position.copy(brew).lerp(held,pickup);
+   if(grip)cup.quaternion.identity().slerp(grip.quaternion,pickup);
+   else if(time>6)cup.position.y+=Math.sin(Math.min(1,(time-6)/2)*Math.PI)*.10;
   }
   if(ladle.visible){const end=pan.position.clone();end.y+=.12;segment(ladle,right,end);ladle.scale.y*=1/.38;}
   if(flow.visible){

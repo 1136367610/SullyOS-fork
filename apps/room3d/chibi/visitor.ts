@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import {buildBody,loadBody} from './FbxBody';
 import {BLANK_SCALE} from './blankBody';
+import {bodyHeightY} from './bodyHeight';
+import {roomWalkSpeed,type RoomWalkClip} from './roomWalk';
+import {approvedRoomWalk} from './approvedRoomWalk';
 import {dressHoodie} from './hoodieClothes';
 import {dressApprovedWardrobe} from './approvedClothing';
 import type {Parts,Motion,Posture,HairSettings,ActivityPose} from './types';
 import type {RollResult} from './CreatorRollBridge';
-export const NEW_BODY_HOME_PERCENT=172;
+export const NEW_BODY_HOME_PERCENT=200;
 
 export async function decodeParts(result:RollResult):Promise<Parts>{
  const parts:Parts={};
@@ -20,13 +23,31 @@ export async function createVisitor(parts:Parts,hair?:HairSettings){
  let updateOutfitPose:(()=>void)|undefined;
  const root=new THREE.Group();root.name='little-world-chibi';root.add(body.root);
  if(body.rig){try{if(hair?.wardrobe!==undefined){const outfit=await dressApprovedWardrobe(body.rig,hair.wardrobe,hair.wardrobeFits,hair.wardrobeColors,hair.wardrobeLayering);body.resources.push(outfit);updateOutfitPose=outfit.updatePose;}else{const outfit=dressHoodie(body.rig);body.resources.push(...outfit.resources);}}catch(e){body.resources.forEach(r=>r.dispose());throw e;}}
- // Approved home size: 172% of the original 1.4-unit height baseline.
+ // Current user-selected home size: 200% of the original 1.4-unit baseline.
  // Scale the whole hierarchy so hair, clothing and the skeleton stay aligned.
  body.root.scale.setScalar(hair?.bodyShape==='blank'?1.4/BLANK_SCALE*(NEW_BODY_HOME_PERCENT/100):.7);
  // Keep the painted features legible under the room's brighter directional light.
  body.root.traverse(o=>{if(o instanceof THREE.Mesh){o.castShadow=false;o.receiveShadow=false;for(const m of Array.isArray(o.material)?o.material:[o.material])if(m instanceof THREE.MeshStandardMaterial){m.emissive.set('#ffffff');m.emissiveIntensity=.04;}}});
  let disposed=false;
+ // Measure the actual fitted head/hair instead of assuming an extra fixed cap.
+ root.updateMatrixWorld(true);body.rig?.skeleton.update();
+ root.traverse(o=>{if(o instanceof THREE.SkinnedMesh)o.computeBoundingBox();});
+ const standingBounds=body.rig?new THREE.Box3().setFromObject(root):null;
+ const navigation=body.rig?{
+  headBottom:.18+bodyHeightY(.56*BLANK_SCALE,body.rig.bodyHeight)*body.root.scale.y,
+  headTop:.18+standingBounds!.max.y+.04,
+ }:undefined;
+ const baseScale=body.root.scale.y,baseHeadBottom=navigation?.headBottom;
+ const setScaleMultiplier=(value:number)=>{
+  if(!Number.isFinite(value))return;
+  const scale=THREE.MathUtils.clamp(value,.4,2.6);body.root.scale.setScalar(baseScale*scale);
+  if(navigation){navigation.headBottom=.18+(baseHeadBottom!-.18)*scale;navigation.headTop=.18+standingBounds!.max.y*scale+.04;}
+  root.updateWorldMatrix(true,true);
+ };
+ let walkSpeed:number|undefined;
+ const setWalkMotion=(clip?:RoomWalkClip)=>{body.setWalkMotion(clip);walkSpeed=clip&&body.rig?roomWalkSpeed(clip,body.rig.bones):undefined;};
+ if(body.rig)setWalkMotion(approvedRoomWalk);
  // The body keeps its original contact plane; action feet hang independently.
- return {root,rig:body.rig,seatOffset:0,animate(time:number,motion:Motion,posture:Posture='standing',activity?:ActivityPose){body.animate(time,motion,posture,activity);updateOutfitPose?.();},dispose(){if(disposed)return;disposed=true;root.removeFromParent();for(const resource of body.resources)resource.dispose();}};
+ return {root,rig:body.rig,navigation,setScaleMultiplier,setWalkMotion,get walkSpeed(){return walkSpeed===undefined?body.rig?1.05:1.45:walkSpeed*body.root.scale.y;},get seatScale(){return body.root.scale.y;},get bedHeadToHip(){return body.rig?(standingBounds!.max.y/baseScale-bodyHeightY(.38*BLANK_SCALE,body.rig.bodyHeight))*body.root.scale.y:0;},seatOffset:0,animate(time:number,motion:Motion,posture:Posture='standing',activity?:ActivityPose){body.animate(time,motion,posture,body.rig&&activity&&(['computer','stream'].includes(activity.kind)||activity.kind.startsWith('bath-'))?{...activity,handScale:(activity.kind.startsWith('bath-')?1:.7)/body.root.scale.y}:activity);updateOutfitPose?.();},dispose(){if(disposed)return;disposed=true;root.removeFromParent();for(const resource of body.resources)resource.dispose();}};
 }
 export type ChibiVisitor=Awaited<ReturnType<typeof createVisitor>>;
