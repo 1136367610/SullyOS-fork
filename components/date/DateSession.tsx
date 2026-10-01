@@ -1,5 +1,5 @@
 import {meetingAppearance, MEETING_READING_CSS} from '../../utils/meetingAppearance';
-import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { CharacterProfile, Message, DateState, DialogueItem, UserProfile, DateObservation } from '../../types';
 import Modal from '../../components/os/Modal';
 import { useOS } from '../../context/OSContext';
@@ -18,7 +18,7 @@ import {
     stripTtsMarkupForDisplay,
     synthesizeSpeech,
 } from '../../utils/ttsRouter';
-import { planNovelLoadMore } from '../../utils/dateSessionHistory';
+
 import { getPendingReplyText } from '../../utils/pendingReply';
 import { fetchBlobForShare } from '../../utils/shareExport';
 import VoiceFavoriteActionSheet from '../voice/VoiceFavoriteActionSheet';
@@ -131,21 +131,14 @@ interface DateSessionProps {
     onDeleteMessage: (msg: Message) => void;
     onDeleteMessages: (ids: number[]) => Promise<void>;
     onSettings: () => void;
-    /** 阅读模式「加载更早」铺满已加载部分后，回库里取下一批（limit 递增式重取）。 */
-    onLoadMoreHistory?: (nextLimit: number) => Promise<void>;
-    /** 当前查询用的 limit（配合 onLoadMoreHistory 递增）。 */
-    historyLoadLimit?: number;
+    /** 按游标加载更早的 50 条记录。 */
+    onLoadMoreHistory?: () => Promise<void>;
+    historyLoading?: boolean;
+    historyError?: string;
     /** 库里的见面记录是否已经取完。 */
     historyReachedEnd?: boolean;
 }
 
-// Long replies can expand into many DOM lines. Keeping a smaller reading window
-// materially reduces iOS WebKit content-process crashes while older entries
-// remain available through the existing "加载更早" button.
-const NOVEL_MESSAGE_WINDOW_SIZE = 40;
-/** 铺满已加载部分后，每次回库多取多少条见面消息。 */
-const NOVEL_HISTORY_FETCH_STEP = 220;
-const NOVEL_MESSAGE_LOAD_STEP = 40;
 const REQUIRED_EMOTIONS_SET = ['normal', 'happy', 'angry', 'sad', 'shy'];
 
 type DateSpeechResult = { url: string; spokenText: string };
@@ -190,11 +183,12 @@ const ReadingAvatar: React.FC<{ src?: string; name: string; light: boolean }> = 
 
 const DateSession: React.FC<DateSessionProps> = ({ 
     onLoadMoreHistory,
-    historyLoadLimit = 0,
+    historyLoading = false,
+    historyError = '',
     historyReachedEnd = true,
     char, 
     userProfile,
-    messages, 
+    messages: historyMessages,
     peekStatus, 
     initialState,
     encounterId,
@@ -233,6 +227,7 @@ const DateSession: React.FC<DateSessionProps> = ({
     const [observation, setObservation] = useState<DateObservation | null>(initialState?.observation ?? null);
     
     // Interaction State
+    const messages = React.useMemo(() => encounterId ? historyMessages.filter(message => message.metadata?.dateEncounterId === encounterId) : historyMessages, [historyMessages, encounterId]);
     const [input, setInput] = useState('');
     const [showInputBox, setShowInputBox] = useState(!peekStatus && !initialState);
     const [isTyping, setIsTyping] = useState(false); // Waiting for API
@@ -278,7 +273,7 @@ const DateSession: React.FC<DateSessionProps> = ({
     const voiceCacheRef = useRef<Record<string, DateSpeechResult>>({});
     const [novelVoiceLoading, setNovelVoiceLoading] = useState<Set<string>>(new Set());
     const [novelPlayingId, setNovelPlayingId] = useState<string | null>(null);
-    const [novelVisibleCount, setNovelVisibleCount] = useState(NOVEL_MESSAGE_WINDOW_SIZE);
+
     const dateAudioRef = useRef<HTMLAudioElement | null>(null);
     const voiceEnabled = !!char.dateVoiceEnabled;
     const voiceLang = char.dateVoiceLang || '';
@@ -582,26 +577,7 @@ const DateSession: React.FC<DateSessionProps> = ({
         return { key: fallback.key, src: state.currentSprite || fallback.src };
     };
 
-    // Filter messages for Novel Mode: Show only current session
-    // Logic: Find the LAST message with `isOpening: true`. Show all messages from there onwards.
-    const sessionMessages = React.useMemo(() => {
-        if (encounterId) return messages.filter(m => m.metadata?.dateEncounterId === encounterId);
-        const openingIndex = messages.map(m => m.metadata?.isOpening).lastIndexOf(true);
-        if (openingIndex !== -1) {
-            return messages.slice(openingIndex);
-        }
-        // Fallback: If no opening found (legacy data), show all
-        return messages;
-    }, [messages, encounterId]);
-
-    const visibleSessionMessages = React.useMemo(() => {
-        return sessionMessages.slice(-novelVisibleCount);
-    }, [sessionMessages, novelVisibleCount]);
-    const hiddenNovelMessageCount = Math.max(0, sessionMessages.length - visibleSessionMessages.length);
-
-    useEffect(() => {
-        setNovelVisibleCount(NOVEL_MESSAGE_WINDOW_SIZE);
-    }, [char.id]);
+    const visibleSessionMessages = historyMessages;
 
     // Initialization
     useEffect(() => {
@@ -653,11 +629,29 @@ const DateSession: React.FC<DateSessionProps> = ({
     }, [char, currentSpriteKey]);
 
     // Novel Mode Scroll
-    useEffect(() => {
-        if (isNovelMode && novelScrollRef.current) {
-            novelScrollRef.current.scrollTop = novelScrollRef.current.scrollHeight;
-        }
-    }, [visibleSessionMessages.length, isNovelMode, showInputBox]);
+    const readingPosition = useRef({ first: 0, last: 0, height: 0, top: 0, nearBottom: true, active: false });
+    useLayoutEffect(() => {
+        const element = novelScrollRef.current;
+        const previous = readingPosition.current;
+        if (!isNovelMode || !element) { previous.active = false; return; }
+        const first = visibleSessionMessages[0]?.id || 0;
+        const last = visibleSessionMessages.at(-1)?.id || 0;
+        if (!previous.active || !previous.last) element.scrollTop = element.scrollHeight;
+        else if (first && first < previous.first) element.scrollTop = previous.top + element.scrollHeight - previous.height;
+        else if (previous.nearBottom) element.scrollTop = element.scrollHeight;
+        readingPosition.current = { first, last, height: element.scrollHeight, top: element.scrollTop,
+            nearBottom: element.scrollHeight - element.clientHeight - element.scrollTop < 100, active: true };
+    }, [visibleSessionMessages, isNovelMode, showInputBox]);
+    const onReadingScroll = () => {
+        const element = novelScrollRef.current;
+        if (!element) return;
+        const movingUp = element.scrollTop < readingPosition.current.top;
+        readingPosition.current.top = element.scrollTop;
+        readingPosition.current.height = element.scrollHeight;
+        readingPosition.current.nearBottom = element.scrollHeight - element.clientHeight - element.scrollTop < 100;
+        if (movingUp && element.scrollTop < 80 && !historyLoading && !historyReachedEnd && !historyError)
+            void onLoadMoreHistory?.();
+    };
 
     // Typewriter effect
     useEffect(() => {
@@ -1025,7 +1019,7 @@ const DateSession: React.FC<DateSessionProps> = ({
 
             {/* Novel Mode View */}
             {isNovelMode && (
-                <div ref={novelScrollRef} className={`meeting-reading-page absolute inset-0 z-20 overflow-y-auto no-scrollbar pt-24 pb-32 px-8 mask-image-gradient overscroll-contain ${lightReading ? 'bg-[#faf8f5]' : 'bg-black/90 backdrop-blur-sm'}`} onClick={(e) => { e.stopPropagation(); if (showMenu) { setShowMenu(false); setShowVoiceLangPicker(false); return; } setShowInputBox(true); }}>
+                <div ref={novelScrollRef} onScroll={onReadingScroll} style={{ overflowAnchor: 'none' }} className={`meeting-reading-page absolute inset-0 z-20 overflow-y-auto no-scrollbar pt-24 pb-32 px-8 mask-image-gradient overscroll-contain ${lightReading ? 'bg-[#faf8f5]' : 'bg-black/90 backdrop-blur-sm'}`} onClick={(e) => { e.stopPropagation(); if (showMenu) { setShowMenu(false); setShowVoiceLangPicker(false); return; } setShowInputBox(true); }}>
                     <div className="min-h-full flex flex-col justify-end">
                         <div className="max-w-2xl mx-auto animate-fade-in space-y-6">
                             {isBatchSelectMode && (
@@ -1044,7 +1038,7 @@ const DateSession: React.FC<DateSessionProps> = ({
                                     </div>
                                 </div>
                             )}
-                            {sessionMessages.length === 0 && peekStatus && (() => {
+                            {visibleSessionMessages.length === 0 && peekStatus && (() => {
                                 const { observation: peekObs, rest: peekBody } = extractObservation(peekStatus, { lenient: observeEnabled, custom: char.dateObserve?.custom });
                                 return (
                                     <>
@@ -1057,37 +1051,20 @@ const DateSession: React.FC<DateSessionProps> = ({
                                     </>
                                 );
                             })()}
-                            {(hiddenNovelMessageCount > 0 || !historyReachedEnd) && (
-                                <div className="flex justify-center">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // 本地还有没显示的就只开窗；已经铺满则回库里取更早的一批，
-                                            // 否则初始窗口以外的见面记录在阅读模式里永远够不着。
-                                            const plan = planNovelLoadMore({
-                                                loadedCount: sessionMessages.length,
-                                                visibleCount: novelVisibleCount,
-                                                windowStep: NOVEL_MESSAGE_LOAD_STEP,
-                                                loadLimit: historyLoadLimit,
-                                                loadStep: NOVEL_HISTORY_FETCH_STEP,
-                                                reachedDbEnd: historyReachedEnd,
-                                            });
-                                            setNovelVisibleCount(plan.nextVisibleCount);
-                                            if (plan.nextLoadLimit !== null) void onLoadMoreHistory?.(plan.nextLoadLimit);
-                                        }}
-                                        className={`px-4 py-2 rounded-full text-xs font-bold border active:scale-95 transition-transform ${
-                                            lightReading
-                                                ? 'bg-stone-100 text-stone-500 border-stone-200'
-                                                : 'bg-white/10 text-white/60 border-white/10'
-                                        }`}
-                                    >
-                                        加载更早见面记录{hiddenNovelMessageCount > 0 ? ` (${hiddenNovelMessageCount})` : ''}
+                            {(!historyReachedEnd || historyError) && (
+                                <div className="flex flex-col items-center gap-2">
+                                    {historyError && <p role="alert" className="text-xs text-rose-400">{historyError}</p>}
+                                    <button disabled={historyLoading} onClick={e => { e.stopPropagation(); void onLoadMoreHistory?.(); }}
+                                        className={`px-4 py-2 rounded-full text-xs font-bold border disabled:opacity-50 ${lightReading ? 'bg-stone-100 text-stone-500 border-stone-200' : 'bg-white/10 text-white/60 border-white/10'}`}>
+                                        {historyLoading ? '正在读取…' : historyError ? '重试读取记录' : '加载更早见面记录'}
                                     </button>
                                 </div>
                             )}
                             {visibleSessionMessages.map((msg) => (
                                 <div
                                     key={msg.id}
+                                    data-date-message-id={msg.id}
+                                    style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 240px' }}
                                     className={`group relative rounded-xl transition-colors -mx-4 px-4 py-2 ${isBatchSelectMode ? 'pl-10' : ''} ${lightReading ? 'active:bg-stone-100' : 'active:bg-white/5'}`}
                                     onClick={(e) => {
                                         if (!isBatchSelectMode) return;

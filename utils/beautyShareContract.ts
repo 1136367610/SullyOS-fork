@@ -9,6 +9,8 @@ export interface BeautyMetadata {
   contact: string;
   allowRemix: boolean;
   allowRedistribute: boolean;
+  /** Explicit consent per work. Older submissions remain unlisted. */
+  allowPublicListing?: boolean;
   exportVersion: string;
   bugFeedback: 'welcome' | 'self-fix';
   message: string;
@@ -25,6 +27,8 @@ export interface BeautySubmission {
   reviewNote: string;
   updatedAt: number;
   authorCode?: string;
+  catalogHidden?: boolean;
+  catalogPublic?: boolean;
 }
 export interface BeautyShare {
   code: string;
@@ -63,10 +67,12 @@ export function validateBeautyMetadata(value: unknown): BeautyMetadata {
   if (!Array.isArray(value.platforms) || value.platforms.length < 1 || value.platforms.some((p: unknown) => !BEAUTY_PLATFORMS.includes(p as any))) throw Error('请选择发放平台');
   if (typeof value.allowRemix !== 'boolean' || typeof value.allowRedistribute !== 'boolean') throw Error('请设置二改和二次传播权限');
   if (value.bugFeedback !== 'welcome' && value.bugFeedback !== 'self-fix') throw Error('请选择反馈偏好');
+  if (value.allowPublicListing !== undefined && typeof value.allowPublicListing !== 'boolean') throw Error('请确认是否允许公开展示');
   return {
     name: text(value.name, '美化名', 80, true), credit: text(value.credit, '署名', 60, true),
     platforms: [...new Set(value.platforms)] as string[], contact: text(value.contact, '联系说明', 160),
     allowRemix: value.allowRemix, allowRedistribute: value.allowRedistribute,
+    ...(value.allowPublicListing !== undefined ? {allowPublicListing:value.allowPublicListing} : {}),
     exportVersion: text(value.exportVersion, '导出版本', 80, true), bugFeedback: value.bugFeedback,
     message: text(value.message, '作者留言', 2000),
   };

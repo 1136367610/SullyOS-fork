@@ -124,5 +124,5 @@ it('有旧快照仍显示三个入口；直接见面不请求开场，退出无�
     await clickText('测试角色');
     await clickText('直接见面');
     expect(mocks.session.encounterId).not.toBe(firstId);
-    expect(mocks.session.messages).toEqual([]);
+    expect(mocks.session.messages.map((message: any) => message.content)).toEqual(['上一场']);
 });

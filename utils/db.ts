@@ -680,7 +680,7 @@ export const DB = {
 
   // DateApp 等按来源展示的轻量历史读取：用 charId 索引倒序扫，只收集目标 source 的最近 N 条。
   // 这样不会为了渲染见面阅读模式，把该角色全量聊天（含图片/base64消息）一次性 getAll 进内存。
-  getRecentMessagesByCharIdAndSource: async (charId: string, source: string, limit: number): Promise<Message[]> => {
+  getRecentMessagesByCharIdAndSource: async (charId: string, source: string, limit: number, beforeId?: number): Promise<Message[]> => {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(STORE_MESSAGES, 'readonly');
@@ -691,6 +691,13 @@ export const DB = {
       cursorReq.onsuccess = () => {
           const cursor = cursorReq.result;
           if (cursor && collected.length < limit) {
+              // Index duplicates are ordered by message primary key. Seek straight to
+              // the page boundary instead of deserializing every newer message again.
+              if (beforeId !== undefined && Number(cursor.primaryKey) >= beforeId) {
+                  if (Number(cursor.primaryKey) > beforeId) cursor.continuePrimaryKey(charId, beforeId);
+                  else cursor.continue();
+                  return;
+              }
               const m = cursor.value as Message;
               if (!m.groupId && m.metadata?.source === source) collected.push(m);
               cursor.continue();

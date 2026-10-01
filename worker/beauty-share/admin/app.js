@@ -49,8 +49,10 @@ function downloadBlob(blob, name) { const url = URL.createObjectURL(blob); const
 function badge(text, status, parent) { const node = element('span', text, parent); node.className = 'status ' + status; }
 function renderSubmission(item) {
   const article = element('article', '', $('submissions')); const m = item.metadata;
+  const visibility = m.allowPublicListing ? '作者同意公开展示（含静态预览包）' : '仅凭码领取，不进入公开库';
   const head = element('div', '', article); head.className = 'item-heading';
   element('h2', m.name, head); badge(({ pending: '审核中', approved: '已通过', rejected: '已退回' })[item.status], item.status, head);
+  element('p', visibility + (item.catalogHidden ? ' · 作者已取消公开' : ''), article);
   element('small', `${item.kind === 'appearance' ? '桌面主题' : '美化预设'} · ${m.credit} · ${new Date(item.updatedAt).toLocaleString()}`, article);
   const details = element('details', '', article); element('summary', '作品说明与作者规范', details);
   element('p', `作者码：${item.authorCode}\n平台：${m.platforms.join('、')}\n联系说明：${m.contact || '未填写'}\n允许二改：${m.allowRemix ? '是' : '否'} · 允许二次传播：${m.allowRedistribute ? '是' : '否'}\n导出版本：${m.exportVersion}\nBug 反馈：${m.bugFeedback === 'welcome' ? '欢迎' : '请自行修复处理'}\n作者留言：${m.message || '未填写'}`, details);
@@ -58,12 +60,13 @@ function renderSubmission(item) {
   if (item.reviewNote) element('p', `上次审核：${item.reviewNote}`, article);
   const actions = element('div', '', article); actions.className = 'actions';
   action('下载检查文件', async () => { const response = await api(`revisions/${item.latestRevision}/file`); downloadBlob(await response.blob(), `beauty-review-${item.id}.json`); }, actions);
+  if(m.allowPublicListing) action('检查公开封面',async()=>{const response=await api(`revisions/${item.latestRevision}/cover`);const url=URL.createObjectURL(await response.blob());const dialog=element('dialog','',document.body);const img=element('img','',dialog);img.src=url;img.alt='待审核的装扮库封面';img.style.maxWidth='min(360px,80vw)';img.style.maxHeight='65vh';const close=element('button','关闭',dialog);const dispose=()=>{dialog.close();dialog.remove();URL.revokeObjectURL(url);};close.onclick=dispose;dialog.addEventListener('cancel',e=>{e.preventDefault();dispose();});dialog.showModal();},actions);
   if (item.pendingRevision) {
     const label = element('label', '审核说明', article); const note = document.createElement('textarea'); note.maxLength = 1000; note.placeholder = '退回时请说明需要修改的地方'; label.append(note);
     const reviewActions = element('div', '', article); reviewActions.className = 'actions';
     for (const [decision, text] of [['approved', '通过并开放分享'], ['rejected', '退回修改']]) action(text, async () => {
       const submit = async () => { await api(`admin/revisions/${item.pendingRevision}/review`, { method: 'POST', body: JSON.stringify({ decision, note: note.value }) }); await load(); notice(decision === 'approved' ? '已通过，分享码已开放。可在「已通过」查看。' : '已退回，作者可以查看审核说明。'); };
-      if (decision === 'approved') confirmAction(article, `确认已检查「${m.name}」的这份文件，并开放凭码下载？`, '确认通过并开放分享', submit);
+      if (decision === 'approved') confirmAction(article, `确认已检查「${m.name}」的这份文件${m.allowPublicListing?'与公开封面，并同意进入装扮库':''}，并开放凭码下载？`, '确认通过并开放分享', submit);
       else { if (!note.value.trim()) throw Error('请先填写退回原因。'); await submit(); }
     }, reviewActions, decision === 'approved' ? 'primary' : '');
   }
