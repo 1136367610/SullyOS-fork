@@ -119,7 +119,19 @@ async function load() {
   $('export-selected').hidden = view !== 'repos'; $('export-selected').textContent = '生成所选 Repo 合集卡';
   if (!items.length) { const p = element('p', '这里暂时没有符合条件的内容。', $('submissions')); p.className = 'empty'; }
   items.forEach(view === 'repos' ? renderRepo : renderSubmission); updatePaging();
+  await loadCatalogStatus();
 }
+async function loadCatalogStatus() {
+  try {
+    const status = await (await api('admin/catalog')).json();
+    $('catalog-status').textContent = status.pending ? '公开快照正在等待更新；连续审核会合并处理。' : status.error || (status.lastPublished ? '公开快照已更新：' + new Date(status.lastPublished).toLocaleString() : '公开快照会在审核通过后自动更新。');
+  } catch { $('catalog-status').textContent = '快照状态暂时不可用，可稍后查看。'; }
+}
+$('catalog-refresh').onclick = () => busy(async () => {
+  await api('admin/catalog', { method: 'POST' }); await loadCatalogStatus();
+  notice('已安排更新公开快照，无需重新发布前端。');
+});
+$('catalog-check').onclick = () => busy(loadCatalogStatus);
 function switchView(next) {
   view = next; offset = 0; query = ''; $('search').value = '';
   $('tab-submissions').setAttribute('aria-pressed', String(view === 'submissions')); $('tab-repos').setAttribute('aria-pressed', String(view === 'repos'));

@@ -16,14 +16,15 @@ describe('装扮库静态读取与格式边界',()=>{
     expect(()=>validateCatalogCover('data:image/svg+xml,<svg/>')).toThrow();
     expect(()=>validateCatalogCover('data:image/png;base64,aGVsbG8=')).toThrow();
   });
-  it('目录复用缓存，失败后可重试，搜索与翻页不需要请求分享 API',async()=>{
+  it('合并并发目录请求，每次进入重新校验静态缓存，失败可重试',async()=>{
     const fetch=vi.fn().mockResolvedValueOnce(new Response('offline',{status:503})).mockImplementation(async()=>new Response(JSON.stringify({version:1,generatedAt:1,entries:[entry]})));
     vi.stubGlobal('fetch',fetch);
     await expect(loadBeautyCatalog('https://static.test')).rejects.toThrow();
     const a=loadBeautyCatalog('https://static.test'),b=loadBeautyCatalog('https://static.test');expect(a).toBe(b);
-    expect((await a).entries).toHaveLength(1);await loadBeautyCatalog('https://static.test');expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await a).entries).toHaveLength(1);await loadBeautyCatalog('https://static.test');expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch.mock.calls.every(args=>args[0]==='https://static.test/catalog.json')).toBe(true);
     expect(fetch.mock.calls[0][1].credentials).toBe('omit');
+    expect(fetch.mock.calls.every(args=>args[1].cache==='no-cache')).toBe(true);
   });
   it('交互预览只取选中的静态包，校验失败不会交给预览组件',async()=>{
     const pack={format:'sullyos-chat-decoration',version:1,name:'月光',parts:{css:'.sully-chat-root{color:red}'}};

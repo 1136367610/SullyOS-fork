@@ -125,17 +125,18 @@ R2 与 D1 没有跨服务事务。一般写入失败会立即清理对象并归�
 - 投稿说明增加可选 `metadata.allowPublicListing`，新投稿始终默认不勾选，不从记住的作者偏好继承。历史投稿缺少该字段一律不公开；要加入库，作者需用「选择文件更新」明确勾选并送审。作者可从已公开作品的一键更新沿用授权。
 - 勾选后明确告知：署名、联系说明、留言、作品与完整预览素材将公开并可被下载。公开不是防复制功能，二改和传播规范仍须遵守。封面从示例预览在本机生成，最长边不超过 600 像素、最大 256 KiB，仅允许 PNG/WebP；与作品一同审核。管理员可单独检查公开封面，不执行投稿 CSS。
 - `0003_public_catalog.sql` 追加每个版本的封面及作品撤回标记。审核只替换通过后的 published 指针；待审、退回版不进入目录。作者可「取消公开展示」，不会让分享码失效；同时取消当前待审版的公开授权，避免后续审核又暴露。之后重新公开需要新一次明确授权和审核。
-- 新增 `CATALOG` **独立公共桶**，绝不能公开现有私有 `FILES` 桶。每 10 分钟的 Cron 在有变化时生成 `catalog.json` 与以分享码/版本号命名的静态包、小封面。没有变化则不重复构建。使用 D1 租约避免重叠构建，失败不覆盖上一份目录；构建中授权变化则丢弃该次目录，下一轮重试。
-- 前端从 `VITE_BEAUTY_CATALOG_URL`（默认 `https://beauty-library.friedsully.com`）读取静态目录，浏览器与 CDN 缓存 10 分钟。列表只加载当前页的懒加载小图，每页 12 款；进入时随机一次，搜索名称/作者、筛选和翻页全在本地，「换一批」才重排。点击「交互预览」才读取单份公开包并校验大小和 SHA-256，在既有隔离预览中展示，不访问分享 Worker 或 D1。
-- 领取仍重新请求现行分享码和私有下载接口：版本或规范变化要求再次确认；下架立即阻止领取。公开快照不承担实时撤回检查。下架/取消公开后的目录和文件通常需等待下一轮生成及缓存过期；客户端内存目录另有 10 分钟缓存，旧标签页可能继续显示已取到的内容，已下载副本不能收回。
+- 新增 `CATALOG` **独立公共桶**，绝不能公开现有私有 `FILES` 桶。审核、撤回和删除通过 `CATALOG_REFRESH` Durable Object 安排一次性更新，连续操作延后约 20 秒合并处理（最长合并窗口 60 秒）。没有周期性快照 Cron；每日私有数据清理保留。管理员可查看任务状态或手动「更新公开快照」。
+- 数据变更前先持久化任务预留，变更后释放；请求中断时预留最多 120 秒后过期，任务仍会补做。使用 D1 租约避免重叠构建，构建失败保留上一份目录，并最多追加 6 次退避重试；构建中授权变化则丢弃该次目录并重试。目录发布后的旧公开文件清理失败也会重试，私有投稿不受影响。
+- 前端从 `VITE_BEAUTY_CATALOG_URL`（默认 `https://beauty-library.friedsully.com`）读取静态目录。每次进入或点击「刷新目录」都以 `cache: no-cache` 校验 `catalog.json`；仅合并正在进行的请求，不再保存 10 分钟内存目录。目录响应必须重新验证，版本化包与小封面可缓存 600 秒。列表每页 12 款，只懒加载当前页小图；进入/刷新时随机一次，搜索、筛选和翻页全在本地，「换一批」只重排。打开中的页面不自动轮询或跳动。交互预览才读取单份公开包并校验大小和 SHA-256，不访问分享 Worker 或 D1。
+- 领取仍重新请求现行分享码和私有下载接口：版本或规范变化要求再次确认；下架立即阻止领取。公开快照不承担实时撤回检查，目录和文件需等待事件任务完成及既有资源缓存过期；旧标签页可能继续显示已取到的内容，已下载副本不能收回。快照内容更新不需要重新部署前端。
 - 快照只降低浏览带来的动态后端压力，不等于零成本：R2 存储与读操作、CDN 流量以及作者提交/审核/领取仍有各自费用/配额。较多作品时需监控快照构建耗时及 Worker 子请求限额，再改增量队列；构建失败保留旧目录。
 
 ### 装扮库部署顺序
 
 1. 先建独立 R2 桶 `sullyos-beauty-catalog`，按本目录 `catalog-cors.json` 配置只读跨域。不要修改私有桶的公开状态。
-2. 将 `beauty-library.friedsully.com` 绑定到公共桶（或替换前端环境变量为自己的静态域名）。为 `catalog.json`、`items/*` 配置 CDN 缓存，尊重对象的 `Cache-Control: public, max-age=600`；确认 JSON 也命中缓存，禁止缓存授权 API。CORS 使用 `*`，不携带凭据，方便二改部署和本机使用。
-3. 先对 D1 应用 `0003` 迁移，再部署带 `CATALOG` 绑定和 Cron 的 Worker。新版 Worker 依赖新字段，不能先部署 Worker 再迁移。
-4. 等首轮 Cron 生成空目录，核验公共域名 GET `/catalog.json` 的状态、CORS 和缓存头，再发布前端。旧作品不会自动入库；真实公开投稿由作者勾选后人工审核。
+2. 将 `beauty-library.friedsully.com` 绑定到公共桶（或替换前端环境变量）。`catalog.json` 尊重 `public, no-cache, max-age=0, must-revalidate`，禁止用 CDN 强制 TTL 覆盖；`items/*` 可缓存 600 秒。禁止缓存授权 API。CORS 使用 `*`，不携带凭据。
+3. 先对 D1 应用 `0003` 迁移，再部署带 `CATALOG`、`CATALOG_REFRESH` 绑定及 `catalog-refresh-v1` SQLite Durable Object 迁移的 Worker。新版 Worker 依赖新字段，不能先部署 Worker 再迁移。
+4. 管理员点击「更新公开快照」初始化目录，核验公共域名 GET `/catalog.json` 的状态、CORS 和缓存头，再发布前端。旧作品不会自动入库；真实公开投稿由作者勾选后人工审核。
 5. 不要把管理员身份、密码、会话、待审文件或私人 Repo 放入公共桶。紧急撤回需同时清理公共对象与 CDN 缓存；分享码撤回接口已立即阻断新领取。
 
 回归：`pnpm vitest run utils/beautyCatalog.test.ts worker/beauty-share/src/catalog.test.ts utils/beautyShare.test.ts`。Worker 测试使用 Node 22.13+ 的 SQLite，执行真实迁移和审批 SQL，覆盖无授权/待审隔离、更新指针、取消公开、删除、封面权限、构建失败与并发撤回；不会接触远端数据库。
@@ -152,7 +153,7 @@ R2 与 D1 没有跨服务事务。一般写入失败会立即清理对象并归�
 
 前端首次打开聊天装扮会介绍装扮库；提交过作品的作者打开分享页面、取回已有投稿后，另外介绍公开展示与单条/批量协议修改。两类公告分别确认一次，确认记录随个人完整备份迁移。公告不自动修改作品授权，不在普通用户浏览时额外请求作者接口。
 
-- 已创建独立 `sullyos-beauty-catalog` 桶、绑定 `beauty-library.friedsully.com`、配置只读 CORS；`0003` 已应用，Worker 已部署并注册每 10 分钟的快照 Cron。
-- 线上 `catalog.json` 返回 200、`Access-Control-Allow-Origin: *`、`Cache-Control: public, max-age=600`。首次核查有 0 份已审核且授权公开的作品，因此仅初始化空目录，历史作品未自动公开。私有作者接口未登录仍返回 401。
-- **CDN 缓存规则尚未配置**：现有 Wrangler OAuth 对 Cache Rules API 返回权限错误，JSON 响应目前为 `CF-Cache-Status: DYNAMIC`。浏览不经过分享 Worker/D1，浏览器按响应头缓存，但不能宣称 JSON 已命中 CDN。需在 Cloudflare → friedsully.com → Cache Rules 新增仅匹配 `http.host eq "beauty-library.friedsully.com"` 的规则：Eligible for cache，Edge TTL / Browser TTL 尊重源站 Cache-Control（600 秒）。不要匹配 `beauty.friedsully.com` 的授权 API。
-- 后端已先行部署，前端随 master 合并后的既有发布流程上线。Worker 部署版本 `1e8ab0f6-5755-4450-b3d8-5329d09f1f5f`。
+- 已创建独立 `sullyos-beauty-catalog` 桶、绑定 `beauty-library.friedsully.com`、配置只读 CORS；`0003` 已应用。Worker 已改用审核事件触发的 Durable Object，一次性任务完成后不再唤醒；只保留每日私有数据清理 Cron。
+- 线上审核一批 5 份后自动生成目录，仅其中 1 份明确授权公开的作品进入目录，另外 4 份仍只凭码领取。任务完成且无错误。`catalog.json` 返回 200、`Cache-Control: public, no-cache, max-age=0, must-revalidate`；相同 ETag 条件请求返回 304。
+- **CDN 缓存规则尚未配置**：现有 Wrangler OAuth 对 Cache Rules API 返回权限错误，不能宣称 JSON 已命中 CDN。浏览不经过分享 Worker/D1。今后配置规则时，版本化 `items/*` 可缓存 600 秒，目录必须尊重重新验证响应头，不能强制旧目录缓存；不要匹配 `beauty.friedsully.com` 的授权 API。
+- 后端已先行部署，前端随 master 合并后的既有发布流程上线。Worker 部署版本 `9a108165-faf1-431c-bd53-a7fc3504936a`。

@@ -5,6 +5,7 @@ const {DatabaseSync}=createRequire(import.meta.url)('node:sqlite') as typeof imp
 import {readFileSync} from 'node:fs';
 import worker from './index';
 import {dirtyCatalog,rebuildCatalog} from './catalog';
+import {CatalogRefresh} from './catalogRefresh';
 import {sha256} from './auth';
 import type {Env,Statement} from './types';
 import {parseBeautyCatalog} from '../../../utils/beautyCatalogContract';
@@ -26,6 +27,11 @@ async function fixture(){
     FILES:{async put(key,value){files.set(key,value);},async get(key){const text=files.get(key);return text===undefined?null:{body:new Response(text).body!,size:text.length};},async delete(key){files.delete(key);}},
     CATALOG:{async put(key,value,options){pub.set(key,{value,options});},async head(key){const item=pub.get(key);return item?{customMetadata:item.options?.customMetadata}:null;},async delete(key){pub.delete(key);},async list(){return {objects:[...pub.keys()].filter(k=>k.startsWith('items/')).map(key=>({key})),truncated:false};}},
     ASSETS:{fetch:async()=>new Response('')},AUTH_PEPPER:'test-only-not-a-production-secret'.repeat(2),UPLOADS_ENABLED:'true'};
+  const jobData = new Map<string, unknown>(); let alarmAt: number | null = null;
+  const storage = {async get<T>(key:string){return structuredClone(jobData.get(key)) as T|undefined;},async put(key:string,value:unknown){jobData.set(key,structuredClone(value));},async getAlarm(){return alarmAt;},async setAlarm(time:number){alarmAt=time;}};
+  const refresh = new CatalogRefresh({storage},env);
+  env.CATALOG_REFRESH = {idFromName:name=>name,get:()=>({fetch:request=>refresh.fetch(request)})};
+  const fire = async()=>{alarmAt=null;await refresh.alarm();};
   const tokens={author:'a'.repeat(64),stranger:'b'.repeat(64),admin:'c'.repeat(64)};
   for(const [role,token] of Object.entries(tokens)){
     db.prepare('INSERT INTO authors VALUES(?,?,?,?)').run(role,role==='admin'?'admin':'author','unused',1);
@@ -40,9 +46,48 @@ async function fixture(){
   };
   const approve=async(revision:string)=>{expect((await api('/admin/revisions/'+revision+'/review','admin',{decision:'approved',note:''})).status).toBe(200);};
   const snapshot=()=>parseBeautyCatalog(JSON.parse(pub.get('catalog.json')!.value as string));
-  return {db,env,files,pub,api,submit,approve,snapshot};
+  return {db,env,files,pub,api,submit,approve,snapshot,fire,storage};
 }
 describe('公开装扮库：真实 SQL、审批和快照边界',()=>{
+  it('目录发布后清理旧文件失败，重试仍移除已撤回的公开文件',async()=>{
+    const f=await fixture(),one=await f.submit();await f.approve(one.revision);await f.fire();
+    const entry=f.snapshot().entries[0];
+    await f.api('/submissions/'+one.id+'/hide-catalog','author',{});
+    vi.spyOn(f.env.CATALOG!,'delete').mockRejectedValueOnce(Error('temporary storage error'));
+    await f.fire();expect(f.snapshot().entries).toHaveLength(0);
+    expect(f.pub.has(entry.file)).toBe(true);expect(await f.storage.getAlarm()).not.toBeNull();
+    await f.fire();expect(f.pub.has(entry.file)).toBe(false);expect(await f.storage.getAlarm()).toBeNull();
+  });
+  it('审核批次安排单次任务，完成后不再定时唤醒；删除和手动更新也触发',async()=>{
+    const f=await fixture(),one=await f.submit(),two=await f.submit();
+    expect(await f.storage.getAlarm()).toBeNull();
+    await f.approve(one.revision);await f.approve(two.revision);
+    expect(await f.storage.getAlarm()).not.toBeNull();expect(f.pub.has('catalog.json')).toBe(false);
+    await f.fire();expect(f.snapshot().entries).toHaveLength(2);expect(await f.storage.getAlarm()).toBeNull();
+    expect(f.pub.get('catalog.json')?.options.httpMetadata.cacheControl).toContain('must-revalidate');
+    expect((await f.api('/admin/catalog')).status).toBe(401);
+    expect((await f.api('/admin/catalog','author',{})).status).toBe(403);
+    await f.api('/submissions/'+one.id,'author',undefined,'DELETE');await f.fire();
+    expect(f.snapshot().entries).toHaveLength(1);
+    expect((await f.api('/admin/catalog','admin',{})).status).toBe(200);await f.fire();
+    expect((await f.api('/admin/catalog','admin')).value.pending).toBe(false);
+  });
+  it('失败保留旧快照并重试；准备后请求中断也会恢复，绑定故障不提交审批',async()=>{
+    const f=await fixture(),one=await f.submit();await f.approve(one.revision);await f.fire();
+    const previous=f.pub.get('catalog.json');await f.api('/admin/catalog','admin',{});
+    vi.spyOn(f.env.FILES,'get').mockResolvedValueOnce(null);await f.fire();
+    expect(f.pub.get('catalog.json')).toBe(previous);expect(await f.storage.getAlarm()).not.toBeNull();
+    await f.fire();expect(await f.storage.getAlarm()).toBeNull();
+    const second=await f.submit();const binding=f.env.CATALOG_REFRESH;f.env.CATALOG_REFRESH=undefined;
+    expect((await f.api('/admin/revisions/'+second.revision+'/review','admin',{decision:'approved',note:''})).status).toBe(500);
+    expect(f.db.prepare('SELECT status FROM revisions WHERE id=?').get(second.revision)?.status).toBe('pending');
+    f.env.CATALOG_REFRESH=binding;
+    const stub=binding!.get(binding!.idFromName('public-catalog'));
+    await stub.fetch(new Request('https://internal/job',{method:'POST',body:JSON.stringify({action:'prepare',ticket:crypto.randomUUID()})}));
+    await dirtyCatalog(f.env).run();await f.fire();expect(await f.storage.getAlarm()).not.toBeNull();
+    const realNow=Date.now();vi.spyOn(Date,'now').mockReturnValue(realNow+121000);
+    await f.fire();expect(await f.storage.getAlarm()).toBeNull();
+  });
   it('修改协议期间取消公开，过时请求不能恢复公开授权',async()=>{
     const f=await fixture(),work=await f.submit();await f.approve(work.revision);
     const get=f.env.FILES.get;
