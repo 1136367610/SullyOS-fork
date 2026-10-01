@@ -2833,6 +2833,8 @@ export interface CharacterProfile {
    * 或 http(s) 图床直链。空 = 默认时段天光。
    */
   companionBackground?: string;
+  /** 陪伴桌面的手动主题色（#rrggbb）；留空时沿用自动取色。随角色备份。 */
+  companionThemeColor?: string;
   /**
    * 触感陪伴桌面的本地反馈包。用户只在设置中主动生成一次；之后每次触碰
    * 都从这里轮播台词与演出，不再逐次请求主聊天 API。

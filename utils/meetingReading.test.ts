@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ theme: { storyAppearance: { preset: 'novel' } } as any }));
@@ -38,4 +40,39 @@ it('story novel mode keeps prose outside a collapsed supplement; none keeps the 
     expect(host.querySelector('.meeting-prose')).toBeNull();
     expect(host.textContent).toContain('书店');
     expect(host.textContent).not.toContain('场景与补充');
+});
+
+it('reading shows previous encounters, prepends without jumping to the bottom, and keeps scroll position for new replies', async () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div'); document.body.append(host);
+    const root = createRoot(host), loadOlder = vi.fn(async () => {});
+    const makeRows = (start: number, end: number) => Array.from({length:end-start+1},(_,i)=>({
+        id:start+i, charId:'c', role:'assistant', type:'text', timestamp:1, content:`历史正文 ${start+i}`,
+        metadata:{source:'date', dateEncounterId:'previous'},
+    }));
+    const props = {
+        char:{id:'c',name:'角色',avatar:'',dateAppearance:{preset:'novel'}},userProfile:{name:'用户'},
+        encounterId:'new',peekStatus:'',onSendMessage:async()=>'',onReroll:async()=>'',onExit:()=>{},
+        onEditMessage:()=>{},onDeleteMessage:()=>{},onDeleteMessages:async()=>{},onSettings:()=>{},
+        onLoadMoreHistory:loadOlder, historyReachedEnd:false,
+    };
+    try {
+        await act(async () => root.render(React.createElement(DateSession,{...props,messages:makeRows(51,100)} as any)));
+        const page = host.querySelector('.meeting-reading-page') as HTMLDivElement;
+        expect(page.querySelectorAll('[data-date-message-id]')).toHaveLength(50);
+        expect(page.textContent).toContain('历史正文 51');
+        Object.defineProperty(page,'scrollHeight',{configurable:true,get:()=>page.querySelectorAll('[data-date-message-id]').length*100});
+        Object.defineProperty(page,'clientHeight',{configurable:true,value:500});
+        page.scrollTop=200;
+        await act(async()=>page.dispatchEvent(new Event('scroll')));
+        page.scrollTop=40;
+        await act(async()=>page.dispatchEvent(new Event('scroll')));
+        expect(loadOlder).toHaveBeenCalledTimes(1);
+        await act(async()=>root.render(React.createElement(DateSession,{...props,messages:makeRows(1,100)} as any)));
+        expect(page.scrollTop).toBe(5040);
+        await act(async()=>root.render(React.createElement(DateSession,{...props,messages:makeRows(1,101)} as any)));
+        expect(page.scrollTop).toBe(5040);
+        // Current encounter has no reply: old history must not enable reroll.
+        expect(host.querySelector('button[title="重新生成"]')).toBeNull();
+    } finally { await act(async()=>root.unmount()); host.remove(); }
 });

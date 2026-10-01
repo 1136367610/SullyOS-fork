@@ -1,3 +1,4 @@
+import { useDateMessageHistory } from '../utils/useDateMessageHistory';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -86,7 +87,7 @@ const DateApp: React.FC = () => {
 
     // 选择页分页（6 个角色一页，横向翻页）
     const SELECT_PAGE_SIZE = 6;
-    const DATE_SESSION_MESSAGE_LIMIT = 220;
+    const DATE_SESSION_MESSAGE_LIMIT = 50;
     const DATE_HISTORY_MESSAGE_LIMIT = 500;
     const pagerRef = useRef<HTMLDivElement>(null);
     const [selectPage, setSelectPage] = useState(0);
@@ -135,10 +136,10 @@ const DateApp: React.FC = () => {
     const enteringSessionRef = useRef(false);
 
     // --- NEW: Editing State lifted to here for DB sync ---
-    const [dateMessages, setDateMessages] = useState<Message[]>([]);
-    // 阅读模式「加载更早」用：当前查询 limit 与「库里已经没有更早的了」。
-    const [dateLoadLimit, setDateLoadLimit] = useState(DATE_SESSION_MESSAGE_LIMIT);
-    const [dateHistoryReachedEnd, setDateHistoryReachedEnd] = useState(false);
+    const { messages: dateMessages, setMessages: setDateMessages, refresh: loadDateMessages,
+        loadOlder: handleLoadMoreDateHistory, reachedEnd: dateHistoryReachedEnd,
+        loading: dateHistoryLoading, error: dateHistoryError } = useDateMessageHistory(
+            activeCharacterId || undefined, encounterIdRef.current, mode === 'session');
     const [hasSavedOpening, setHasSavedOpening] = useState(false);
 
     // Edit Modal State
@@ -163,43 +164,6 @@ const DateApp: React.FC = () => {
     const loadRecentDateMessages = async (charId: string, limit = DATE_SESSION_MESSAGE_LIMIT) => {
         return (await DB.getRecentMessagesByCharIdAndSource(charId, 'date', limit))
             .sort((a, b) => a.timestamp - b.timestamp);
-    };
-
-    // --- Data Loading ---
-    const loadDateMessages = async (limit = dateLoadLimit) => {
-        if (char) {
-            const loadingEncounterId = encounterIdRef.current;
-            // 见面记录只取最近窗口，不再把该角色全部聊天 getAll 进内存。
-            // TODO(date-assets): 后续把角色立绘/背景本体迁到 assets store 后，这里还能再把 limit 放宽。
-            const recent = await loadRecentDateMessages(char.id, limit);
-            if (encounterIdRef.current !== loadingEncounterId) return;
-            const filtered = recent.filter(m => m.metadata?.dateEncounterId === loadingEncounterId);
-            setDateMessages(filtered);
-            // 拿回来的比要的少 = 库里的见面记录已经取完，阅读模式不用再往前翻了。
-            setDateHistoryReachedEnd(recent.length < limit || filtered.length < recent.length);
-            
-            // 检查数据库中是否已经包含当前的 peekStatus（通过内容比对），避免重复保存
-            if (peekStatus && filtered.some(m => m.content === peekStatus && m.role === 'assistant')) {
-                setHasSavedOpening(true);
-            }
-        }
-    };
-
-    useEffect(() => {
-        if (char && mode === 'session') {
-            // 进会话 / 换角色都从初始窗口重来。limit 必须显式传：setState 是异步的，
-            // 靠 dateLoadLimit 闭包会读到上一个角色翻开的深度，和重置后的 state 对不上。
-            setDateLoadLimit(DATE_SESSION_MESSAGE_LIMIT);
-            setDateHistoryReachedEnd(false);
-            loadDateMessages(DATE_SESSION_MESSAGE_LIMIT);
-        }
-    }, [char, mode]);
-
-
-    /** 阅读模式要更早的记录：limit 递增重取（反向游标，limit 越大够得越远）。 */
-    const handleLoadMoreDateHistory = async (nextLimit: number) => {
-        setDateLoadLimit(nextLimit);
-        await loadDateMessages(nextLimit);
     };
 
     useEffect(() => () => { peekRequestRef.current++; }, []);
@@ -310,7 +274,6 @@ const DateApp: React.FC = () => {
             if (encounterIdRef.current !== enteringEncounterId) return;
             setMode('session');
             trackEvent('走过去开始见面会话');
-            await loadDateMessages(DATE_SESSION_MESSAGE_LIMIT);
         } finally {
             enteringSessionRef.current = false;
         }
@@ -441,7 +404,7 @@ const DateApp: React.FC = () => {
         const preparedAllMsgs = await materializeVisionDescriptions(allMsgs, apiConfig.visionApi);
 
         // Update local state for display
-        if (encounterIdRef.current === currentEncounterId) await loadDateMessages(DATE_SESSION_MESSAGE_LIMIT);
+        if (encounterIdRef.current === currentEncounterId) await loadDateMessages();
 
         const emojis = await DB.getEmojis();
         const modelText = isContinueTurn
@@ -488,7 +451,7 @@ const DateApp: React.FC = () => {
         markDateTurnDirty(char);
 
         // Refresh local state
-        if (encounterIdRef.current === currentEncounterId) await loadDateMessages(DATE_SESSION_MESSAGE_LIMIT);
+        if (encounterIdRef.current === currentEncounterId) await loadDateMessages();
 
         // Memory Palace 后台流程（不阻塞返回，与聊天侧一致）
         runMemoryPalacePostHook(char);
@@ -501,7 +464,7 @@ const DateApp: React.FC = () => {
         if (!char || dateMessages.length === 0) throw new Error("No context");
 
         const lastMsg = dateMessages[dateMessages.length - 1];
-        if (lastMsg.role !== 'assistant') throw new Error("Cannot reroll user message");
+        if (lastMsg.role !== 'assistant' || lastMsg.metadata?.dateEncounterId !== currentEncounterId) throw new Error("Cannot reroll user message");
 
         // Keep the old reply until the replacement request succeeds.
         const allMsgs = await loadCharacterContextMessages(char);
@@ -530,10 +493,11 @@ const DateApp: React.FC = () => {
             markDateTurnDirty(char);
             trackEvent('重掷见面回复', { 目标: '开场白' });
             // 阅读模式空会话时顶部渲染的开场 & 退出快照里的 peekStatus 同步成新开场
-            setPeekStatus(content);
-
-            const freshMsgs = await DB.getMessagesByCharId(char.id, true);
-            if (encounterIdRef.current === currentEncounterId) setDateMessages(freshMsgs.filter(m => m.metadata?.dateEncounterId === currentEncounterId).sort((a,b) => a.timestamp - b.timestamp));
+            if (encounterIdRef.current === currentEncounterId) {
+                setPeekStatus(content);
+                setDateMessages(previous => previous.filter(message => message.id !== lastMsg.id));
+                await loadDateMessages();
+            }
             return content;
         }
 
@@ -580,7 +544,7 @@ const DateApp: React.FC = () => {
         trackEvent('重掷见面回复', { 目标: '回复' });
 
         // Sync
-        if (encounterIdRef.current === currentEncounterId) await loadDateMessages(DATE_SESSION_MESSAGE_LIMIT);
+        if (encounterIdRef.current === currentEncounterId) await loadDateMessages();
 
         // Memory Palace 后台流程（Reroll 也算一轮新输出）
         runMemoryPalacePostHook(char);
@@ -1133,7 +1097,8 @@ const DateApp: React.FC = () => {
                     onDeleteMessages={handleDeleteMessages}
                     onSettings={() => {}} // Removed parent state change, DateSession handles it internally now
                     onLoadMoreHistory={handleLoadMoreDateHistory}
-                    historyLoadLimit={dateLoadLimit}
+                    historyLoading={dateHistoryLoading}
+                    historyError={dateHistoryError}
                     historyReachedEnd={dateHistoryReachedEnd}
                 />
 

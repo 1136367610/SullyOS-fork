@@ -5,6 +5,13 @@ export interface Statement {
   run(): Promise<{ meta: { changes: number } }>;
 }
 export interface Env {
+  /** Dedicated public snapshots bucket, NEVER the private FILES bucket. */
+  CATALOG?: {
+    put(key: string, value: string | ArrayBuffer, options?: unknown): Promise<unknown>;
+    head(key: string): Promise<{customMetadata?:Record<string,string>} | null>;
+    delete(key: string): Promise<unknown>;
+    list(options: {prefix:string;cursor?:string}): Promise<{objects:{key:string}[];truncated:boolean;cursor?:string}>;
+  };
   DB: { prepare(query: string): Statement; batch(statements: Statement[]): Promise<{ meta: { changes: number } }[]> };
   FILES: {
     put(key: string, value: string, options?: unknown): Promise<unknown>;

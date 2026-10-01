@@ -10,7 +10,8 @@
 
 每次选择角色生成独立 `dateEncounterId`，本场所有消息携带该 metadata；开场另带 `isOpening` 与 `dateOpeningMode`，重生成保留这些标记。异步回复捕获发起时的场次 ID，退出后返回的回复仍属于原场次，不更新新场次 UI。
 
-阅读模式只显示当前场次；模型输入仍走完整的角色上下文管线，场次不构成记忆隔断。
+阅读模式连续显示该角色的见面历史，包括旧场次和没有场次标记的旧记录。进入时读取最新 50 条，向上滚动或点击「加载更早」按消息 ID 游标再取 50 条；追加旧记录保留滚动位置，新回复不收起已经展开的历史。列表沿用原有正文、语音、SAR 与 OBSERVE 渲染，离屏正文延迟绘制。
+立绘播放、失败重试与重掷仍仅操作当前场次，不因浏览旧记录而恢复旧播放快照。模型输入仍走完整的角色上下文管线，UI 的 50 条分页不限制模型上下文。
 记录按次优先使用场次 ID，同场跨日不拆分，无开场或开场被删也不串场。旧数据继续按 `isOpening`，更早无锚点数据按日期兼容；按日期查看仍按设备当地日期归组。
 
-测试：`utils/dateEntryFlow.test.ts`、`utils/dateHistory.test.ts`、`utils/datePrompts.test.ts`。
+测试：`utils/dateEntryFlow.test.ts`、`utils/dateMessagePagination.test.ts`、`utils/useDateMessageHistory.test.ts`、`utils/meetingReading.test.ts`、`utils/dateHistory.test.ts`、`utils/datePrompts.test.ts`。
