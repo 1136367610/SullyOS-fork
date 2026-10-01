@@ -2,7 +2,9 @@ import { BEAUTY_MAX_BYTES, isRecord, validateBeautyMetadata, validateBeautyPacka
 import { equal, identity, newSession, passwordHash, randomHex, sha256 } from './auth';
 import type { Env } from './types';
 import { validateCatalogCover, CATALOG_COVER_MAX } from '../../../utils/beautyCatalogContract';
-import { dirtyCatalog, rebuildCatalog } from './catalog';
+import { dirtyCatalog } from './catalog';
+import { catalogMutation, catalogJob } from './catalogRefresh';
+export { CatalogRefresh } from './catalogRefresh';
 
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 function fail(status: number, message: string): never { throw new HttpError(status, message); }
@@ -135,11 +137,11 @@ async function remove(env: Env, id: string, author?: string) {
     .bind(...(author ? [id, author] : [id])).first();
   if (!row) fail(404, '作品不存在');
   // Revoke access first, then cleanup. A cleanup failure must never keep a share usable.
-  await env.DB.batch([
+  await catalogMutation(env, () => env.DB.batch([
     env.DB.prepare('UPDATE submissions SET deleted_at=?,updated_at=?,pending_revision=NULL,published_revision=NULL WHERE id=?').bind(now(), now(), id),
     env.DB.prepare("UPDATE revisions SET status='withdrawn' WHERE submission_id=? AND status='pending'").bind(id),
     dirtyCatalog(env),
-  ]);
+  ]));
   // Access is already revoked. Scheduled cleanup retries storage failures.
   try { await cleanup(env); } catch { /* Keep the successful deletion visible to the author. */ }
   return json({ deleted: true });
@@ -293,13 +295,21 @@ async function route(request: Request, env: Env): Promise<Response> {
   const visibility=path.match(/^\/api\/submissions\/([a-f0-9]{32})\/hide-catalog$/);
   if(visibility&&method==='POST'){
     const who=await principal(request,env,'author');
-    const results=await env.DB.batch([
+    const results=await catalogMutation(env, () => env.DB.batch([
       env.DB.prepare('UPDATE submissions SET catalog_hidden=1,updated_at=? WHERE id=? AND author_code=? AND deleted_at IS NULL').bind(now(),visibility[1],who.code),
       env.DB.prepare("UPDATE revisions SET metadata=json_set(metadata,'$.allowPublicListing',json('false')),catalog_cover='' WHERE id=(SELECT pending_revision FROM submissions WHERE id=? AND author_code=? AND deleted_at IS NULL) AND status='pending'").bind(visibility[1],who.code),
       dirtyCatalog(env),
-    ]);
+    ]));
     if(!results[0].meta.changes)fail(404,'作品不存在');
     return json({ok:true});
+  }
+  if (path === '/api/admin/catalog' && (method === 'GET' || method === 'POST')) {
+    await principal(request, env, 'admin');
+    if (method === 'POST') {
+      await catalogMutation(env, () => dirtyCatalog(env).run());
+      return json({ queued: true });
+    }
+    return catalogJob(env, new Request('https://catalog.internal/status'));
   }
   if (path === '/api/admin/submissions' && method === 'GET') {
     await principal(request, env, 'admin');
@@ -351,7 +361,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const body = await readJson(request, 4096);
     if (!['approved', 'rejected'].includes(body.decision) || typeof body.note !== 'string' || body.note.length > 1000 || (body.decision === 'rejected' && !body.note.trim())) fail(400, '请选择审核结果；退回需要填写原因（最多 1000 字）');
     const revision = review[1]; const code = 'S-' + randomHex(6).toUpperCase();
-    const results = await env.DB.batch([
+    const results = await catalogMutation(env, () => env.DB.batch([
       env.DB.prepare(`UPDATE revisions SET status=?,review_note=?,reviewed_at=? WHERE id=? AND status='pending'
         AND EXISTS(SELECT 1 FROM submissions WHERE pending_revision=? AND deleted_at IS NULL)`)
         .bind(body.decision, body.note.trim(), now(), revision, revision),
@@ -362,7 +372,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         WHERE pending_revision=? AND deleted_at IS NULL AND EXISTS(SELECT 1 FROM revisions WHERE id=? AND status=?)`)
         .bind(now(), body.decision, body.decision, revision, body.decision, code, revision, revision, body.decision),
       dirtyCatalog(env),
-    ]);
+    ]));
     if (!results[0].meta.changes) fail(409, '这份提交已处理或被删除，请刷新列表');
     return json({ ok: true });
   }
@@ -413,6 +423,6 @@ export default {
   },
   async scheduled(event: {cron?:string}, env: Env) {
     if(event.cron==='17 19 * * *')await cleanup(env);
-    await rebuildCatalog(env);
+
   },
 };

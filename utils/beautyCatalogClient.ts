@@ -4,11 +4,11 @@ import {normalizeBeautyPackage} from './beautyShareClient';
 
 // This origin serves only public static snapshots. Never point it at the private bucket.
 export const BEAUTY_CATALOG_URL=(import.meta.env.VITE_BEAUTY_CATALOG_URL||'https://beauty-library.friedsully.com').replace(/\/$/,'');
-let cached:{base:string;until:number;value:Promise<BeautyCatalog>}|undefined;
-async function readStatic(url:string,maxBytes:number){
+let pending:{base:string;value:Promise<BeautyCatalog>}|undefined;
+async function readStatic(url:string,maxBytes:number,cache:RequestCache='default'){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
   try{
-    const response=await fetch(url,{signal:controller.signal,credentials:'omit',cache:'default'});
+    const response=await fetch(url,{signal:controller.signal,credentials:'omit',cache});
     if(!response.ok)throw Error('装扮库暂时无法加载，请稍后重试');
     const reader=response.body?.getReader();if(!reader)throw Error('装扮库内容为空');
     const chunks:Uint8Array[]=[];let size=0;
@@ -18,10 +18,13 @@ async function readStatic(url:string,maxBytes:number){
   }finally{clearTimeout(timer);}
 }
 export function loadBeautyCatalog(base=BEAUTY_CATALOG_URL):Promise<BeautyCatalog>{
-  if(cached&&cached.base===base&&cached.until>Date.now())return cached.value;
-  const value=readStatic(base+'/catalog.json',8*1024*1024).then(bytes=>parseBeautyCatalog(JSON.parse(new TextDecoder().decode(bytes))));
-  const entry={base,until:Date.now()+10*60_000,value};cached=entry;
-  void value.catch(()=>{if(cached===entry)cached=undefined;});
+  if(pending&&pending.base===base)return pending.value;
+  // Revalidate the static manifest on entry; the browser can reuse its ETag body.
+  // Only concurrent entry requests are shared. Search/paging do not call this.
+  const value=readStatic(base+'/catalog.json',8*1024*1024,'no-cache').then(bytes=>parseBeautyCatalog(JSON.parse(new TextDecoder().decode(bytes))));
+  const entry={base,value};pending=entry;
+  const clear=()=>{if(pending===entry)pending=undefined;};
+  void value.then(clear,clear);
   return value;
 }
 export async function loadCatalogPreview(entry:BeautyCatalogEntry,base=BEAUTY_CATALOG_URL){

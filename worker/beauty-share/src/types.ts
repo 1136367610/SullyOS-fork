@@ -5,6 +5,10 @@ export interface Statement {
   run(): Promise<{ meta: { changes: number } }>;
 }
 export interface Env {
+  CATALOG_REFRESH?: {
+    idFromName(name: string): unknown;
+    get(id: unknown): { fetch(request: Request): Promise<Response> };
+  };
   /** Dedicated public snapshots bucket, NEVER the private FILES bucket. */
   CATALOG?: {
     put(key: string, value: string | ArrayBuffer, options?: unknown): Promise<unknown>;

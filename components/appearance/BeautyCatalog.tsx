@@ -50,7 +50,7 @@ export default function BeautyCatalog({onBack,onReceive}:{onBack:()=>void;onRece
     </div>
     <div className="wardrobe-content" ref={list}>
       {search&&<input autoFocus className="wardrobe-search" aria-label="搜索作品或作者" placeholder="搜索作品名或作者" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/>}
-      <div className="wardrobe-list-caption"><h3>发现装扮</h3><span>{filtered.length} 款 <button onClick={()=>{setEntries(v=>shuffleCatalog(v));setPage(0);}}>换一批</button></span></div>
+      <div className="wardrobe-list-caption"><h3>发现装扮</h3><span>{filtered.length} 款 <button disabled={loading} onClick={()=>{setPage(0);setAttempt(v=>v+1);}}>刷新目录</button> <button onClick={()=>{setEntries(v=>shuffleCatalog(v));setPage(0);}}>换一批</button></span></div>
       {loading?<p role="status">正在打开装扮库…</p>:error?<div role="alert"><p>{error}</p><button onClick={()=>setAttempt(v=>v+1)}>重试</button></div>:<>
         <div className="wardrobe-grid">{filtered.slice(current*12,current*12+12).map(entry=><article className="wardrobe-item" key={entry.code}><button className="wardrobe-tile" aria-label={'预览 '+entry.metadata.name} onClick={()=>setSelected(entry)}><div className="wardrobe-cover"><img loading="lazy" decoding="async" src={BEAUTY_CATALOG_URL+'/'+entry.cover} alt={entry.metadata.name} onError={e=>{e.currentTarget.style.visibility='hidden';}}/></div><strong>{entry.metadata.name}</strong><span className="wardrobe-credit">{entry.metadata.credit}</span></button></article>)}</div>
         {!filtered.length&&<div className="wardrobe-empty"><span>✧</span><h3>{needle?'没有找到这款装扮':'这里还在慢慢添新装'}</h3><p>{needle?'换个作品名或作者试试。':'作者同意公开、审核通过的作品会出现在这里。'}</p></div>}
