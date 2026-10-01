@@ -104,6 +104,7 @@ export interface JournalAppearance {
 }
 
 export interface OSTheme {
+  storyAppearance?: import('./utils/meetingAppearance').MeetingAppearance;
   hue: number;
   saturation: number;
   lightness: number;
@@ -2906,6 +2907,7 @@ export interface CharacterProfile {
   spriteConfig?: SpriteConfig;
   customDateSprites?: string[]; // User-added custom emotion names for date mode (per-character)
   dateLightReading?: boolean;   // Light reading mode for novel/text view in date
+  dateAppearance?: import('./utils/meetingAppearance').MeetingAppearance;
   dateReadingShowAvatars?: boolean; // Show both participants' avatars beside messages in date reading mode
   dateSkinSets?: SkinSet[];     // Multiple skin sets for portrait mode
   activeSkinSetId?: string;     // Currently active skin set ID
