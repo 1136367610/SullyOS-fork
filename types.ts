@@ -3023,12 +3023,6 @@ export interface CharacterProfile {
   proactiveConfig?: {
     enabled: boolean;
     intervalMinutes: number; // 30, 60, 120, 240, etc.
-    useSecondaryApi?: boolean;
-    secondaryApi?: {
-      baseUrl: string;
-      apiKey: string;
-      model: string;
-    };
   };
 
   // 情绪Buff系统

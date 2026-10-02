@@ -179,7 +179,8 @@ purpose」的组合，会产出既无引用可解析、又无内联凭据的空�
   `char:<id>/emotion`（情绪评估，`emotionConfig.api` 缺省时回落主 API）。
   chat / instant 仍分行，避免配置同步覆盖正在生成的即时回复。
   **2026-10-02：主动消息单独 API 已下线**，旧角色 / 旧备份的副 API 字段不再生效。
-  设置面板说明调用使用主 API；情绪和记忆整理的独立 API 不变。
+  页面内定时主动消息（1.0）同时移除独立 API 开关，使用实时的聊天主 API。
+  两处设置面板都说明调用使用主 API；情绪和记忆整理的独立 API 不变。
 - 构建与命名住 `utils/amsgLlmCredentials.ts`；上云的指纹门控、退避、底账在
   `utils/amsgStateSync.ts`（与 tool_config 同款）；排程 / 即时对话带 `credRefs` 与
   `CREDENTIAL_NOT_FOUND` 当场补传自愈在 `utils/activeMsgClient.ts`。
