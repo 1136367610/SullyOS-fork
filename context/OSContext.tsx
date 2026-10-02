@@ -2310,10 +2310,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               return;
           }
 
-          // Determine which API to use
-          const pCfg = char.proactiveConfig;
-          const useSecondary = pCfg?.useSecondaryApi && pCfg.secondaryApi?.baseUrl;
-          const api = useSecondary ? pCfg!.secondaryApi! : currentApiConfig;
+          // 页面内主动消息也统一使用聊天主 API，忽略旧备份中的副 API 配置。
+          const api = currentApiConfig;
           if (!api.baseUrl) {
               drainQueuedProactive();
               return;
@@ -2321,7 +2319,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
           proactiveRunningRef.current = true;
           setProactiveComposingChars(prev => prev[charId] ? prev : { ...prev, [charId]: true });
-          console.log(`🔔 [Proactive/Global] Trigger fired for ${char.name}${useSecondary ? ' (副API)' : ''}`);
+          console.log(`🔔 [Proactive/Global] Trigger fired for ${char.name}`);
 
           try {
               // 1. Calculate time gap
