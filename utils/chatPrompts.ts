@@ -1086,7 +1086,12 @@ ${voiceActingGuide()}`;
         userProfile: UserProfile,
         emojis: Emoji[],
         processedExcludeIds?: Set<number>,
-        options?: { useVisionDescriptions?: boolean; contextHighWaterMark?: number },
+        options?: {
+            useVisionDescriptions?: boolean;
+            contextHighWaterMark?: number;
+            /** 默认使用聊天时间感知；见面入口传线下开关，控制时间戳与互动间隔。 */
+            timeAwarenessEnabled?: boolean;
+        },
     ) => {
         // Filter Logic
         // 新版上下文范围由 chatContextRange 先按「自适应/拉杆最大范围」取窗；
@@ -1098,6 +1103,7 @@ ${voiceActingGuide()}`;
         }
         const historySlice = effectiveHistory.slice(-limit);
         const charTz = resolveCharTimeZone(char);
+        const timeAwarenessOn = options?.timeAwarenessEnabled ?? (char.timeAwarenessEnabled !== false);
 
         let timeGapHint = "";
         if (historySlice.length >= 2) {
@@ -1111,14 +1117,14 @@ ${voiceActingGuide()}`;
                     break;
                 }
             }
-            // 时间感知强化开关：默认开启（undefined 视为 true），显式关掉后不再注入「距离上次聊天多久」提示
-            if (lastRealMsg && currentMsg && char.timeAwarenessEnabled !== false) timeGapHint = ChatPrompts.getTimeGapHint(lastRealMsg, currentMsg.timestamp, charTz);
+            // 时间感知关闭时，互动间隔与现实消息时间戳一起遮住。
+            if (lastRealMsg && currentMsg && timeAwarenessOn) timeGapHint = ChatPrompts.getTimeGapHint(lastRealMsg, currentMsg.timestamp, charTz);
         }
 
         return {
             apiMessages: historySlice.map((m, index) => {
                 let content: any = m.content;
-                const timeStr = `[${ChatPrompts.formatDate(m.timestamp, charTz)}]`;
+                const timeStr = timeAwarenessOn ? `[${ChatPrompts.formatDate(m.timestamp, charTz)}]` : '';
                 const sourceTag = (() => {
                     const source = m.metadata?.source;
                     if (source === 'call') return '[通话]';
@@ -1164,7 +1170,7 @@ ${voiceActingGuide()}`;
                      if (visionDescription) {
                          let textPart = `${timeStr} [图片：${visionDescription}]`;
                          if (index === historySlice.length - 1 && timeGapHint && m.role === 'user') textPart += `\n\n${timeGapHint}`;
-                         return { role: m.role, content: textPart };
+                         return { role: m.role, content: textPart.trimStart() };
                      }
                      // 向下兼容：如果图片数据缺失（例如只导入了文字备份），不要把空 URL 发给 API，否则会报错无法回应
                      // 图片有三种形态：base64 data URL、外链 http(s)、本机的 blobref 令牌
@@ -1178,9 +1184,9 @@ ${voiceActingGuide()}`;
                          : `${timeStr} [User sent an image, but the image data is no longer available]`;
                      if (index === historySlice.length - 1 && timeGapHint && m.role === 'user') textPart += `\n\n${timeGapHint}`;
                      if (!hasImageData) {
-                         return { role: m.role, content: textPart };
+                         return { role: m.role, content: textPart.trimStart() };
                      }
-                     return { role: m.role, content: [{ type: "text", text: textPart }, { type: "image_url", image_url: { url: m.content } }] };
+                     return { role: m.role, content: [{ type: "text", text: textPart.trimStart() }, { type: "image_url", image_url: { url: m.content } }] };
                 }
                 
                 if (index === historySlice.length - 1 && timeGapHint && m.role === 'user') content = `${content}\n\n${timeGapHint}`; 
@@ -1419,7 +1425,7 @@ ${voiceActingGuide()}`;
                 }
                 else content = `${timeStr} ${sourceTag} ${content}`;
 
-                return { role: m.role, content };
+                return { role: m.role, content: typeof content === 'string' ? content.trimStart() : content };
             }),
             historySlice // Return original slice for Quote lookup
         };
