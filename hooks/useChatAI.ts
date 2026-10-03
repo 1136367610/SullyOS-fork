@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from '../utils/characterApi';
 import { createReplyRun, withReplyCancellation } from '../utils/chatReplyCancellation';
 
 import { useState, useRef, useEffect, useSyncExternalStore, MutableRefObject } from 'react';
@@ -624,7 +625,7 @@ export const useChatAI = ({
         opts?: { skipEmotionInjection?: boolean },
     ) => {
         if (isTyping || !char) return;
-        const effectiveApi = overrideApiConfig || apiConfig;
+        const effectiveApi = resolveDialogueApi(apiConfig, char, overrideApiConfig);
         if (!effectiveApi.baseUrl) { alert("请先在设置中配置 API URL"); return; }
 
         // 重 roll（回溯重生）时不带入上一轮的情绪余波：清掉 buff 注入（buffInjection/activeBuffs）和
@@ -974,7 +975,7 @@ export const useChatAI = ({
             //    再判一次，否则可能「按上云把评估打包走了，实际却走本地」，情绪底色悄悄停更。
             const emotionEvalEnabled = !!(!promptBuildSkipped && !isEmotionEvalSkipped() && isScheduleFeatureOn(char) && char.emotionConfig?.enabled);
             // 评估跟随全局流式开关（专用情绪 API 自带 stream 字段时以它为准）
-            const evalStream: boolean = !!((effectiveApi as any).stream ?? apiConfig.stream ?? false);
+            const evalStream: boolean = !!(apiConfig.stream ?? false);
             const emotionApi = emotionEvalEnabled
                 ? ((char.emotionConfig!.api?.baseUrl)
                     ? { ...char.emotionConfig!.api!, stream: (char.emotionConfig!.api as any).stream ?? evalStream }

@@ -268,6 +268,9 @@ export interface VisionApiConfig {
   model: string;
 }
 
+/** A complete dialogue endpoint, separate from TTS/vision configuration. */
+export type DialogueApiConfig = Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model' | 'stream' | 'temperature'>;
+
 export interface APIConfig {
   baseUrl: string;
   apiKey: string;
@@ -516,6 +519,7 @@ export interface ActiveMsg2InboxMessage {
 }
 
 export interface ApiPreset {
+  group?: string;
   id: string;
   name: string;
   config: APIConfig;
@@ -2690,6 +2694,8 @@ export interface MemoryPalaceWaterlineConfig {
 }
 
 export interface CharacterProfile {
+  /** Local default for this character's dialogue; absent means follow Settings. Never shared in cards. */
+  dialogueApi?: DialogueApiConfig;
   id: string;
   name: string;
   avatar: string;
@@ -3876,6 +3882,8 @@ export interface Emoji {
 }
 
 export interface FullBackupData {
+    /** 纯文字备份单独携带收藏索引，不覆盖整个资源库。 */
+    contentFavoritesIndex?: unknown;
     timestamp: number;
     version: number;
     theme?: OSTheme;

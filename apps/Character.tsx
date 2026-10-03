@@ -1,3 +1,5 @@
+import CharacterApiPanel from '../components/character/CharacterApiPanel';
+import CharacterSettingsSection from '../components/character/CharacterSettingsSection';
 import CharacterStatsPanel from '../components/character/CharacterStatsPanel';
 import { characterRemark } from '../utils/characterRemark';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
@@ -1462,6 +1464,7 @@ ${isInitialGeneration ? `
                                 />
                            </div>
 
+                           <CharacterSettingsSection title="时间感知与时区" summary={formData.customTimezoneEnabled ? formData.customTimezone || '自定义时区' : '跟随本机时区'}>
                            {/* 时间感知 & 时区：三个独立开关，可任意组合（聊天时间感知 / 自定义时区 / 线下时间感知） */}
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
                                <div>
@@ -1530,6 +1533,9 @@ ${isInitialGeneration ? `
                                </div>
                            </div>
 
+                           </CharacterSettingsSection>
+
+                           <CharacterSettingsSection title="生活记录注入" summary={formData.lifeRecordEnabled ? '已开启' : '未开启'}>
                            {/* 生活记录注入：总开关 + 4 个模块小开关（数据在档案 App「生活记录」里维护） */}
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
                                <div>
@@ -1577,6 +1583,9 @@ ${isInitialGeneration ? `
                                </div>
                            </div>
 
+                           </CharacterSettingsSection>
+
+                           <CharacterSettingsSection title="角色语音音色" summary={formData.voiceProfile?.voiceName || '音色与合成参数'}>
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-3">
                                <div className="flex items-center justify-between">
                                    <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><SpeakerHigh size={12} /> 角色语音音色</label>
@@ -1753,6 +1762,10 @@ ${isInitialGeneration ? `
                                    </div>
                                )}
                            </div>
+
+                           </CharacterSettingsSection>
+
+                           <CharacterApiPanel key={formData.id} character={formData} onChange={api => handleChange('dialogueApi', api)} />
 
                            {/* Worldbook Section */}
                            <div>

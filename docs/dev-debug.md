@@ -388,16 +388,16 @@ SW 跑在自己的 context，没法直接访问 page 的 `localStorage` / `appen
 在 `catch` 里调用它：
 
 ```
-URL: https://sullymeow.ccwu.cc/api/health
+URL: https://proxy.friedsully.com/api/health
 请求: GET · 失败于 43ms
 错误: TypeError: Failed to fetch
-目标域名: sullymeow.ccwu.cc（跨域请求，受 CORS 约束）
+目标域名: proxy.friedsully.com（跨域请求，受 CORS 约束）
 本页来源: https://xxx.pages.dev
 浏览器联网状态: 在线
 Resource Timing: responseStatus=429, transferSize=0 → 对方其实回了 HTTP 429，是响应被 CORS 拦掉的，不是网络不通
 初判: 请求在拿到响应头之前就失败了——浏览器没告诉我们具体是哪一步断的。
 可能原因: 梯子/代理把这个域名的连接掐了 · DNS 解析不到 · ...
-连通性复检: no-cors 直连 sullymeow.ccwu.cc 成功 → 网络路径是通的，问题出在响应本身（...）
+连通性复检: no-cors 直连 proxy.friedsully.com 成功 → 网络路径是通的，问题出在响应本身（...）
 ```
 
 两个关键设计：

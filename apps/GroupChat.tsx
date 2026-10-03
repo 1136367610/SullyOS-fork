@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from '../utils/characterApi';
 import {ChatCardSurface} from '../components/chat/ChatCardSurface';
 import { avatarDecorationImageStyle, isAnniversaryFrame } from '../utils/anniversaryGifts';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
@@ -1497,10 +1498,6 @@ ${memberTimeline || '(暂无互动记录)'}
     // 单成员失败只跳过该成员，不杀整轮。
     const triggerRoundRobin = async (currentMsgs: Message[]) => {
         if (!activeGroup) return;
-        if (!apiConfig.apiKey) {
-            addToast('请先在设置里填好 API', 'error');
-            return;
-        }
         setIsTyping(true);
         const abort = new AbortController();
         abortRef.current = abort;
@@ -1516,6 +1513,8 @@ ${memberTimeline || '(暂无互动记录)'}
             for (const member of groupMembers) {
                 if (abort.signal.aborted) break;
                 try {
+                    const dialogueApi = resolveDialogueApi(apiConfig, member);
+                    if (!dialogueApi.baseUrl || !dialogueApi.model) throw new Error("请配置该角色或设置中的 API");
                     // 每位成员基于"此刻"的群历史构建上下文——包含本轮先发言成员的新消息
                     const { header, sharedScene } = buildGroupSystemHeader(roundMsgs, groupMembers);
                     const memberBlock = await buildMemberBlock(member, roundMsgs, sharedScene);
@@ -1540,12 +1539,13 @@ ${memberTimeline || '(暂无互动记录)'}
                     const prompt = `${header}${memberBlock}\n\n${buildRoundRobinInstruction(member.name, { ...history, text: '（见下方独立消息历史）' }, emojiContextStr)}${htmlPromptExt}\n`;
 
                     const data = await completeGroupChatWithMcp({
-                        url: `${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`,
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
+                        url: `${dialogueApi.baseUrl.replace(/\/+$/, '')}/chat/completions`,
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dialogueApi.apiKey || 'sk-none'}` },
                         body: {
-                            model: apiConfig.model,
+                            model: dialogueApi.model,
                             messages: buildGroupRequestMessages([member], prompt, history),
-                            temperature: 0.9,
+                            temperature: dialogueApi.temperature ?? 0.9,
+                            stream: dialogueApi.stream ?? false,
                             max_tokens: 2000
                         },
                         groupId: activeGroup.id,

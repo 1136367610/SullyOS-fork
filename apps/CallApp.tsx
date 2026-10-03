@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from '../utils/characterApi';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import { canAnalyzeVoiceSource, isVoiceAudioPriming, primeVoiceAudio, voicePlaybackErrorMessage } from '../utils/voicePlayback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -1904,7 +1905,8 @@ ${sentencePlan}`;
     includeUserCameraContext = false,
     userCameraSnapshotForTurn?: string,
   ): Promise<ParsedCallReply> => {
-    const baseUrl = apiConfig.baseUrl?.replace(/\/+$/, '');
+    const dialogueApi = resolveDialogueApi(apiConfig, selectedChar);
+    const baseUrl = dialogueApi.baseUrl?.replace(/\/+$/, '');
     if (!baseUrl) throw new Error('请先在设置里配置聊天 API URL');
     const userName = userProfile?.name?.trim() || '用户';
     if (selectedChar) {
@@ -1967,15 +1969,15 @@ ${sentencePlan}`;
       purpose: string,
     ) => safeFetchJson(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dialogueApi.apiKey || 'sk-none'}` },
       body: JSON.stringify({
-        model: apiConfig.model,
+        model: dialogueApi.model,
         messages: [{ role: 'system', content: nextSystemPrompt }, ...nextMessages],
-        temperature: 0.85,
+        temperature: dialogueApi.temperature ?? 0.85,
         // max_tokens 是 Claude 原生 API 的必填字段；缺了它，OpenAI→Claude 中转会被
         // 上游打回，包成 502 / bad_response_status_code。与私聊 (useChatAI.ts) 对齐。
         max_tokens: 8000,
-        stream: false,
+        stream: dialogueApi.stream ?? false,
       }),
     }, maxRetries, 0, { appName: '电话', charId: selectedChar?.id, charName: selectedChar?.name, purpose });
     let chatData: any;
