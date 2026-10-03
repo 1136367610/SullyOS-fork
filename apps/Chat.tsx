@@ -45,6 +45,7 @@ import {resolveDecorationTheme} from '../utils/chatDecoration';
 import {DecorationTab} from '../components/chat/ChatDecorationPanel';
 import ChatAppearanceWardrobe from '../components/chat/ChatAppearanceWardrobe';
 import ChatInputArea from '../components/chat/ChatInputArea';
+import ConfirmDialog from '../components/os/ConfirmDialog';
 import { loadChatInputPreferences, saveChatInputPreferences } from '../utils/chatInputPreferences';
 import InstantChatRouteNotice from '../components/chat/InstantChatRouteNotice';
 import MemoryRepairPortal from '../components/chat/MemoryRepairPortal';
@@ -226,6 +227,30 @@ const Chat: React.FC = () => {
     const [settingsHideSysLogs, setSettingsHideSysLogs] = useState(false);
     const [inputPreferences, setInputPreferences] = useState(loadChatInputPreferences);
     const [settingsInputPreferences, setSettingsInputPreferences] = useState(loadChatInputPreferences);
+    const [linkCardQuestion, setLinkCardQuestion] = useState<'linkCards' | 'xhsCards' | null>(null);
+    const linkCardAnswer = useRef<((convert: boolean) => void) | null>(null);
+    useEffect(() => () => { linkCardAnswer.current?.(false); linkCardAnswer.current = null; }, []);
+    const decideLinkCard = async (kind: 'linkCards' | 'xhsCards'): Promise<boolean> => {
+        const prefs = loadChatInputPreferences();
+        if (prefs[kind] === false) return false;
+        const notice = kind === 'xhsCards' ? 'xhsCardNoticeSeen' : 'linkCardNoticeSeen';
+        if (prefs[notice]) return true;
+        // A second simultaneous send keeps its text instead of replacing a pending question.
+        if (linkCardAnswer.current) return false;
+        return new Promise(resolve => { linkCardAnswer.current = resolve; setLinkCardQuestion(kind); });
+    };
+    const answerLinkCard = (convert: boolean) => {
+        if (!linkCardQuestion) return;
+        const notice = linkCardQuestion === 'xhsCards' ? 'xhsCardNoticeSeen' : 'linkCardNoticeSeen';
+        const prefs = { ...loadChatInputPreferences(), [linkCardQuestion]: convert, [notice]: true };
+        saveChatInputPreferences(prefs);
+        setInputPreferences(prefs);
+        setSettingsInputPreferences(prefs);
+        const resolve = linkCardAnswer.current;
+        linkCardAnswer.current = null;
+        setLinkCardQuestion(null);
+        resolve?.(convert);
+    };
     const [settingsHtmlModeCustomPrompt, setSettingsHtmlModeCustomPrompt] = useState('');
     const contextSuiteAnyEnabled = memoryPalaceConfig.featureFlags?.recallRouter === true
         || memoryPalaceConfig.featureFlags?.interactionAdaptation === true
@@ -1432,7 +1457,7 @@ const Chat: React.FC = () => {
             const xhsFullNoteId = xhsFullNote?.noteId;
             // 同时识别桌面/旧版 xhslink.com 与手机版新版 xhslink.cn。
             const xhsShortUrl = detectXhsShortUrl(text);
-            if (xhsFullNoteId || xhsShortUrl) {
+            if ((xhsFullNoteId || xhsShortUrl) && await decideLinkCard('xhsCards')) {
                 let noteId = xhsFullNoteId || '';
                 let xsecToken = xhsFullNote?.xsecToken;
                 let shortLinkError = '';
@@ -1491,7 +1516,7 @@ const Chat: React.FC = () => {
                         role: 'user',
                         type: 'xhs_card',
                         content: note.title || '小红书笔记',
-                        metadata: { xhsNote: note }
+                        metadata: { ...metadata, xhsNote: note, originalShareText: text, originalShareUrl: detectFirstUrl(text) || xhsShortUrl }
                     });
                     // F12 调试（仅开发分支）：打印卡片存了啥 + 角色实际会读到的文本。
                     if (isDevDebugAvailable()) {
@@ -1512,7 +1537,7 @@ const Chat: React.FC = () => {
             // 视频平台链接（抖音/B站/快手…）Jina 基本抓不到东西（SPA+登录墙），
             // 优先走 apizero 视频解析拿标题/作者/封面/热度；失败降级回通用网页抓取。
             const sharedUrl = detectFirstUrl(text);
-            if (sharedUrl && !isXhsUrl(sharedUrl) && !(xhsFullNoteId || xhsShortUrl)) {
+            if (sharedUrl && !isXhsUrl(sharedUrl) && !(xhsFullNoteId || xhsShortUrl) && await decideLinkCard('linkCards')) {
                 let webpage: ExtractedWebpage | null = null;
                 if (isVideoShareUrl(sharedUrl)) {
                     try {
@@ -1537,7 +1562,7 @@ const Chat: React.FC = () => {
                         role: 'user',
                         type: 'webpage_card',
                         content: webpage.title,
-                        metadata: { webpage },
+                        metadata: { ...metadata, webpage, originalShareText: text, originalShareUrl: sharedUrl },
                     });
                     // F12 调试（仅开发分支）：打印卡片存了啥 + 角色实际会读到的文本。
                     if (isDevDebugAvailable()) {
@@ -1551,7 +1576,7 @@ const Chat: React.FC = () => {
                 }
             }
 
-            // 一段话里出现链接 = 整条就是分享（符合用户习惯）→ 建卡成功就删原文，只留卡片。
+            // 原文和链接已完整保存在卡片 metadata；仅建卡成功后移除重复的文字消息。
             if ((xhsCardCreated || webpageCardCreated) && savedUserMsgId) {
                 await DB.deleteMessage(savedUserMsgId);
             }
@@ -3717,6 +3742,11 @@ const Chat: React.FC = () => {
 
              {showHistoryCleanup && <ChatHistoryCleanupModal key={`history-cleanup:${char.id}`} character={char} onClose={() => setShowHistoryCleanup(false)} onDeleted={handleHistoryCleanupDone} />}
              {emojiExport && <EmojiExportDialog {...emojiExport} onClose={() => setEmojiExport(null)} />}
+            <ConfirmDialog isOpen={linkCardQuestion !== null}
+                title={linkCardQuestion === 'xhsCards' ? '小红书链接解析' : '分享链接解析'}
+                message="检测到分享链接，要关闭自动转卡片吗？关闭后，本条及之后的链接会按原文发送，方便角色用你配置的 MCP 读取。保留卡片也会带上原链接。两类解析可在加号 → 设置中分别调整。"
+                confirmText="关闭，发送原文" cancelText="保留卡片"
+                onConfirm={() => answerLinkCard(false)} onCancel={() => answerLinkCard(true)} />
             <ChatModals
                 modalType={modalType} setModalType={setModalType}
                 transferAmt={transferAmt} setTransferAmt={setTransferAmt}
