@@ -3913,6 +3913,9 @@ export const DB = {
           await clearAndAdd(STORE_ASSETS, data.assets || [], '系统资源', true);
           data.assets = undefined as any;
       }, data.assets?.length || 0);
+      await runSection('聊天收藏', data.contentFavoritesIndex != null, async () => {
+          await DB.saveAssetRaw('content_favorites_index_v1', data.contentFavoritesIndex);
+      });
       await runSection('日记贴纸', data.savedJournalStickers !== undefined, async () => {
           await mergeStore(STORE_JOURNAL_STICKERS, data.savedJournalStickers, '日记贴纸', true);
           data.savedJournalStickers = undefined as any;

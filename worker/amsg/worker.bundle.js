@@ -23,7 +23,7 @@ function reconcileStoppedReplies(log, rows) {
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.33_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2_2cae65e4266a5b0179fd10f9a9eedab9/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1235,7 +1235,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.33_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-Q4VQ3NVR.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2_2cae65e4266a5b0179fd10f9a9eedab9/node_modules/@rei-standard/amsg-server/dist/chunk-Q4VQ3NVR.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -9367,14 +9367,21 @@ var isFreshChatPresence = (value, charId, nowMs) => Boolean(
 );
 
 // utils/proxyWorker.ts
-var DEFAULT_PROXY_WORKER = "https://sullymeow.ccwu.cc";
+var DEFAULT_PROXY_WORKER = "https://proxy.friedsully.com";
 var LS_KEY = "sully_proxy_worker_url_v1";
-var STALE_HOSTS = [/sully-n\.qegj567\.workers\.dev/i, /sullymeow\.ccwu213\.cc/i];
+var STALE_HOSTS = /* @__PURE__ */ new Set(["sully-n.qegj567.workers.dev", "sullymeow.ccwu213.cc", "sullymeow.ccwu.cc"]);
+var isLegacyProxyWorkerUrl = (url) => {
+  try {
+    return STALE_HOSTS.has(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+};
 var normalize = (url) => url.trim().replace(/\/+$/, "");
 var runtimeOverrideUrl = null;
 var setProxyWorkerUrlOverride = (url) => {
   const trimmed = normalize(url || "");
-  runtimeOverrideUrl = /^https?:\/\//i.test(trimmed) ? trimmed : null;
+  runtimeOverrideUrl = /^https?:\/\//i.test(trimmed) ? isLegacyProxyWorkerUrl(trimmed) ? DEFAULT_PROXY_WORKER : trimmed : null;
 };
 var getProxyWorkerUrl = () => {
   if (runtimeOverrideUrl) return runtimeOverrideUrl;
@@ -9383,7 +9390,7 @@ var getProxyWorkerUrl = () => {
     if (!raw) return DEFAULT_PROXY_WORKER;
     const url = normalize(raw);
     if (!/^https?:\/\//i.test(url)) return DEFAULT_PROXY_WORKER;
-    if (STALE_HOSTS.some((re) => re.test(url))) return DEFAULT_PROXY_WORKER;
+    if (isLegacyProxyWorkerUrl(url)) return DEFAULT_PROXY_WORKER;
     return url;
   } catch {
     return DEFAULT_PROXY_WORKER;
@@ -15253,7 +15260,7 @@ var isFcmConfigured = (env) => Boolean(
 
 // worker/amsg/src/index.ts
 var getFireStash = (scratch) => scratch?.fire;
-var REPLY_IN_FLIGHT_DEFER_MS = 6e4;
+var REPLY_IN_FLIGHT_DEFER_MS = 45e3;
 var laterOf = (a, b) => a == null ? b : b == null ? a : Math.max(a, b);
 var buildToolCtx = (pack, config) => {
   const char = {

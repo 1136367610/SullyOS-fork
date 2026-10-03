@@ -98,6 +98,7 @@ import {
     listContentFavorites,
     removeContentFavoriteById,
     saveMessageContentFavorite,
+    saveConversationContentFavorite,
 } from '../utils/contentFavorites';
 import { SCHEDULE_CHANGE_EVENT, type ScheduleChangeEventDetail } from '../utils/scheduleChange';
 import {
@@ -3059,6 +3060,25 @@ const Chat: React.FC = () => {
     const [showForwardModal, setShowForwardModal] = useState(false);
     const [forwardGroupId, setForwardGroupId] = useState(GROUP_FILTER_ALL); // 转发弹窗的角色分组筛选
 
+    const savingConversationFavorite = useRef(false);
+    const handleFavoriteSelected = async () => {
+        if (!char || savingConversationFavorite.current) return;
+        const selected = messages.filter(message => message.charId === char.id && selectedMsgIds.has(message.id));
+        if (!selected.length) { addToast('请勾选消息正文后再收藏', 'info'); return; }
+        savingConversationFavorite.current = true;
+        try {
+            await saveConversationContentFavorite(selected, char.id, char.name, userProfile.name);
+            addToast(`已将 ${selected.length} 条消息合并收藏`, 'success');
+            setSelectionMode(false);
+            setSelectedMsgIds(new Set());
+            setSelectedThinkingMsgIds(new Set());
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : '收藏失败，请重试', 'error');
+        } finally {
+            savingConversationFavorite.current = false;
+        }
+    };
+
     const handleForwardSelected = () => {
         if (selectedMsgIds.size === 0) return;
         setShowForwardModal(true);
@@ -4316,6 +4336,8 @@ const Chat: React.FC = () => {
                     onInputFocusChange={setIsInputFocused}
                     onDeleteSelected={handleBatchDelete}
                     onForwardSelected={handleForwardSelected}
+                    onFavoriteSelected={handleFavoriteSelected}
+                    favoriteSelectedCount={messages.filter(message => message.charId === char?.id && selectedMsgIds.has(message.id)).length}
                     selectedCount={selectedMsgIds.size + Array.from(selectedThinkingMsgIds).filter(id => !selectedMsgIds.has(id)).length}
                     emojis={filteredEmojis}
                     emojiSuggestionsEnabled={inputPreferences.emojiSuggestions}

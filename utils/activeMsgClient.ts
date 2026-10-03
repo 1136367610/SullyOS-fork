@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from './characterApi';
 import { stoppedReplyStateEntries } from './amsgStoppedReplyClient';
 import { loadCharacterContextMessages } from './chatContextRange';
 import { ReiClient } from '@rei-standard/amsg-client';
@@ -567,8 +568,8 @@ const initializeClient = (config: ActiveMsg2GlobalConfig) => {
   return promise;
 };
 
-const resolveApiConfig = (_char: CharacterProfile, _config: ActiveMsg2CharacterConfig, apiConfig: APIConfig) => {
-  const source = apiConfig;
+const resolveApiConfig = (char: CharacterProfile, _config: ActiveMsg2CharacterConfig, apiConfig: APIConfig) => {
+  const source = resolveDialogueApi(apiConfig, char);
 
   if (!source.baseUrl || !source.apiKey || !source.model) {
     throw new Error('主动消息 2.0 缺少可用的 API URL / Key / Model。');

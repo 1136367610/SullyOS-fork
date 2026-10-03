@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from '../utils/characterApi';
 import {isBuiltinAppearance, readBuiltinAppearance} from '../utils/builtinAppearance';
 import { browserHolidayCache, deviceTimeZone, getUserHolidayReminder } from '../utils/userHolidays';
 import {exportDecorationMedia} from '../utils/decorationMediaBackup';
@@ -79,7 +80,7 @@ import { ActiveMsgStore, backupHasBackendConnection, exportAmsg2GlobalConfig } f
 import { charMayHaveCloudState, purgeCharCloudState, purgeCloudCharById } from '../utils/amsg2CharCleanup';
 import { parseCharCredId } from '../utils/amsgLlmCredentials';
 import { SAR_MODULE_RUNTIME_CHANGED_EVENT, type SarModuleRuntimeChangedDetail } from '../utils/sarModuleRuntimeEvents';
-import { markAmsgStateDirty, markAmsgStateDirtyForAll, resumePendingAmsgStateSync, syncAmsgToolConfigAndPrompts, wipeAmsgCloudDataForReset } from '../utils/amsgStateSync';
+import { markAmsgStateDirty, markAmsgStateDirtyForAll, resumePendingAmsgStateSync, syncAmsgLlmCredentials, syncAmsgToolConfigAndPrompts, wipeAmsgCloudDataForReset } from '../utils/amsgStateSync';
 import { loadMusicPlaybackSnapshot } from './MusicContext';
 import { setCharNameRegistry } from '../utils/charNameRegistry';
 import { setMinimaxRegion } from '../utils/minimaxEndpoint';
@@ -398,8 +399,8 @@ interface OSContextType {
   
   // API Presets
   apiPresets: ApiPreset[];
-  addApiPreset: (name: string, config: APIConfig) => void;
-  updateApiPreset: (id: string, name: string, config: APIConfig) => void;
+  addApiPreset: (name: string, config: APIConfig, group?: string) => void;
+  updateApiPreset: (id: string, name: string, config: APIConfig, group?: string) => void;
   removeApiPreset: (id: string) => void;
 
   // 实时配置 (天气、新闻、Notion等)
@@ -2315,8 +2316,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               return;
           }
 
-          // 页面内主动消息也统一使用聊天主 API，忽略旧备份中的副 API 配置。
-          const api = currentApiConfig;
+          // 页面内主动消息与私聊使用同一角色默认；旧主动消息副 API 不再参与取值。
+          const api = resolveDialogueApi(currentApiConfig, char);
           if (!api.baseUrl) {
               drainQueuedProactive();
               return;
@@ -2428,7 +2429,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               // 4. API call
               const baseUrl = api.baseUrl.replace(/\/+$/, '');
               const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.apiKey || 'sk-none'}` };
-              const reqBody: any = { model: api.model, messages: fullMessages, temperature: 0.85, stream: false };
+              const reqBody: any = { model: api.model, messages: fullMessages, temperature: api.temperature ?? 0.85, stream: api.stream ?? false };
               // 思考链开启时显式向后端请求 extended thinking — 与 useChatAI 同步,
               // 不同代理认不同入口,全都试一遍,代理不识别的会自动忽略
               if (payload.flags.thinkingActive) {
@@ -3254,8 +3255,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       setAvailableModels(safeModels);
       localStorage.setItem('os_available_models', JSON.stringify(safeModels));
   };
-  const addApiPreset = (name: string, config: APIConfig) => { setApiPresets(prev => { const next = [...prev, normalizeApiPreset({ id: Date.now().toString(), name, config })]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
-  const updateApiPreset = (id: string, name: string, config: APIConfig) => { setApiPresets(prev => { const next = prev.map(p => p.id === id ? normalizeApiPreset({ ...p, name, config }) : p); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
+  const addApiPreset = (name: string, config: APIConfig, group?: string) => { setApiPresets(prev => { const next = [...prev, normalizeApiPreset({ id: crypto.randomUUID(), name, config, group: group?.trim() })]; localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
+  const updateApiPreset = (id: string, name: string, config: APIConfig, group?: string) => { setApiPresets(prev => { const next = prev.map(p => p.id === id ? normalizeApiPreset({ ...p, name, config, group: group === undefined ? p.group : group.trim() }) : p); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
   const removeApiPreset = (id: string) => { setApiPresets(prev => { const next = prev.filter(p => p.id !== id); localStorage.setItem('os_api_presets', JSON.stringify(next)); return next; }); };
   const savePresets = (presets: ApiPreset[]) => { const normalized = presets.map(normalizeApiPreset); setApiPresets(normalized); localStorage.setItem('os_api_presets', JSON.stringify(normalized)); };
   const addCharacter = async () => {
@@ -3294,6 +3295,10 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         // markDirty 内部自带「没开 2.0 / 没挂 AI 任务就 return」的门，普通角色零成本。
         DB.saveCharacter(target).then(() => {
           markAmsgStateDirty({ char: target, userProfile, groups, realtimeConfig });
+          if (JSON.stringify(before?.dialogueApi) !== JSON.stringify(target.dialogueApi)) {
+            // Fresh snapshot also distinguishes consecutive role-only changes during an upload.
+            syncAmsgLlmCredentials({ ...apiConfig });
+          }
           // 时区和名字是另一条路：它们冻在远端任务行里，fire_pack 刷新盖不到。
           // 上游按任务行的 tzId 推进循环任务的下次触发时刻；fixed 模式的推送标题也直接
           // 读任务行的 contactName。只刷真的变了的那几项，别搭别的操作的便车。
@@ -4069,6 +4074,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           const cloneForInPlace = <T,>(v: T): T => (mode === 'text_only' ? v : deepCloneForExport(v));
 
           const backupData: Partial<FullBackupData> = {
+              contentFavoritesIndex: mode === 'text_only'
+                  ? stripBackupImages(await DB.getAssetRaw('content_favorites_index_v1')) : undefined,
               timestamp: Date.now(),
               version: 3,
               apiConfig: (mode === 'text_only' || mode === 'full') ? apiConfig : undefined,

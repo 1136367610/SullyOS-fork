@@ -823,6 +823,25 @@ describe('LLM 凭据行的后台重传', () => {
     expect(localStorage.getItem(AMSG2_PENDING_CRED_SYNC_LS_KEY), '传上去了就该销账').toBeNull();
   });
 
+  it('全局换 Key 时角色独立凭据不变，恢复跟随后才更新为全局', async () => {
+    vi.mocked(isLlmCredentialsReady).mockResolvedValue(true);
+    const roleApi = { baseUrl: 'https://role.example/v1', apiKey: 'role-key', model: 'role-model' };
+    vi.mocked(DB.getAllCharacters).mockResolvedValue([{ ...CHAR, dialogueApi: roleApi }] as any);
+    syncAmsgLlmCredentials(API);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ActiveMsgClient.putLlmCredentials).toHaveBeenLastCalledWith([{
+      credId: 'char:char-cred-sync/chat',
+      value: { apiUrl: roleApi.baseUrl + '/chat/completions', apiKey: roleApi.apiKey, primaryModel: roleApi.model },
+    }]);
+    vi.mocked(DB.getAllCharacters).mockResolvedValue([CHAR] as any);
+    syncAmsgLlmCredentials({ ...API });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ActiveMsgClient.putLlmCredentials).toHaveBeenLastCalledWith([{
+      credId: 'char:char-cred-sync/chat',
+      value: { apiUrl: API.baseUrl + '/chat/completions', apiKey: API.apiKey, primaryModel: API.model },
+    }]);
+  });
+
   it('这次保存没动 API → 值没变，不白发一次请求', async () => {
     (isLlmCredentialsReady as any).mockResolvedValue(true);
     rememberCredRows([buildCharChatCredRow(CHAR as any, CHAR.activeMsg2Config as any, API)!]);

@@ -3997,7 +3997,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
 
     const choose = (cfg: APIConfig | null) => {
         void setVRApi(cfg); setVr(cfg); setTestResult(null);
-        addToast?.(cfg ? '已切换彼方 API' : '彼方改为跟随聊天默认', 'success');
+        addToast?.(cfg ? '已切换彼方 API' : '彼方改为角色回复跟随角色 API，未设置则跟随全局', 'success');
     };
 
     const test = async () => {
@@ -4042,17 +4042,17 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
     return (
         <div className="space-y-3">
             <p className="text-[11px] text-indigo-300/60 leading-relaxed">
-                彼方里的角色会自主、按间隔登入触发模型调用，比较费 API。你可以在这里给彼方<b className="text-indigo-200">单独指定一份 API</b>（和「设置」里保存的预设共用同一批），不设则跟随聊天默认。
+                彼方里的角色会自主、按间隔登入触发模型调用，比较费 API。你可以在这里给彼方<b className="text-indigo-200">单独指定一份 API</b>（和「设置」里保存的预设共用同一批），不设则角色回复跟随角色 API，未设置则跟随全局。
             </p>
 
             {/* 当前生效 */}
             <div className="rounded-2xl p-3.5" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="text-[10px] tracking-[0.2em] text-indigo-200/60 mb-1.5" style={{ fontFamily: `'Noto Serif SC',serif` }}>当前生效</div>
-                <div className="text-[12.5px] text-white/90 font-semibold">{effective?.model || '未配置'}</div>
-                <div className="text-[10px] text-white/40 mt-0.5">{host(effective?.baseUrl)} · {follow ? '跟随聊天默认' : '彼方独立'}</div>
+                <div className="text-[12.5px] text-white/90 font-semibold">{follow ? '按角色使用模型' : effective?.model || '未配置'}</div>
+                <div className="text-[10px] text-white/40 mt-0.5">{follow ? `全局备用：${chatApi.model || '未配置'} · ${host(chatApi.baseUrl)}` : `${host(effective?.baseUrl)} · 彼方独立`}</div>
                 <button onClick={test} disabled={testing} className="mt-2.5 text-[11px] px-3 py-1.5 rounded-full font-semibold disabled:opacity-50"
                     style={{ background: 'rgba(120,180,255,.16)', color: '#bcd4ff', border: '1px solid rgba(140,180,255,.3)' }}>
-                    {testing ? '测试中…' : '测试连接'}
+                    {testing ? '测试中…' : follow ? '测试全局备用 API' : '测试连接'}
                 </button>
                 {testResult && <div className={`mt-2 text-[10.5px] px-2.5 py-1.5 rounded-lg leading-snug ${testResult.startsWith('连接成功') ? 'text-emerald-300' : 'text-rose-300'}`} style={{ background: 'rgba(0,0,0,.25)' }}>{testResult}</div>}
             </div>
@@ -4064,7 +4064,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
                     className="w-full flex items-center gap-2 rounded-xl p-3 mb-1.5 text-left active:scale-[0.99] transition-transform"
                     style={{ background: follow ? 'rgba(120,180,255,.12)' : 'rgba(255,255,255,.04)', border: `1px solid ${follow ? 'rgba(140,180,255,.4)' : 'rgba(255,255,255,.07)'}` }}>
                     <div className="flex-1 min-w-0">
-                        <div className="text-[12px] text-white/90 font-semibold">跟随聊天默认</div>
+                        <div className="text-[12px] text-white/90 font-semibold">跟随角色设置</div>
                         <div className="text-[10px] text-white/40 truncate">{chatApi?.model || '未配置'} · {host(chatApi?.baseUrl)}</div>
                     </div>
                     {follow && <span className="text-[10px] text-sky-300 font-bold shrink-0">✓ 使用中</span>}
