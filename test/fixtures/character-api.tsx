@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { OSProvider, useOS } from '../../context/OSContext';
 import Character from '../../apps/Character';
 import Settings from '../../apps/Settings';
+import DateSettings from '../../components/date/DateSettings';
 
 function Preview() {
   const os = useOS();
@@ -19,8 +20,9 @@ function Preview() {
       <button onClick={seed}>加载演示配置</button>
       <button onClick={() => setPage('character')}>神经链接</button>
       <button onClick={() => setPage('settings')}>设置</button>
+      <button onClick={() => setPage('date')}>场景布置</button>
     </nav>
-    <main className="relative min-h-0 flex-1">{page === 'character' ? <Character /> : <Settings />}</main>
+    <main className="relative min-h-0 flex-1">{page === 'character' ? <Character /> : page === 'date' && os.characters[0] ? <DateSettings char={os.characters[0]} onBack={() => setPage('character')} /> : <Settings />}</main>
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<OSProvider><Preview /></OSProvider>);

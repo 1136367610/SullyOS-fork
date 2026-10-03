@@ -33,7 +33,10 @@ afterEach(() => { vi.clearAllMocks(); });
 
 it.each(['full', 'text_only'] as const)('%s ZIP restores role credentials and preset groups, then sends them through useChatAI', async mode => {
     await clearCharacters();
-    const character = { id: `restore-${mode}`, name: '备份角色', dialogueApi: roleApi, emotionConfig: { enabled: false } } as any;
+    const character = { id: `restore-${mode}`, name: '备份角色', dialogueApi: roleApi, emotionConfig: { enabled: false },
+        dateStyleConfig: { style: 'daily', extra: '当前补充要求' },
+        dateExtraPresets: [{ id: 'daily', name: '日常', content: '多写生活细节' }, { id: 'adventure', name: '冒险', content: '加快叙事节奏' }],
+    } as any;
     await DB.saveCharacter(character);
     const zip = new JSZip();
     const data: any = { apiConfig: globalApi, apiPresets: [preset] };
@@ -58,6 +61,8 @@ it.each(['full', 'text_only'] as const)('%s ZIP restores role credentials and pr
     const saved = (await DB.getAllCharacters()).find(c => c.id === character.id)!;
     const char = migrateCharacterContextRange(normalizeCharacterDefaults(normalizeCharacterImpression(saved))).character;
     expect(char.dialogueApi).toEqual(roleApi);
+    expect(char.dateStyleConfig).toEqual(character.dateStyleConfig);
+    expect(char.dateExtraPresets).toEqual(character.dateExtraPresets);
     await DB.saveMessage({ charId: char.id, role: 'user', type: 'text', content: '你好' } as any);
 
     let current!: ReturnType<typeof useChatAI>;
