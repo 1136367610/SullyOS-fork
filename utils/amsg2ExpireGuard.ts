@@ -2,9 +2,12 @@
 /**
  * amsg2 防穿帮闸 — 纯判定逻辑。
  *
- * ⚠️ 叶子模块：会被 worker/amsg 打进 Cloudflare bundle，同时被客户端送达兜底
- * （activeMsgRuntime）与排程现状块（amsg2TaskContext）复用——不得 import
- * 浏览器 / DB / React 依赖（与 utils/agenticTools.ts 同一约束）。
+ * ⚠️ 叶子模块：会被 worker/amsg 打进 Cloudflare bundle，同时被排程现状块
+ * （amsg2TaskContext）复用——不得 import 浏览器 / DB / React 依赖
+ * （与 utils/agenticTools.ts 同一约束）。
+ *
+ * 作废只发生在 worker 发送前（onBeforeFire）。消息一旦发出，客户端照收；排程现状块
+ * 拿聊天记录里的送达证据把这些触发排除掉（见 hasDeliveredProactiveNear）。
  *
  * 语义（设计：claude-notes/2026-07-21-amsg2-liveness-design.md「防穿帮闸」）：
  *   - expire（默认）：到点那会儿用户正在聊天 → 作废，转「排程现状块」告知；
@@ -29,6 +32,12 @@ export const ACTIVE_CHAT_WINDOW_MS = 10 * 60_000;
 /** 触发时刻附近的推理/送达宽限（fire 后 10-30s 才送达，判定窗口向后放这么多）。 */
 export const FIRE_GRACE_MS = 90_000;
 
+/**
+ * 触发时刻过后先等这么久，排程现状块才下「作废」的结论。worker 放行后要生成、推送、
+ * 客户端落库；这段时间里聊天记录还没有送达证据，早下结论会把一条正在路上的消息说成没发。
+ */
+export const EXPIRE_DETECT_SETTLE_MS = 2 * 60_000;
+
 /** 排程现状块只回看这么久内的触发时刻，太老的不再提。 */
 const DEFAULT_LOOKBACK_MS = 48 * 3600_000;
 
@@ -47,15 +56,14 @@ export interface ExpireFireInput {
   nowMs: number;
   /**
    * 本次触发时刻。「正在聊天」窗口锚定它而不是 nowMs——生成+送达可能比到点晚十几分钟，
-   * 拿判定时刻算 10 分钟窗会把撞上对话的消息误放行。worker 在到点当时判定（两者几乎
-   * 相等），客户端送达兜底则晚得多，所以必须显式给。
+   * 拿判定时刻算 10 分钟窗会把撞上对话的消息误放行。worker 重试时判定也可能晚于到点，因此必须显式给。
    */
   occurrenceMs: number | null | undefined;
 }
 
 /**
  * fire 时刻该不该作废这次触发。worker onBeforeFire（数据来自 fire_pack /
- * task metadata）与客户端送达兜底（数据来自本地历史 / push metadata）共用，
+ * task metadata）调用，
  * 一次性和循环任务同一条规则：到点前后十分钟内用户在不在聊天。
  *
  * 判不了（缺策略 / 缺触发时刻 / 一条用户消息都没有）一律放行——这道闸只挡它能确定的
@@ -63,16 +71,12 @@ export interface ExpireFireInput {
  */
 export function shouldExpireFire(input: ExpireFireInput): boolean {
   if (input.policy !== 'expire') return false;
-  // 缺触发时刻就算不出窗口，放行。客户端送达兜底闸会碰上（老版本 SW 落的收件箱行
-  // 没有这个顶层字段）；worker 侧走不到，occurrenceMs 由 onBeforeFire 校验过。
+  // 缺触发时刻就算不出窗口，放行；worker 入口会先校验 occurrenceMs。
   if (input.occurrenceMs == null) return false;
   const last = input.lastUserMessageAt;
   if (last == null) return false;
   // 两边都锚在触发时刻，跟 detectExpiredOccurrences 的对称窗同一个口径。
-  // 右界要是拿 nowMs：worker 在到点当时判（now≈到点）看不出差别，客户端送达兜底 /
-  // 48h 补收却是 now=Date.now()，窗口会一路撑成 (到点-10min, 现在]——用户到点之后
-  // 随便哪个时刻开过一次口，晚送到的定时消息就被吞掉、销账、连云端自述日志一起撤销，
-  // 而检出那边用对称窗根本查不到这次吞没，作废回执整段失联。
+  // Worker 延迟触发 / 重试时也不把窗口一路撑到现在。
   return last > input.occurrenceMs - ACTIVE_CHAT_WINDOW_MS
     && last <= input.occurrenceMs + ACTIVE_CHAT_WINDOW_MS
     // last 是过去的消息时间戳，这条理论上恒真；留着挡时钟歪掉时冒出来的未来时间戳。
@@ -110,24 +114,39 @@ export function hasRealUserMessageBetween(
 const DELIVERED_WINDOW_MS = 30 * 60_000;
 
 /**
- * 某个触发时刻附近是否真的送达过定时主动消息（区分「作废了」和「发出去之后
- * 用户才回复」）。定时任务的落库消息带 metadata.activeMsg2.taskId（非空）；
- * instant 聊天回复的 taskId 是 null，不算。
+ * 某次触发是否真的送达过定时主动消息（区分「作废了」和「发出去之后用户才回复」）。
+ * 定时任务的落库消息带 metadata.activeMsg2.taskId（非空）；instant 聊天回复的
+ * taskId 是 null，不算。
  *
  * 按精确 id 归属：任务的送达一定带同源 amsgClientTaskId，id 不同或缺 id 的消息都不算
  * 本任务的送达——否则会拿别的任务的送达当证据、误抹掉本任务的作废回执。
+ *
+ * 是不是「这一次」触发：
+ *   - 气泡带 metadata.amsgOccurrenceMs（worker 随每条 push 带回的名义触发时刻）时只认它，
+ *     相等才算——间隔很短的循环任务，相邻两次的送达不会互相顶替；
+ *   - 不带的（老 push）退到时间窗：metadata.activeMsg2.sentAt（worker 发出的时刻）或
+ *     落库时间戳落在送达窗内。
+ * 落库时间戳单独靠不住：隔了很久才收进来、本地又已有更晚的消息时，它记的是写库当刻，
+ * 可以离触发时刻任意远。
  */
 export function hasDeliveredProactiveNear(
   messages: RealUserMessageLike[],
   occurrenceMs: number,
   clientTaskId: string,
 ): boolean {
+  const inDeliveredWindow = (at: unknown): boolean =>
+    typeof at === 'number' && at >= occurrenceMs - FIRE_GRACE_MS && at <= occurrenceMs + DELIVERED_WINDOW_MS;
   return messages.some((m) => {
     if (m.role !== 'assistant') return false;
-    const meta = m.metadata as { activeMsg2?: { taskId?: unknown }; amsgClientTaskId?: unknown } | null | undefined;
+    const meta = m.metadata as {
+      activeMsg2?: { taskId?: unknown; sentAt?: unknown };
+      amsgClientTaskId?: unknown;
+      amsgOccurrenceMs?: unknown;
+    } | null | undefined;
     if (meta?.activeMsg2?.taskId == null) return false;
     if (meta.amsgClientTaskId !== clientTaskId) return false;
-    return m.timestamp >= occurrenceMs - FIRE_GRACE_MS && m.timestamp <= occurrenceMs + DELIVERED_WINDOW_MS;
+    if (typeof meta.amsgOccurrenceMs === 'number') return meta.amsgOccurrenceMs === occurrenceMs;
+    return inDeliveredWindow(meta.activeMsg2.sentAt) || inDeliveredWindow(m.timestamp);
   });
 }
 
@@ -157,14 +176,16 @@ export function detectExpiredOccurrences(input: DetectExpiredInput): ExpiredNoti
   const first = new Date(input.firstSendTime).getTime();
   if (!Number.isFinite(first)) return [];
   const horizon = input.nowMs - (input.lookbackMs ?? DEFAULT_LOOKBACK_MS);
+  // 刚到点的那次先不判（见 EXPIRE_DETECT_SETTLE_MS）。
+  const settledBefore = input.nowMs - EXPIRE_DETECT_SETTLE_MS;
 
   const periodMs = recurrencePeriodMs(input.recurrenceType);
   if (periodMs === null) {
-    if (first > input.nowMs || first < horizon) return [];
-    // 跟循环那支同一个对称窗，因为闸本身已经是同一条规则了（见 shouldExpireFire）。
-    // 两边必须一致：这里说「作废了」而闸其实放行了的话，角色会为一条用户明明收到的
-    // 消息道歉——比不说还糟。
-    // 「其实已正常送达」由调用方用 hasDeliveredProactiveNear 按任务归属排除。
+    if (first > settledBefore || first < horizon) return [];
+    // 跟循环那支同一个对称窗，也跟 worker 的闸（shouldExpireFire）同一条规则。
+    // 窗口只说明「这次触发可能被作废」：worker 判定时看到的用户发言可能比这里少，
+    // 放行并发出的消息由调用方用 hasDeliveredProactiveNear 按任务归属排除——
+    // 否则角色会为一条用户明明收到的消息道歉。
     if (!hasRealUserMessageBetween(
       input.messages, first - ACTIVE_CHAT_WINDOW_MS, first + ACTIVE_CHAT_WINDOW_MS,
     )) return [];
@@ -175,7 +196,7 @@ export function detectExpiredOccurrences(input: DetectExpiredInput): ExpiredNoti
   let t = first;
   if (t < horizon) t = first + Math.ceil((horizon - first) / periodMs) * periodMs;
   const out: ExpiredNoticeCandidate[] = [];
-  for (; t <= input.nowMs; t += periodMs) {
+  for (; t <= settledBefore; t += periodMs) {
     // 「到点前后都在聊」的对称窗：覆盖 fire 略晚于到点的 Cron 延迟场景。
     if (hasRealUserMessageBetween(input.messages, t - ACTIVE_CHAT_WINDOW_MS, t + ACTIVE_CHAT_WINDOW_MS)) {
       out.push({ id: `${input.taskUuid}:${t}`, occurrenceMs: t });

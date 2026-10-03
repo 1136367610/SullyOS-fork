@@ -1876,18 +1876,16 @@ export const amsgHooks = {
 
     // 本次触发时刻：任务行 next_send_at（NOT NULL，buildHookTask 已摊平提供）。防穿帮闸的
     // 循环判定要拿它当窗口锚点，之后又经 scratch 透传给每条 push 的 metadata.amsgOccurrenceMs
-    // （客户端兜底闸的循环判定与吞放缓存键都要它）。解析不出来说明上游任务行的时间格式变了，
+    // （客户端排程对账需要它）。解析不出来说明上游任务行的时间格式变了，
     // 按状态异常硬失败。
     const occurrenceMs = Date.parse(String(ctx.task.nextSendAt));
     if (!Number.isFinite(occurrenceMs)) {
       throw fail('任务行 next_send_at 解析不出触发时刻', { nextSendAt: ctx.task.nextSendAt });
     }
 
-    // 防穿帮闸·worker 主判定：一次性任务创建后对话已前进 / 循环任务到点时用户
-    // 正在热聊 → { skip: true } 跳过本次 fire（amsg-server skip 出口，任务照常
-    // 推进/删除），一个生成 token 都不花。fire_pack.lastUserMessageAt 随 amsgStateSync
-    // 在微任务里冲刷，滞后的只有一次上传往返（慢网下也是几秒量级）；这点残余竞态由客户端
-    // 送达兜底闸兜住（activeMsgRuntime 的 runtime-expire-swallow）。缺策略字段的任务不拦。
+    // 防穿帮闸：到点附近用户正在热聊，跳过本次 fire，任务照常推进/删除。
+    // fire_pack 与 presence 的上传有延迟，判定时看到的用户发言可能比真实的少；
+    // 消息一旦发出客户端照收（通知已经弹出，聊天记录里就得有）。缺策略字段的任务不拦。
     //
     // 「用户最后一次开口」取 fire_pack 和 presence 两份里较新的：presence 行是每轮聊天
     // 一开场就写的小值，几十字节就发完了；fire_pack 是整包几十 KB，同样是打脏即发，
@@ -1901,12 +1899,8 @@ export const amsgHooks = {
       nowMs: ctx.now.getTime(),
       occurrenceMs,
     };
-    // 判定输入原样留一行，**放行也留**。客户端送达兜底闸会拿同一套规则、更新的数据
-    // 再判一次，两边结论不一样时（worker 放行 → 生成 → 推送，客户端吞掉）用户看到的
-    // 就是「通知弹出来了、点进去没有」，而这中间没有任何一处说得出发生过什么。只有把
-    // 两边的输入都留下来，事后才分得清是哪一边、因为哪个字段。
-    // 「最后一次开口」拆成两个来源分别记：合并后的那一个值看不出 fire_pack 是不是
-    // 陈旧的，而「fire_pack 落后于真实对话」正是两边判定分叉的头号原因。
+    // 判定输入原样留一行，放行也留。最后一次开口拆成两个来源分别记，
+    // 便于排查 fire_pack / presence 是否落后于真实对话。
     // 字段全是时间戳与枚举，不含正文、不含角色名。
     const expireTrace = {
       taskId: ctx.task.id,

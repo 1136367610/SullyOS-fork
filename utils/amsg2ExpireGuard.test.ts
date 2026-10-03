@@ -4,6 +4,7 @@ import {
   ACTIVE_CHAT_WINDOW_MS,
   FIRE_GRACE_MS,
   detectExpiredOccurrences,
+  EXPIRE_DETECT_SETTLE_MS,
   getLastRealUserMessageAt,
   hasDeliveredProactiveNear,
   hasRealUserMessageBetween,
@@ -43,8 +44,8 @@ describe('shouldExpireFire', () => {
     })).toBe(false);
   });
 
-  it('热聊窗口锚在到点时刻，判定晚十几分钟也不放行（worker 与客户端送达兜底同一口径）', () => {
-    // 到点 24h，客户端送达兜底在 15 分钟后才判：窗口仍是到点前后各十分钟，
+  it('热聊窗口锚在到点时刻，判定晚十几分钟也不放行', () => {
+    // 到点 24h，worker 重试到 15 分钟后才判：窗口仍是到点前后各十分钟，
     // 拿 nowMs 当锚点的话这条 9 分钟前的用户消息会落到窗外被误放行。
     const late = { policy: 'expire', occurrenceMs: 24 * H, nowMs: 24 * H + 15 * 60_000 };
     expect(shouldExpireFire({ ...late, lastUserMessageAt: 24 * H - 9 * 60_000 })).toBe(true);
@@ -118,6 +119,32 @@ describe('消息扫描 helpers', () => {
     expect(hasDeliveredProactiveNear([withCid], 1000, 'cid-B')).toBe(false); // A 的送达不能抹掉 B 的回执
     expect(hasDeliveredProactiveNear([assistantPush(1000)], 1000, 'cid-A')).toBe(false); // 缺 amsgClientTaskId 的消息不是本任务的送达
   });
+  it('hasDeliveredProactiveNear：隔了很久才收进来、落库时间戳远离触发时刻，仍凭 push 自带的时刻认作送达', () => {
+    const fireAt = 8 * H;
+    const landedLate = (metadata: Record<string, unknown>) => ({
+      role: 'assistant', timestamp: fireAt + H, // 一小时后才写库，已出 30 分钟送达窗
+      metadata: { source: 'active_msg_2', amsgClientTaskId: 'cid-A', ...metadata },
+    });
+    // worker 带回的名义触发时刻对得上
+    expect(hasDeliveredProactiveNear(
+      [landedLate({ activeMsg2: { taskId: 't1' }, amsgOccurrenceMs: fireAt })], fireAt, 'cid-A',
+    )).toBe(true);
+    // 没带名义时刻的 push：发出时刻在送达窗内
+    expect(hasDeliveredProactiveNear(
+      [landedLate({ activeMsg2: { taskId: 't1', sentAt: fireAt + 30_000 } })], fireAt, 'cid-A',
+    )).toBe(true);
+    // 另一次触发的送达不算这一次的
+    expect(hasDeliveredProactiveNear(
+      [landedLate({ activeMsg2: { taskId: 't1', sentAt: fireAt + 24 * H }, amsgOccurrenceMs: fireAt + 24 * H })], fireAt, 'cid-A',
+    )).toBe(false);
+    // 间隔 15 分钟的循环任务：后一次的送达（发出时刻落在前一次的送达窗内）不能顶替前一次
+    const nextFire = fireAt + 15 * 60_000;
+    const nextDelivered = landedLate({ activeMsg2: { taskId: 't1', sentAt: nextFire + 20_000 }, amsgOccurrenceMs: nextFire });
+    expect(hasDeliveredProactiveNear([nextDelivered], fireAt, 'cid-A')).toBe(false);
+    expect(hasDeliveredProactiveNear([nextDelivered], nextFire, 'cid-A')).toBe(true);
+    // 三样证据都没有
+    expect(hasDeliveredProactiveNear([landedLate({ activeMsg2: { taskId: 't1' } })], fireAt, 'cid-A')).toBe(false);
+  });
 });
 
 describe('detectExpiredOccurrences（排程现状块的作废检出）', () => {
@@ -139,6 +166,16 @@ describe('detectExpiredOccurrences（排程现状块的作废检出）', () => {
       .toEqual([{ id: 'u1', occurrenceMs: fireAt }]);
     // 五小时前聊过的不算——早先的锚点规则会把这一条判成作废，正是跨夜误杀的来源。
     expect(detectExpiredOccurrences({ ...base, messages: [user(fireAt - 5 * H)] })).toEqual([]);
+  });
+  it('刚到点的触发先不判作废：消息可能还在生成或送达路上', () => {
+    const base = { taskUuid: 'u1', policy: 'expire', messages: [user(NOW - 30_000)] };
+    const at = (fireAt: number, recurrenceType: string) =>
+      detectExpiredOccurrences({ ...base, recurrenceType, firstSendTime: new Date(fireAt).toISOString(), nowMs: NOW });
+    // 到点才 20 秒：一次性、循环都不检出
+    expect(at(NOW - 20_000, 'none')).toEqual([]);
+    expect(at(NOW - 20_000, 'daily')).toEqual([]);
+    // 过了等待期仍在窗口内 → 检出
+    expect(at(NOW - EXPIRE_DETECT_SETTLE_MS, 'none')).toEqual([{ id: 'u1', occurrenceMs: NOW - EXPIRE_DETECT_SETTLE_MS }]);
   });
   it('循环：只检出「到点前窗口内在聊」的那几次，id 带 occurrence 时间戳', () => {
     const first = NOW - 30 * H;

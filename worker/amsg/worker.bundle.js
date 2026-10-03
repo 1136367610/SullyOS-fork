@@ -7769,7 +7769,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-10-01.2";
+var AMSG_BUNDLE_VERSION = "2026-10-03";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -7965,6 +7965,7 @@ var PLATE_CONSOLIDATE_RESULT_KIND = "plate-consolidate";
 var plateJobKey = (jobId) => `plate:${jobId}`;
 var isPlateRoomValue = (v) => PLATE_ROOMS.includes(v);
 var asStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === "string") ? v : null;
+var snapshotTimeFields = (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? { snapshotAt: value } : {};
 function parsePlateJobInput(raw) {
   let obj = raw;
   if (typeof raw === "string") {
@@ -8006,7 +8007,8 @@ function parsePlateJobInput(raw) {
     userName: o.userName,
     identityContext: o.identityContext,
     rooms,
-    materials
+    materials,
+    ...snapshotTimeFields(o.snapshotAt)
   };
 }
 function buildPlateJobMessages(job) {
@@ -8031,7 +8033,8 @@ function buildPlateConsolidateResult(args) {
     jobId: args.jobId,
     charId: args.charId,
     items: args.items,
-    rooms: args.rooms.map((r) => ({ room: r.room, entryIds: r.entryIds }))
+    rooms: args.rooms.map((r) => ({ room: r.room, entryIds: r.entryIds })),
+    ...snapshotTimeFields(args.snapshotAt)
   };
 }
 
@@ -8848,7 +8851,7 @@ var plateConsolidateHandler = {
     }
     try {
       await ctx.emitResult({
-        ...buildPlateConsolidateResult({ jobId, charId: job.charId, items, rooms: job.rooms }),
+        ...buildPlateConsolidateResult({ jobId, charId: job.charId, items, rooms: job.rooms, snapshotAt: job.snapshotAt }),
         // 背景工作，整理完不该把人叫回来看。show:false 的 payload 上游只落收件箱、
         // 不发推送，客户端下次上线补收。
         notification: { show: false }
@@ -8888,6 +8891,7 @@ var getKindFireStash = (scratch) => {
 // utils/amsg2ExpireGuard.ts
 var ACTIVE_CHAT_WINDOW_MS = 10 * 6e4;
 var FIRE_GRACE_MS = 9e4;
+var EXPIRE_DETECT_SETTLE_MS = 2 * 6e4;
 var DEFAULT_LOOKBACK_MS = 48 * 36e5;
 var DAY_MS2 = 24 * 36e5;
 var recurrencePeriodMs = (recurrenceType) => recurrenceType === "daily" ? DAY_MS2 : recurrenceType === "weekly" ? 7 * DAY_MS2 : null;

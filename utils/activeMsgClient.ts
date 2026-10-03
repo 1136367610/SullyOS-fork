@@ -2480,7 +2480,8 @@ export const ActiveMsgClient = {
         // worker 满血链路的 onLLMOutput 拿不到任务顶层的 messageType，靠 metadata 透传
         // 还原 push.messageType（老任务没这字段时 worker 回退 'auto'，收侧只展示不路由）。
         amsgMode: task.mode,
-        // 防穿帮闸字段：worker onBeforeFire 与客户端送达兜底都从这里读。
+        // 防穿帮闸字段：worker onBeforeFire 从这里读；amsgClientTaskId 还随 push 落到气泡上，
+        // 排程现状块靠它认「这次触发送达过」。
         // fixed 恒为 force——它走不了 worker 闸（taskNeedsLlm=false），语义统一钉死。
         // recurrenceType / occurrenceMs 不往这儿抄：库会把它们盖在每条 push 顶层，
         // 角色在 fire 里自排的任务也一样有，抄一份反而多一处会漏写的地方。
