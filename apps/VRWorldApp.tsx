@@ -162,9 +162,10 @@ const VRWorldApp: React.FC = () => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [poBadge, setPoBadge] = useState<{ toSend: number; toCollect: number }>({ toSend: 0, toCollect: 0 });
     const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState(false);
+    const [loadError, setLoadError] = useState<string[]>([]);
+    const reloadGeneration = useRef(0);
     const feedLoadGeneration = useRef(0);
-    useEffect(() => () => { feedLoadGeneration.current++; }, []);
+    useEffect(() => () => { feedLoadGeneration.current++; reloadGeneration.current++; }, []);
 
     // 邮局徽标：本地待寄出/待发送 + 后端待收取的回信（best-effort 探测）
     const refreshPoBadge = useCallback(async () => {
@@ -378,8 +379,10 @@ const VRWorldApp: React.FC = () => {
     const reloadAll = useCallback(async () => {
         // Background refresh must not unmount the library and reset its filter/selection.
         // Initial loading is already true until the first load finishes.
+        const generation = ++reloadGeneration.current;
         const results = await Promise.allSettled([loadNovels(), loadFeed()]);
-        setLoadError(results.some(result => result.status === 'rejected'));
+        if (generation !== reloadGeneration.current) return;
+        setLoadError(results.flatMap((result, index) => result.status === 'rejected' ? [index === 0 ? '书库' : '动态'] : []));
         setLoading(false);
     }, [loadNovels, loadFeed]);
 
@@ -595,11 +598,12 @@ const VRWorldApp: React.FC = () => {
 
             {/* 滚动容器不同于浮动 dock：滚到底时最后一条内容贴 viewport bottom = 屏幕底，必须 + safe-bottom 让位 home 条，否则翻页按钮被压（即原 #158 报的问题）。 */}
             <div className="vr-world-scroll relative flex-1 overflow-y-auto vr-reader-scroll px-4 z-10" style={{ paddingTop: '1rem', paddingBottom: `calc(1rem + ${VR_SAFE_BOTTOM})` }}>
-                {loadError && <div role="alert" className="px-5 py-3 text-center text-xs text-white/70">
-                    部分本地数据读取失败，请重试。已有数据不会被清除。
+                {loading && <p role="status" className="px-5 py-2 text-center text-xs text-white/40">正在读取本地书库与动态，其他功能可先使用。</p>}
+                {loadError.length > 0 && <div role="alert" className="px-5 py-3 text-center text-xs text-white/70">
+                    {loadError.join('、')}读取未完成，请重试；持续失败时请关闭其他糯米机页面后重新打开。无需清理记忆或角色数据。
                     <button className="ml-3 underline" onClick={() => void reloadAll()}>重新载入</button>
                 </div>}
-                {loading ? (
+                {loading && tab === 'library' ? (
                     <div className="text-center text-white/40 text-[13px] tracking-[0.2em] py-12" style={{ fontFamily: `'Noto Serif SC',serif` }}>载入彼方…</div>
                 ) : tab === 'sar' ? (
                     <SARWorldPage occupants={occupantsByRoom.sar || []} npcEnabled={sarState.npcPreference === 'show'} caianMet={sarState.caianMet}

@@ -1648,10 +1648,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
         };
 
+        let charactersReadSucceeded = false;
         const [dbChars, dbThemes, dbUser, dbGroups, dbWorldbooks, dbNovels, dbSongs, dbCharGroups] = await Promise.all([
             settle(DB.getAllCharacters().then(chars => {
                 initializeFeedbackInvitation(chars.length, hadPriorFeedbackEvidence);
                 initializeFirstUseGuide(chars.length);
+                charactersReadSucceeded = true;
                 return chars;
             }), 'characters', [] as CharacterProfile[]),
             settle(DB.getThemes(), 'themes', [] as ChatTheme[]),
@@ -1665,7 +1667,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
         let finalChars = dbChars;
 
-        if (!finalChars.some(c => c.id === sullyV2.id)) {
+        // A failed read is not an empty installation: never overwrite the saved Sully with defaults.
+        if (charactersReadSucceeded && !finalChars.some(c => c.id === sullyV2.id)) {
             await DB.saveCharacter(sullyV2);
             finalChars = [...finalChars, sullyV2];
         } else {
@@ -1758,10 +1761,12 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           } else {
             setActiveCharacterId(finalChars[0].id);
           }
-        } else {
+        } else if (charactersReadSucceeded) {
           await DB.saveCharacter(initialCharacter);
           setCharacters([initialCharacter]);
           setActiveCharacterId(initialCharacter.id);
+        } else {
+          addToast('角色资料读取未完成，未写入默认角色。请重新打开应用重试，无需清理数据。', 'error');
         }
 
         setGroups(dbGroups);
