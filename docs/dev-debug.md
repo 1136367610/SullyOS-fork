@@ -292,8 +292,11 @@ LLM 日志里的聊天历史动辄几十条，整段塞进 localStorage 很快�
 
 | 字段 | 在哪条记录上 | 说明 |
 |---|---|---|
-| `trigger` | `runtime-flush-start` | 这趟冲刷是谁发起的。`SW通知` 是推送直达的那条；`本地巡查` 是页面自己隔几秒数收件箱数出来的（见下）；其余（`回到前台` / `启动` / `轮询补收` / `上线补收`…）各自带着更长的固有延迟 |
+| `trigger` | `runtime-flush-start` | 这趟冲刷是谁发起的。`生成前收件` 是聊天组装上下文前的本机收件（当前角色没有待收消息时不留这条）；`SW通知` 是推送直达的那条；`本地巡查` 是页面自己隔几秒数收件箱数出来的（见下）；其余（`回到前台` / `启动` / `轮询补收` / `上线补收`…）各自带着更长的固有延迟 |
 | `waitedMs` | `runtime-inbox-message` | 这条消息在收件箱里躺了多久才轮到它。跟正文长短无关，纯粹是「没人来捞」的时间。算的是它**第一次**落到这台设备的时刻——补收把同一条重新写一遍时会保住这个值，否则它永远显示「刚到」 |
+| `charId` / `waitedMs` | `runtime-before-chat-inbox-timeout` | 生成前收件等待达到 30 秒，本轮先继续，原收件管线仍在工作。这一趟跑完之前，同角色后续的生成不再等、也不再记这条 |
+| `charId` / `count` | `runtime-before-chat-inbox-pending` | 生成前收件结束时，当前角色还有 `count` 条留在收件箱（多段没到齐被扣住，或处理失败等重试）；本轮先继续 |
+| `messageId` / `charId` / `taskUuid` | `runtime-scheduled-delivery-accepted` | 已发送的定时消息进入接收流程，与用户此后是否发言无关。是否最终落库还需接着看后处理与重试记录 |
 | `count` / `posted` / `targets` | `notify-clients`（SW 侧） | SW 喊页面时找到几个页面、各自可见性、发成功几个 |
 | `portAck` / `clientsAck` | `runtime-sw-channel-probe` | 启动时的通道体检。两条路分开测：port 通而 clients 不通 = SW 活着但找不到页面 |
 
