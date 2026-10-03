@@ -23,7 +23,7 @@ function reconcileStoppedReplies(log, rows) {
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.32_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.33_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1235,7 +1235,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.32_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-INNZZFGJ.mjs
+// node_modules/.pnpm/@rei-standard+amsg-server@2.6.0-next.33_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-Q4VQ3NVR.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -2783,6 +2783,7 @@ var DEFAULT_MAX_TOOL_ITERATIONS = 5;
 var DEFAULT_TOTAL_TIMEOUT_MS = 24e4;
 var DEFAULT_MAX_SCHEDULED_TASKS_PER_FIRE = 2;
 var MIN_SCHEDULE_LEAD_MS = 6e4;
+var MAX_DEFER_AFTER_MS = 24 * 60 * 60 * 1e3;
 var SCHEDULABLE_MESSAGE_TYPES = /* @__PURE__ */ new Set(["auto", "prompted", "fixed"]);
 var SCHEDULABLE_RECURRENCE_TYPES = /* @__PURE__ */ new Set(["none", "daily", "weekly"]);
 var SLEEP_BETWEEN_MESSAGES_MS = 1500;
@@ -2817,6 +2818,22 @@ function buildHookTask(task, decryptedPayload) {
     retryCount: task.retry_count ?? 0
   });
 }
+var BAD_BEFORE_FIRE_MESSAGE = "AGENTIC_BAD_BEFORE_FIRE: onBeforeFire must return ChatMessage[] | { messages, maxToolIterations?, totalTimeoutMs?, tools?, toolChoice? } | { skip: true } | { defer: { afterMs } } | null";
+function readDeferAfterMs(defer) {
+  const afterMs = defer && typeof defer === "object" ? (
+    /** @type {any} */
+    defer.afterMs
+  ) : void 0;
+  if (typeof afterMs !== "number" || !Number.isFinite(afterMs) || afterMs <= 0 || afterMs > MAX_DEFER_AFTER_MS) {
+    throw markPermanent(
+      new TypeError(
+        `${BAD_BEFORE_FIRE_MESSAGE}\uFF08defer.afterMs \u5FC5\u987B\u662F\u6709\u9650\u6B63\u6570\uFF0C\u4E14\u4E0D\u8D85\u8FC7 ${MAX_DEFER_AFTER_MS} \u6BEB\u79D2\uFF09`
+      ),
+      "AGENTIC_BAD_BEFORE_FIRE"
+    );
+  }
+  return afterMs;
+}
 function normalizeBeforeFireResult(result) {
   if (Array.isArray(result)) {
     return { messages: result };
@@ -2833,12 +2850,7 @@ function normalizeBeforeFireResult(result) {
       toolChoice: result.toolChoice
     };
   }
-  throw markPermanent(
-    new TypeError(
-      "AGENTIC_BAD_BEFORE_FIRE: onBeforeFire must return ChatMessage[] | { messages, maxToolIterations?, totalTimeoutMs?, tools?, toolChoice? } | { skip: true } | null"
-    ),
-    "AGENTIC_BAD_BEFORE_FIRE"
-  );
+  throw markPermanent(new TypeError(BAD_BEFORE_FIRE_MESSAGE), "AGENTIC_BAD_BEFORE_FIRE");
 }
 function firstPositiveInt(values, fallback) {
   for (const v of values) {
@@ -3173,6 +3185,7 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
   };
   let settledStatus = "failed";
   let settledError = null;
+  let settledRetryAfter = null;
   try {
     const outcome = await runFireChain({
       task,
@@ -3197,7 +3210,11 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
       occurrenceMs
     });
     throwIfCancelled();
-    settledStatus = !outcome.handled ? "not-handled" : outcome.result.status === "skipped" ? "skipped" : "sent";
+    if (!outcome.handled) settledStatus = "not-handled";
+    else if (outcome.result.status === "deferred") {
+      settledStatus = "deferred";
+      settledRetryAfter = outcome.result.retryAfter;
+    } else settledStatus = outcome.result.status === "skipped" ? "skipped" : "sent";
     return outcome;
   } catch (error) {
     if (isCancelled() && !isTaskCancelledError(error)) {
@@ -3217,6 +3234,7 @@ async function runAgenticFire({ task, decryptedPayload, userKey, ctx }) {
       status: settledStatus,
       ...settledStatus === "cancelled" ? { willRetry: false, failureStage: null } : settledStatus === "failed" && ctx._deliveryState ? failureRetryDecision(ctx._deliveryState, settledError) : { willRetry: null, failureStage: null },
       skipReason: settledStatus === "skipped" ? progress.skipReason : null,
+      retryAfter: settledStatus === "deferred" ? settledRetryAfter : null,
       sentCount: progress.sentCount,
       pushedCount: progress.pushedCount,
       total: progress.total,
@@ -3273,6 +3291,27 @@ async function runFireChain({
   if (typeof before === "object" && before.skip === true) {
     progress.skipReason = "before-fire";
     return { handled: true, result: { success: true, messagesSent: 0, status: "skipped", iterations: 0 } };
+  }
+  if (typeof before === "object" && !Array.isArray(before) && before.defer != null) {
+    const afterMs = readDeferAfterMs(before.defer);
+    if (ctx._deferSupported !== true) {
+      throw new DeploymentConfigError(
+        "AGENTIC_DEFER_UNSUPPORTED: onBeforeFire \u8FD4\u56DE\u4E86 { defer }\uFF0C\u4F46\u8FD9\u6761\u6295\u9012\u8DEF\u5F84\u4E0D\u652F\u6301\u63A8\u8FDF\u2014\u2014\u53EA\u6709 runScheduledTick / runTask \u4E14\u9002\u914D\u5668\u5B9E\u73B0\u4E86 claimTask\uFF08\u4EFB\u52A1\u8868\u6709 retry_after \u5217\uFF09\u65F6\u53EF\u7528\uFF0C\u8BF7\u6C42\u5185\u5F53\u573A\u6295\u9012\u7684 instant \u4EFB\u52A1\u4E0D\u53EF\u7528",
+        { code: "AGENTIC_DEFER_UNSUPPORTED" }
+      );
+    }
+    return {
+      handled: true,
+      result: {
+        success: false,
+        deferred: true,
+        // 用真实时钟：这个时刻要落进 retry_after，跟数据库捞取条件里的「现在」比。
+        retryAfter: new Date(Date.now() + afterMs).toISOString(),
+        messagesSent: 0,
+        status: "deferred",
+        iterations: 0
+      }
+    };
   }
   const normalized = normalizeBeforeFireResult(before);
   const maxToolIterations = firstPositiveInt(
@@ -4369,6 +4408,7 @@ async function deliverTasks(ctx, tasks) {
     deletedOnceOffTasks: 0,
     updatedRecurringTasks: 0,
     staleTasks: [],
+    deferredTasks: [],
     cancelledTasks: [],
     reasoningSkippedTasks: [],
     redeliveredTasks: [],
@@ -4662,7 +4702,7 @@ async function deliverTasks(ctx, tasks) {
     const occurrenceMs = Date.parse(task.next_send_at);
     const retryAfterMs = task.retry_after ? Date.parse(task.retry_after) : NaN;
     const notOnFreshRetryChain = (task.retry_count || 0) === 0 || Number.isFinite(retryAfterMs) && Date.now() - retryAfterMs > staleAfterMs;
-    if (Number.isFinite(occurrenceMs) && Date.now() - occurrenceMs > staleAfterMs && notOnFreshRetryChain) {
+    const settleAsStale = async () => {
       try {
         const stateAccessors = createStateAccessors({
           db,
@@ -4722,8 +4762,32 @@ async function deliverTasks(ctx, tasks) {
         results.failedCount++;
         results.failedTasks.push({ taskId: task.id, reason: error.message || "\u8FC7\u671F\u4EFB\u52A1\u5904\u7406\u5931\u8D25", status: "stale_update_failed" });
       }
+    };
+    if (Number.isFinite(occurrenceMs) && Date.now() - occurrenceMs > staleAfterMs && notOnFreshRetryChain) {
+      await settleAsStale();
       return;
     }
+    const handleDeferred = async (retryAfter2) => {
+      const wakeMs = Date.parse(retryAfter2);
+      if (Number.isFinite(occurrenceMs) && wakeMs - occurrenceMs > staleAfterMs) {
+        await settleAsStale();
+        return;
+      }
+      try {
+        const updated = await updateTaskWithLastError(task.id, {
+          retry_after: retryAfter2,
+          lease_until: null
+        });
+        if (rowVanished(updated)) {
+          await recordCancelled(task, "cancelled_mid_delivery");
+          return;
+        }
+        results.deferredTasks.push({ taskId: task.id, retryAfter: retryAfter2 });
+      } catch (error) {
+        results.failedCount++;
+        results.failedTasks.push({ taskId: task.id, reason: error.message || "\u63A8\u8FDF\u5199\u5E93\u5931\u8D25", status: "defer_update_failed" });
+      }
+    };
     let sendResult;
     try {
       sendResult = await processSingleMessage(
@@ -4734,7 +4798,11 @@ async function deliverTasks(ctx, tasks) {
           masterKey,
           webpush: guardWebpushWithLease(ctx.webpush, lease),
           isTaskCancelled: () => lease.lost,
-          signal: lease.signal
+          signal: lease.signal,
+          // onBeforeFire 的 { defer } 要靠 retry_after 这一列落地，没实现
+          // claimTask 的适配器没有这一列（见 lib/agentic-fire.js 的
+          // AGENTIC_DEFER_UNSUPPORTED）。
+          _deferSupported: supportsClaim
         },
         masterKey,
         { userKey, payload: decryptedPayload }
@@ -4752,6 +4820,14 @@ async function deliverTasks(ctx, tasks) {
         userKey,
         { errorCode: error.code || null, permanent: error.permanent === true, pushStatus: null }
       );
+      return;
+    }
+    if (sendResult.deferred) {
+      if (lease.lost) {
+        await recordCancelled(task, "cancelled_mid_delivery");
+        return;
+      }
+      await handleDeferred(sendResult.retryAfter);
       return;
     }
     if (!sendResult.success) {
@@ -4846,6 +4922,9 @@ async function deliverTasks(ctx, tasks) {
       deletedOnceOffTasks: results.deletedOnceOffTasks,
       updatedRecurringTasks: results.updatedRecurringTasks,
       staleTasks: results.staleTasks,
+      // onBeforeFire 返回 { defer } 被推迟的任务（{ taskId, retryAfter }）：这一
+      // 跳没生成也没发，到 retryAfter 之后再问。不计入 successCount / failedCount。
+      deferredTasks: results.deferredTasks,
       // 投递期间行被取消 / 顶替的任务。`cancelled_mid_delivery` = 推送在发出去
       // 之前被拦下；`cancelled_after_delivery` = 推送已经发完，收尾写库才发现
       // 行没了。两种都不计入 successCount / failedCount。
@@ -7111,7 +7190,7 @@ function createClientStateNamespacesHandler(ctx) {
   }
   return { GET };
 }
-var SERVER_VERSION = true ? "2.6.0-next.32" : "0.0.0-dev";
+var SERVER_VERSION = true ? "2.6.0-next.33" : "0.0.0-dev";
 var SERVER_FEATURES = Object.freeze([
   "client-state",
   "client-state-chunking",
@@ -7222,7 +7301,10 @@ var SERVER_FEATURES = Object.freeze([
   // 工厂配置认 maxDeliveryRetries（投递失败的重试次数上限，默认 3）。
   "max-delivery-retries",
   // Per-task pre-commit retry limit and fire receipt retry decision.
-  "max-generation-retries"
+  "max-generation-retries",
+  // onBeforeFire 认 { defer: { afterMs } }：这次不生成，过一会儿再来问（不占重试
+  // 次数）；onFireSettled 的 status 多一种 'deferred'，带 retryAfter。
+  "before-fire-defer"
 ]);
 function createCapabilitiesHandler(ctx) {
   async function GET(url, headers) {
@@ -7769,7 +7851,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-10-01.2";
+var AMSG_BUNDLE_VERSION = "2026-10-03.2";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -7965,6 +8047,7 @@ var PLATE_CONSOLIDATE_RESULT_KIND = "plate-consolidate";
 var plateJobKey = (jobId) => `plate:${jobId}`;
 var isPlateRoomValue = (v) => PLATE_ROOMS.includes(v);
 var asStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === "string") ? v : null;
+var snapshotTimeFields = (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? { snapshotAt: value } : {};
 function parsePlateJobInput(raw) {
   let obj = raw;
   if (typeof raw === "string") {
@@ -8006,7 +8089,8 @@ function parsePlateJobInput(raw) {
     userName: o.userName,
     identityContext: o.identityContext,
     rooms,
-    materials
+    materials,
+    ...snapshotTimeFields(o.snapshotAt)
   };
 }
 function buildPlateJobMessages(job) {
@@ -8031,7 +8115,8 @@ function buildPlateConsolidateResult(args) {
     jobId: args.jobId,
     charId: args.charId,
     items: args.items,
-    rooms: args.rooms.map((r) => ({ room: r.room, entryIds: r.entryIds }))
+    rooms: args.rooms.map((r) => ({ room: r.room, entryIds: r.entryIds })),
+    ...snapshotTimeFields(args.snapshotAt)
   };
 }
 
@@ -8442,6 +8527,19 @@ var AMSG_SLOT_SELF_LOG = "{{AMSG_SELF_LOG}}";
 var AMSG_SLOT_TASK_LIST = "{{AMSG_TASK_LIST}}";
 var AMSG_SLOT_SCENE = "{{AMSG_SCENE}}";
 var AMSG_SLOT_REALTIME_WORLD = "{{AMSG_REALTIME_WORLD}}";
+var AMSG_SLOT_LIVE_CHAT = "{{AMSG_LIVE_CHAT}}";
+var AMSG_SILENT_MARK = "[[SILENT]]";
+var BEFORE_SPEAK_LINES = [
+  "\u3010\u5F00\u53E3\u4E4B\u524D\u3011",
+  `\u5148\u5BF9\u7167\u4E0A\u9762\u7684\u3010\u6700\u8FD1\u5BF9\u8BDD\u4E0A\u4E0B\u6587\u3011\uFF08\u8FDE\u540C\u540E\u9762\u4F60\u81EA\u5DF1\u53D1\u8FC7\u3001\u56DE\u8FC7\u7684\u90A3\u51E0\u53E5\uFF09\u3002${AMSG_SLOT_LIVE_CHAT}`,
+  "\u9ED8\u8BA4\u662F\u7167\u5E38\u8BF4\u4F60\u8981\u8BF4\u7684\u8BDD\u3002\u53EA\u6709\u4E24\u79CD\u60C5\u51B5\u8FD9\u6B21\u4E0D\u8BF4\uFF1A",
+  "1. \u8FD9\u6761\u4EFB\u52A1\u8981\u8BF4\u7684\u4E8B\uFF0C\u5DF2\u7ECF\u5728\u4F60\u4EEC\u7684\u5BF9\u8BDD\u91CC\u53D1\u751F\u8FC7\u3001\u6216\u8005\u5DF2\u7ECF\u804A\u5B8C\u4E86\u3002",
+  "2. \u4F60\u4EEC\u6B63\u804A\u7740\u522B\u7684\uFF0C\u8FD9\u6761\u63D2\u8FDB\u6765\u660E\u663E\u4F1A\u6253\u65AD\u6B63\u5728\u8BF4\u7684\u4E8B\uFF0C\u800C\u4E14\u665A\u70B9\u518D\u8BF4\u4E5F\u4E0D\u803D\u8BEF\u3002",
+  "\u6B63\u804A\u7740\u4E0D\u7B49\u4E8E\u4E0D\u8BF4\uFF1A\u5BF9\u65B9\u6B63\u7B49\u7740\u8FD9\u6761\u3001\u6216\u8005\u5B83\u8DDF\u773C\u4E0B\u804A\u7684\u63A5\u5F97\u4E0A\uFF0C\u5C31\u987A\u7740\u8BDD\u5934\u628A\u5B83\u8BF4\u51FA\u6765\uFF0C\u50CF\u804A\u5929\u91CC\u81EA\u7136\u63A5\u4E0A\u7684\u4E00\u53E5\uFF0C\u522B\u50CF\u53E6\u8D77\u4E00\u6BB5\u7684\u901A\u77E5\u3002",
+  "\u62FF\u4E0D\u51C6\u5C31\u8BF4\u3002\u300C\u6015\u6253\u6270\u300D\u300C\u65F6\u673A\u597D\u50CF\u4E0D\u592A\u5BF9\u300D\u8FD9\u79CD\u7B3C\u7EDF\u7684\u987E\u8651\u4E0D\u7B97\u7406\u7531\u3002",
+  `\u51B3\u5B9A\u4E0D\u8BF4 \u2192 \u6574\u6BB5\u8F93\u51FA\u53EA\u5199 ${AMSG_SILENT_MARK} \u8FD9\u4E00\u4E2A\u6807\u8BB0\uFF0C\u522B\u7684\u4E00\u4E2A\u5B57\u90FD\u4E0D\u8981\u5199\uFF0C\u4E5F\u4E0D\u8981\u89E3\u91CA\u3002`
+];
+var LIVE_CHAT_WINDOW_MS = 10 * 6e4;
 var wallClockPartsInZone = (nowMs, tz) => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz.tzId,
@@ -8510,6 +8608,7 @@ var buildAwayHint = (targetName, timeSinceUser) => {
 };
 var SELF_LOG_MAX_ENTRIES = 8;
 var SELF_LOG_TEXT_MAX = 200;
+var SELF_LOG_REPLY_TEXT_MAX = 1500;
 var createSelfLog = (basePackAt, anchorUserMsgAt = null) => ({
   v: 4,
   basePackAt,
@@ -8541,7 +8640,7 @@ var appendSelfLogTask = (log, task) => ({
   tasks: [...log.tasks.filter((t) => t.taskUuid !== task.taskUuid), task]
 });
 var appendSelfLogEntry = (log, entry) => {
-  const text = entry.text.trim().slice(0, SELF_LOG_TEXT_MAX);
+  const text = entry.text.trim().slice(0, entry.reply ? SELF_LOG_REPLY_TEXT_MAX : SELF_LOG_TEXT_MAX);
   if (!text) return log;
   const alreadyLogged = log.entries.some((e) => e.id === entry.id);
   const kept = log.entries.filter((e) => e.id !== entry.id);
@@ -8584,20 +8683,43 @@ var renderSelfLogBlock = (log, nowMs, tz, maxUnanswered = DEFAULT_MAX_UNANSWERED
       `\uFF08\u5BF9\u65B9\u672A\u56DE\u5E94\u671F\u95F4\u4F60\u5DF2\u8FDE\u7740\u4E3B\u52A8\u627E\u4E86\u5BF9\u65B9 ${sends} \u6B21${limitHalf}\u3002\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\u3002\uFF09`
     ].join("\n");
   }
-  const countLine = sends >= 1 ? `\uFF08\u5BF9\u65B9\u4E00\u76F4\u6CA1\u56DE\u5E94\uFF0C\u4F60\u5DF2\u8FDE\u7740\u4E3B\u52A8\u627E\u4E86\u5BF9\u65B9 ${sends} \u6B21${limitHalf}\u3002\u5F80\u4E0B\u63A5\u7740\u8BF4\uFF0C\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\uFF0C\u4E5F\u522B\u5047\u88C5\u8FD9\u4E9B\u6CA1\u53D1\u751F\u8FC7\u3002\uFF09` : "\uFF08\u8FD9\u51E0\u6761\u662F\u4F60\u53D1\u51FA\u53BB\u7684\uFF0C\u5BF9\u65B9\u8FD8\u6CA1\u56DE\u5E94\u3002\u5F80\u4E0B\u63A5\u7740\u8BF4\uFF0C\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\uFF0C\u4E5F\u522B\u5047\u88C5\u8FD9\u4E9B\u6CA1\u53D1\u751F\u8FC7\u3002\uFF09";
-  return [
-    "",
-    "",
-    "\u3010\u8FD9\u4E4B\u540E\u4F60\u53C8\u53D1\u8FC7\uFF08\u5BF9\u65B9\u8FD8\u6CA1\u56DE\uFF09\u3011",
-    ...fresh.map((e) => `- ${formatAgo(e.at, nowMs, tz)}\u3000${e.text}`),
-    countLine
-  ].join("\n");
+  const replies = fresh.filter((e) => e.reply);
+  const proactive = fresh.filter((e) => !e.reply);
+  const line = (e) => `- ${formatAgo(e.at, nowMs, tz)}\u3000${e.text}`;
+  const out = ["", ""];
+  if (replies.length > 0) {
+    out.push(
+      "\u3010\u8FD9\u4E4B\u540E\u4F60\u56DE\u4E86\u5BF9\u65B9\u3011",
+      ...replies.map(line),
+      "\uFF08\u8FD9\u662F\u4F60\u5BF9\u4E0A\u9762\u5BF9\u8BDD\u91CC\u5BF9\u65B9\u6700\u540E\u90A3\u51E0\u53E5\u7684\u56DE\u590D\uFF0C\u5BF9\u65B9\u5DF2\u7ECF\u770B\u5230\u4E86\u3002\u5F80\u4E0B\u8BF4\u7684\u65F6\u5019\u63A5\u7740\u5B83\uFF0C\u522B\u91CD\u590D\u3002\uFF09"
+    );
+  }
+  if (proactive.length > 0) {
+    if (replies.length > 0) out.push("");
+    out.push(
+      "\u3010\u8FD9\u4E4B\u540E\u4F60\u53C8\u53D1\u8FC7\uFF08\u5BF9\u65B9\u8FD8\u6CA1\u56DE\uFF09\u3011",
+      ...proactive.map(line),
+      sends >= 1 ? `\uFF08\u5BF9\u65B9\u4E00\u76F4\u6CA1\u56DE\u5E94\uFF0C\u4F60\u5DF2\u8FDE\u7740\u4E3B\u52A8\u627E\u4E86\u5BF9\u65B9 ${sends} \u6B21${limitHalf}\u3002\u5F80\u4E0B\u63A5\u7740\u8BF4\uFF0C\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\uFF0C\u4E5F\u522B\u5047\u88C5\u8FD9\u4E9B\u6CA1\u53D1\u751F\u8FC7\u3002\uFF09` : "\uFF08\u8FD9\u51E0\u6761\u662F\u4F60\u53D1\u51FA\u53BB\u7684\uFF0C\u5BF9\u65B9\u8FD8\u6CA1\u56DE\u5E94\u3002\u5F80\u4E0B\u63A5\u7740\u8BF4\uFF0C\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\uFF0C\u4E5F\u522B\u5047\u88C5\u8FD9\u4E9B\u6CA1\u53D1\u751F\u8FC7\u3002\uFF09"
+    );
+  } else if (sends >= 1) {
+    out.push(`\uFF08\u5BF9\u65B9\u672A\u56DE\u5E94\u671F\u95F4\u4F60\u5DF2\u8FDE\u7740\u4E3B\u52A8\u627E\u4E86\u5BF9\u65B9 ${sends} \u6B21${limitHalf}\u3002\u522B\u628A\u5DF2\u7ECF\u8BF4\u8FC7\u7684\u8BDD\u6362\u4E2A\u8BF4\u6CD5\u518D\u8BB2\u4E00\u904D\u3002\uFF09`);
+  }
+  return out.join("\n");
+};
+var renderLiveChatLine = (targetName, lastUserMessageAt, nowMs) => {
+  if (lastUserMessageAt == null) return "";
+  const diff = nowMs - lastUserMessageAt;
+  if (diff < 0 || diff >= LIVE_CHAT_WINDOW_MS) return "";
+  const ago = diff < 6e4 ? "\u521A\u521A" : `${Math.floor(diff / 6e4)} \u5206\u949F\u524D`;
+  return `
+\u4F60\u4EEC\u6B64\u523B\u6B63\u804A\u7740\uFF1A${targetName || "\u5BF9\u65B9"}${ago}\u8FD8\u5728\u8DDF\u4F60\u8BF4\u8BDD\u3002`;
 };
 var fillSlot = (text, slot, value) => text.split(slot).join(value);
 var renderFirePack = (pack, nowMs, taskInstruction, extras) => {
   const tz = { tzId: pack.tzId };
   const currentTime = formatFireTimeFull(nowMs, tz);
-  const diffMinutes = pack.lastUserMessageAt == null ? null : Math.max(0, Math.floor((nowMs - pack.lastUserMessageAt) / 6e4));
+  const lastUserMessageAt = extras?.lastUserMessageAt !== void 0 ? extras.lastUserMessageAt : pack.lastUserMessageAt ?? null;
+  const diffMinutes = lastUserMessageAt == null ? null : Math.max(0, Math.floor((nowMs - lastUserMessageAt) / 6e4));
   const timeSinceUser = formatTimeSinceUser(diffMinutes);
   const awayHint = buildAwayHint(pack.targetName, timeSinceUser);
   let out = pack.template;
@@ -8612,6 +8734,7 @@ var renderFirePack = (pack, nowMs, taskInstruction, extras) => {
     tz,
     extras?.maxUnansweredSends ?? DEFAULT_MAX_UNANSWERED_SENDS
   ));
+  out = fillSlot(out, AMSG_SLOT_LIVE_CHAT, renderLiveChatLine(pack.targetName, lastUserMessageAt, nowMs));
   out = fillSlot(out, AMSG_SLOT_TASK_LIST, extras?.taskListBlock ?? "");
   out = fillSlot(out, AMSG_SLOT_SCENE, renderFireSceneBlock(pack.scene, nowMs, tz, {
     includeClock: extras?.includeClock !== false
@@ -8848,7 +8971,7 @@ var plateConsolidateHandler = {
     }
     try {
       await ctx.emitResult({
-        ...buildPlateConsolidateResult({ jobId, charId: job.charId, items, rooms: job.rooms }),
+        ...buildPlateConsolidateResult({ jobId, charId: job.charId, items, rooms: job.rooms, snapshotAt: job.snapshotAt }),
         // 背景工作，整理完不该把人叫回来看。show:false 的 payload 上游只落收件箱、
         // 不发推送，客户端下次上线补收。
         notification: { show: false }
@@ -8885,27 +9008,39 @@ var getKindFireStash = (scratch) => {
   return typeof stash.kind === "string" ? { kind: stash.kind, state: stash.state } : null;
 };
 
+// utils/amsgFireSkipResult.ts
+var FIRE_SKIP_RESULT_KIND = "fire-skipped";
+var SILENT_REASONS = /* @__PURE__ */ new Set(["schedule-off"]);
+var shouldReportFireSkip = (reason) => !SILENT_REASONS.has(reason);
+function buildFireSkipResult(args) {
+  return {
+    resultKind: FIRE_SKIP_RESULT_KIND,
+    v: 1,
+    charId: args.charId,
+    taskUuid: args.taskUuid,
+    occurrenceMs: args.occurrenceMs,
+    reason: args.reason,
+    ...args.task ? {
+      task: {
+        mode: args.task.mode,
+        ...args.task.promptHint ? { promptHint: args.task.promptHint } : {},
+        recurrenceType: args.task.recurrenceType
+      }
+    } : {}
+  };
+}
+
 // utils/amsg2ExpireGuard.ts
-var ACTIVE_CHAT_WINDOW_MS = 10 * 6e4;
 var FIRE_GRACE_MS = 9e4;
-var DEFAULT_LOOKBACK_MS = 48 * 36e5;
 var DAY_MS2 = 24 * 36e5;
 var recurrencePeriodMs = (recurrenceType) => recurrenceType === "daily" ? DAY_MS2 : recurrenceType === "weekly" ? 7 * DAY_MS2 : null;
-function shouldExpireFire(input) {
-  if (input.policy !== "expire") return false;
-  if (input.occurrenceMs == null) return false;
-  const last = input.lastUserMessageAt;
-  if (last == null) return false;
-  return last > input.occurrenceMs - ACTIVE_CHAT_WINDOW_MS && last <= input.occurrenceMs + ACTIVE_CHAT_WINDOW_MS && last <= input.nowMs;
-}
-var DELIVERED_WINDOW_MS = 30 * 6e4;
 
 // utils/amsg2Tasks.ts
 var shortTaskId = (taskUuid) => taskUuid.slice(0, 8);
 var describeRecurrence = (recurrence) => recurrence === "daily" ? "\u6BCF\u5929" : recurrence === "weekly" ? "\u6BCF\u5468" : "\u4E00\u6B21\u6027";
 var AMSG2_SCHEDULE_SECRECY_NOTE = "\u4E0D\u8981\u5411\u7528\u6237\u590D\u8FF0\u6216\u63D0\u53CA\u8FD9\u4EFD\u6392\u7A0B\u4FE1\u606F\u672C\u8EAB\u7684\u5B58\u5728\u3002";
 var AMSG2_SCHEDULE_NOT_YET_NOTE = "\u6392\u5728\u672A\u6765\u7684\u4E8B\u5230\u70B9\u81EA\u5DF1\u4F1A\u54CD\uFF0C\u4E0D\u7528\u4F60\u73B0\u5728\u63D0\u524D\u66FF\u5B83\u5F00\u53E3\u2014\u2014\u8FD8\u6CA1\u5230\u90A3\u4E2A\u65F6\u523B\u7684\u5C31\u8BA9\u5B83\u5B89\u9759\u5F85\u7740\uFF0C\u522B\u6BCF\u8F6E\u90FD\u62FF\u5B83\u8D77\u8BDD\u5934\u3001\u8FFD\u7740\u95EE\u8FDB\u5C55\u3002\u5BF9\u65B9\u81EA\u5DF1\u63D0\u8D77\uFF0C\u6216\u8005\u771F\u5230\u4E86\u90A3\u4E2A\u70B9\uFF0C\u624D\u662F\u8BF4\u5B83\u7684\u65F6\u5019\u3002";
-var describeExpirePolicy = (policy) => policy === "force" ? "\u5F3A\u5236\u53D1\u9001" : "\u9047\u5FD9\u4F5C\u5E9F";
+var describeExpirePolicy = (policy) => policy === "force" ? "\u5230\u70B9\u5FC5\u53D1" : "\u5230\u70B9\u770B\u60C5\u51B5";
 var describeTaskMode = (task) => {
   if (task.mode === "fixed") return "\u56FA\u5B9A\u6D88\u606F";
   if (task.mode === "prompted") return `\u63D0\u793A\u65B9\u5411\u300C${task.promptHint || ""}\u300D`;
@@ -8955,10 +9090,10 @@ var AMSG_FIRE_CANCEL_TOOL = "cancel_active_message";
 var AMSG_FIRE_RENEW_TOOL = "renew_active_message";
 var MAX_FIRE_SCHEDULES = 2;
 var EXPIRE_POLICY_DESCRIPTION = [
-  "\u9632\u7A7F\u5E2E\u7B56\u7565\u3002",
-  "expire\uFF08\u9ED8\u8BA4\uFF0C\u5927\u591A\u6570\u60C5\u51B5\u7528\u5B83\uFF09\uFF1A\u5230\u70B9\u65F6\u5982\u679C\u6392\u7A0B\u4E4B\u540E\u5BF9\u8BDD\u5DF2\u6709\u65B0\u8FDB\u5C55\u3001\u6216\u7528\u6237\u6B64\u523B\u6B63\u5728\u804A\u5929\uFF0C\u8FD9\u6761\u81EA\u52A8\u4F5C\u5E9F\u2014\u2014\u4E4B\u540E\u4F60\u4F1A\u5728\u6392\u7A0B\u73B0\u72B6\u91CC\u770B\u5230\uFF0C\u7531\u4F60\u51B3\u5B9A\u81EA\u7136\u5E26\u51FA\u3001\u7EED\u671F\u8FD8\u662F\u653E\u5F03\u3002",
+  "\u5230\u70B9\u7B56\u7565\u3002",
+  "expire\uFF08\u9ED8\u8BA4\uFF0C\u5927\u591A\u6570\u60C5\u51B5\u7528\u5B83\uFF09\uFF1A\u5230\u70B9\u65F6\u4F60\u4F1A\u5148\u770B\u4E00\u773C\u6700\u65B0\u7684\u5BF9\u8BDD\u518D\u5F00\u53E3\u2014\u2014\u8FD9\u4EF6\u4E8B\u5DF2\u7ECF\u804A\u8FC7\u4E86\u3001\u6216\u8005\u63D2\u8FDB\u6765\u4F1A\u6253\u65AD\u6B63\u5728\u8BF4\u7684\u4E8B\uFF0C\u8FD9\u6B21\u5C31\u4E0D\u53D1\uFF1B\u6CA1\u53D1\u7684\u4E4B\u540E\u4F60\u4F1A\u5728\u6392\u7A0B\u73B0\u72B6\u91CC\u770B\u5230\uFF0C\u7531\u4F60\u51B3\u5B9A\u81EA\u7136\u5E26\u51FA\u3001\u7EED\u671F\u8FD8\u662F\u653E\u5F03\u3002",
   "\u6311\u8BDD\u9898\u3001\u60F3\u627E\u4EBA\u804A\u5929\u8FD9\u7C7B\u300C\u60F3\u8BF4\u70B9\u4EC0\u4E48\u300D\u7684\u6392\u7A0B\u4E00\u5F8B\u7528\u5B83\uFF1A\u7528\u6237\u4EBA\u90FD\u56DE\u6765\u4E86\uFF0C\u4F60\u8FD8\u7167\u7740\u51E0\u5C0F\u65F6\u524D\u7684\u60F3\u6CD5\u5F00\u53E3\uFF0C\u4F1A\u5F88\u5047\u3002",
-  'force\uFF1A\u4E0D\u7BA1\u7528\u6237\u5728\u4E0D\u5728\u804A\u5929\u90FD\u7167\u53D1\u3002\u7528\u5728\u300C\u5230\u90A3\u4E2A\u70B9\u5FC5\u987B\u8BF4\u8FD9\u4EF6\u5177\u4F53\u7684\u4E8B\u300D\u4E0A\uFF0C\u4E24\u79CD\u6765\u6E90\u90FD\u7B97\u2014\u2014\u7528\u6237\u660E\u786E\u8981\u6C42\u7684\uFF08\u5982"8\u70B9\u53EB\u6211\u8D77\u5E8A"\uFF09\uFF0C\u4EE5\u53CA\u4F60\u81EA\u5DF1\u8BB8\u4E0B\u7684\uFF08\u5982"\u6C64\u7096\u4E0A\u4E86\uFF0C\u4E24\u5C0F\u65F6\u540E\u597D\u4E86\u53EB\u4F60""\u4F60\u90A3\u4E2A\u4F1A\u6211\u5230\u70B9\u63D0\u9192\u4F60"\uFF09\u3002',
+  'force\uFF1A\u51C6\u70B9\u7167\u53D1\uFF0C\u4E0D\u7B49\u4E5F\u4E0D\u8BA9\u3002\u7528\u5728\u300C\u5230\u90A3\u4E2A\u70B9\u5FC5\u987B\u8BF4\u8FD9\u4EF6\u5177\u4F53\u7684\u4E8B\u300D\u4E0A\uFF0C\u4E24\u79CD\u6765\u6E90\u90FD\u7B97\u2014\u2014\u7528\u6237\u660E\u786E\u8981\u6C42\u7684\uFF08\u5982"8\u70B9\u53EB\u6211\u8D77\u5E8A"\uFF09\uFF0C\u4EE5\u53CA\u4F60\u81EA\u5DF1\u8BB8\u4E0B\u7684\uFF08\u5982"\u6C64\u7096\u4E0A\u4E86\uFF0C\u4E24\u5C0F\u65F6\u540E\u597D\u4E86\u53EB\u4F60""\u4F60\u90A3\u4E2A\u4F1A\u6211\u5230\u70B9\u63D0\u9192\u4F60"\uFF09\u3002',
   "\u8FD9\u7C7B\u5151\u73B0\u7684\u662F\u4E00\u4E2A\u5177\u4F53\u627F\u8BFA\uFF0C\u7528\u6237\u4E2D\u9014\u56DE\u6765\u804A\u8FC7\u5929\u4E5F\u4E0D\u5F71\u54CD\u5B83\u8BE5\u54CD\u3002"
 ].join("\n");
 var FIRE_TOOL_DESCRIPTION = [
@@ -14782,12 +14917,13 @@ function processLLMRound(state, llmOutputText, build, mcp, schedule, iteration, 
     build.xhsXsecTokens
   );
   const finishMeta = directives.length > 0 ? { directives, ...xhsSession ? { xhsSession } : {} } : void 0;
-  const segments = sanitizeIntoSegments(cleanedText);
+  const declined = fullText.includes(AMSG_SILENT_MARK);
+  const segments = declined ? [] : sanitizeIntoSegments(cleanedText);
   if (segments.length === 0) {
     const scheduleChanges = directives.filter((d) => d.type === "change_schedule").map((d) => ({ startTime: d.time, activity: d.activity }));
     return {
       decision: "skip-push",
-      reason: finishMeta ? "side-effects-only" : "empty-generation",
+      reason: declined ? "declined" : finishMeta ? "side-effects-only" : "empty-generation",
       ...scheduleChanges.length > 0 ? { scheduleChanges } : {}
     };
   }
@@ -15117,6 +15253,7 @@ var isFcmConfigured = (env) => Boolean(
 
 // worker/amsg/src/index.ts
 var getFireStash = (scratch) => scratch?.fire;
+var REPLY_IN_FLIGHT_DEFER_MS = 6e4;
 var laterOf = (a, b) => a == null ? b : b == null ? a : Math.max(a, b);
 var buildToolCtx = (pack, config) => {
   const char = {
@@ -15249,13 +15386,33 @@ var writeLastSkip = async (writeState, charId, skip) => {
     console.warn("[amsg:skip] \u8DF3\u8FC7\u539F\u56E0\u5199\u5165\u5931\u8D25\uFF08\u8DF3\u8FC7\u672C\u8EAB\u7167\u5E38\u751F\u6548\uFF0C\u53EA\u662F\u9762\u677F\u5C11\u4E00\u53E5\u8BF4\u660E\uFF09", error);
   }
 };
-var recordSkip = async (ctx, charId, reason, occurrenceMs) => writeLastSkip(ctx.writeState, charId, {
-  v: 1,
-  taskUuid: typeof ctx.task.uuid === "string" ? ctx.task.uuid : null,
-  occurrenceMs,
-  reason,
-  skippedAt: ctx.now.getTime()
-});
+var emitFireSkip = async (emitResult, args) => {
+  if (!args.taskUuid || !shouldReportFireSkip(args.reason) || typeof emitResult !== "function") return;
+  try {
+    await emitResult({
+      ...buildFireSkipResult({ ...args, taskUuid: args.taskUuid }),
+      // 角色这次一个字都没说，不该惊动用户：show:false 只落收件箱、不发推送。
+      notification: { show: false }
+    });
+  } catch (error) {
+    console.warn("[amsg:skip] \u300C\u8FD9\u6B21\u6CA1\u53D1\u300D\u6CA1\u80FD\u9001\u56DE\u5BA2\u6237\u7AEF\uFF08\u89D2\u8272\u4E0B\u4E00\u8F6E\u4E0D\u4F1A\u77E5\u9053\u8FD9\u6761\u6CA1\u53D1\uFF09", error);
+  }
+};
+var findTaskBrief = (tasks, taskUuid) => {
+  const task = taskUuid ? tasks.find((t) => t.taskUuid === taskUuid) : void 0;
+  return task ? { mode: task.mode, promptHint: task.promptHint, recurrenceType: task.recurrenceType } : null;
+};
+var recordSkip = async (ctx, charId, reason, occurrenceMs, task) => {
+  const taskUuid = typeof ctx.task.uuid === "string" ? ctx.task.uuid : null;
+  await writeLastSkip(ctx.writeState, charId, {
+    v: 1,
+    taskUuid,
+    occurrenceMs,
+    reason,
+    skippedAt: ctx.now.getTime()
+  });
+  await emitFireSkip(ctx.emitResult, { charId, taskUuid, occurrenceMs, reason, task });
+};
 var readErrorCode = (error) => {
   const code = error?.code;
   return typeof code === "string" && code ? code : null;
@@ -15459,6 +15616,14 @@ var amsgStaleSkip = async (task, info) => {
     skippedCount: info.skippedCount,
     nextSendAtMs: Number.isFinite(nextSendAtMs) ? nextSendAtMs : null
   });
+  if (!isInstantChatTask(meta) && info.occurrenceMs != null) {
+    await emitFireSkip(info.emitResult, {
+      charId,
+      taskUuid: typeof task?.uuid === "string" ? task.uuid : null,
+      occurrenceMs: info.occurrenceMs,
+      reason: "stale"
+    });
+  }
 };
 var attachScheduledTasks = (pushPayloads, tasks) => {
   if (tasks.length === 0 || pushPayloads.length === 0) return pushPayloads;
@@ -15811,18 +15976,12 @@ var amsgHooks = {
       charRows.find((r) => r.key === AMSG_CHAT_PRESENCE_KEY)?.value
     );
     if (!instant && policy === "expire" && isFreshChatPresence(presence, charId, ctx.now.getTime())) {
-      console.log("[amsg:expire-skip]", {
+      console.log("[amsg:defer]", {
         taskId: ctx.task.id,
-        reason: "active-chat-presence",
+        reason: "reply-in-flight",
         presenceActiveAt: presence?.activeAt
       });
-      await recordSkip(
-        ctx,
-        charId,
-        "active-chat-presence",
-        Date.parse(String(ctx.task.nextSendAt)) || ctx.now.getTime()
-      );
-      return { skip: true };
+      return { defer: { afterMs: REPLY_IN_FLIGHT_DEFER_MS } };
     }
     const packRow = charRows.find((r) => r.key === AMSG_FIRE_PACK_KEY);
     if (!packRow) throw fail3("\u4E91\u7AEF\u6CA1\u6709\u8FD9\u4E2A\u89D2\u8272\u7684 fire_pack");
@@ -15846,26 +16005,18 @@ var amsgHooks = {
       throw fail3("\u4EFB\u52A1\u884C next_send_at \u89E3\u6790\u4E0D\u51FA\u89E6\u53D1\u65F6\u523B", { nextSendAt: ctx.task.nextSendAt });
     }
     const presenceLastUserMessageAt = presence?.charId === charId ? presence.lastUserMessageAt : null;
-    const expireInput = {
-      policy,
-      lastUserMessageAt: laterOf(pack.lastUserMessageAt ?? null, presenceLastUserMessageAt),
-      nowMs: ctx.now.getTime(),
-      occurrenceMs
-    };
-    const expireTrace = {
-      taskId: ctx.task.id,
-      // 判定本身已经不看任务类型了（一次性和循环同一条规则），但排查时得认得出是哪种。
-      recurrenceType: ctx.task.recurrenceType,
-      ...expireInput,
-      packLastUserMessageAt: pack.lastUserMessageAt ?? null,
-      presenceLastUserMessageAt
-    };
-    if (!instant && shouldExpireFire(expireInput)) {
-      console.log("[amsg:expire-skip]", { ...expireTrace, reason: "conversation-moved-on" });
-      await recordSkip(ctx, charId, "conversation-moved-on", occurrenceMs);
-      return { skip: true };
+    const lastUserMessageAt = laterOf(pack.lastUserMessageAt ?? null, presenceLastUserMessageAt);
+    if (!instant) {
+      console.log("[amsg:fire-context]", {
+        taskId: ctx.task.id,
+        recurrenceType: ctx.task.recurrenceType,
+        policy,
+        occurrenceMs,
+        nowMs: ctx.now.getTime(),
+        packLastUserMessageAt: pack.lastUserMessageAt ?? null,
+        presenceLastUserMessageAt
+      });
     }
-    if (!instant) console.log("[amsg:expire-pass]", expireTrace);
     if (!instant && typeof taskMeta.amsgTaskInstruction !== "string") {
       throw fail3("\u4EFB\u52A1 metadata \u7F3A amsgTaskInstruction\uFF08\u65E7\u683C\u5F0F\u4EFB\u52A1\uFF09");
     }
@@ -15886,7 +16037,8 @@ var amsgHooks = {
       return { skip: true };
     }
     const storedSelfLog = reconcileStoppedReplies(parseSelfLog(charRows.find((r) => r.key === AMSG_SELF_LOG_KEY)?.value ?? ""), charRows);
-    const selfLog = reconcileSelfLogWithPack(storedSelfLog, pack, expireInput.lastUserMessageAt);
+    const selfLog = reconcileSelfLogWithPack(storedSelfLog, pack, lastUserMessageAt);
+    const taskBrief = findTaskBrief([...pack.pendingTasks, ...selfLog.tasks], ctx.task.uuid);
     const clientTaskId = typeof taskMeta.amsgClientTaskId === "string" ? taskMeta.amsgClientTaskId : "";
     const nowMs = ctx.now.getTime();
     const scheduleOff = !pack.selfScheduleEnabled || limitsRecord?.selfScheduleEnabled === false;
@@ -15898,7 +16050,7 @@ var amsgHooks = {
         recurring,
         scheduleOff
       });
-      await recordSkip(ctx, charId, "schedule-off", occurrenceMs);
+      await recordSkip(ctx, charId, "schedule-off", occurrenceMs, taskBrief);
       return { skip: true };
     }
     const maxUnansweredSends = limits.maxUnansweredSends;
@@ -15909,7 +16061,7 @@ var amsgHooks = {
         sends: countUnansweredSends(selfLog),
         limit: maxUnansweredSends
       });
-      await recordSkip(ctx, charId, "unanswered-limit", occurrenceMs);
+      await recordSkip(ctx, charId, "unanswered-limit", occurrenceMs, taskBrief);
       return { skip: true };
     }
     const occurrenceEntryId = `${clientTaskId || "task"}@${occurrenceMs}`;
@@ -15921,7 +16073,7 @@ var amsgHooks = {
         lastSelfSendAt,
         gapMs: limits.minSendGapMs
       });
-      await recordSkip(ctx, charId, "min-gap", occurrenceMs);
+      await recordSkip(ctx, charId, "min-gap", occurrenceMs, taskBrief);
       return { skip: true };
     }
     if (!instant && recurring && Number.isFinite(limits.recurringStopAfter) && countRecurringSends(selfLog, clientTaskId) >= limits.recurringStopAfter) {
@@ -15931,7 +16083,7 @@ var amsgHooks = {
         sends: countRecurringSends(selfLog, clientTaskId),
         stopAfter: limits.recurringStopAfter
       });
-      await recordSkip(ctx, charId, "recurring-unanswered", occurrenceMs);
+      await recordSkip(ctx, charId, "recurring-unanswered", occurrenceMs, taskBrief);
       return { skip: true };
     }
     const dailyDay = dayKeyInZone(nowMs, pack.userTzId);
@@ -15945,7 +16097,7 @@ var amsgHooks = {
         sentToday,
         cap: limits.dailySendCap
       });
-      await recordSkip(ctx, charId, "daily-limit", occurrenceMs);
+      await recordSkip(ctx, charId, "daily-limit", occurrenceMs, taskBrief);
       return { skip: true };
     }
     const livePendingTasks = [...pack.pendingTasks, ...selfLog.tasks];
@@ -16113,6 +16265,7 @@ ${userHoliday}` });
       selfLog,
       taskListBlock,
       realtimeWorldBlock,
+      lastUserMessageAt,
       // 「此刻在做什么」里的钟点跟今日节日同一个开关：关掉时间感知的角色不该从日程块
       // 读到「23:00」——那正是这个开关要挡的东西。日程内容本身照给。
       includeClock: toolPack.timeAwarenessEnabled
@@ -16251,6 +16404,15 @@ ${userHoliday}` });
         reason: decision.reason,
         skippedAt: Date.now()
       });
+      if (!stash.instant) {
+        await emitFireSkip(ctx.emitResult, {
+          charId: stash.charId,
+          taskUuid: stash.taskUuid,
+          occurrenceMs: stash.occurrenceMs,
+          reason: decision.reason,
+          task: findTaskBrief(stash.pendingTasks, stash.taskUuid)
+        });
+      }
       if (stash.instant && stash.taskUuid && ctx.writeState) {
         await writeChatFail(ctx.writeState, stash.charId, {
           uuid: stash.taskUuid,

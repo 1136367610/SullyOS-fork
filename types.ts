@@ -464,7 +464,7 @@ export interface ActiveMsg2CharacterConfig {
 /** 任务「没了」的回执台账（amsg-local IDB kv，按角色一条数组）。 */
 export interface Amsg2ExpiredNoticeRecord {
   /**
-   * 防穿帮闸作废：一次性任务 = taskUuid，循环任务 = `${taskUuid}:${occurrenceMs}`；
+   * 到点没发：一次性任务 = taskUuid，循环任务 = `${taskUuid}:${occurrenceMs}`；
    * 用户手动取消 = `${taskUuid}:cancelled`（同一条任务可能两件事都发生过，各占一条）。
    */
   id: string;
@@ -474,10 +474,12 @@ export interface Amsg2ExpiredNoticeRecord {
   promptHint?: string;
   recurrenceType: ActiveMsg2Recurrence;
   /**
-   * 这条回执是怎么来的：闸自动作废（缺省）还是用户在面板里手动取消。
-   * 两者给角色的交代不一样——作废可以续期补上，手动取消是用户不要了。
+   * 这条回执是怎么来的：到点没发（缺省）还是用户在面板里手动取消。
+   * 两者给角色的交代不一样——没发的可以续期补上，手动取消是用户不要了。
    */
   kind?: 'expired' | 'user-cancelled';
+  /** 到点没发的原因，云端给的（见 utils/amsgFireSkipResult）。手动取消的没有。 */
+  reason?: import('./utils/amsgFireSkipResult').AmsgFireSkipReason;
   /** 已注入过排程现状块（角色已知情），不再重复注入。 */
   notifiedAt?: number;
   createdAt: number;

@@ -68,6 +68,7 @@ import {
   AMSG_FIRE_PACK_KEY,
   FIRE_PACK_VERSION,
   AMSG_SLOT_AWAY_HINT,
+  BEFORE_SPEAK_LINES,
   AMSG_SLOT_CURRENT_TIME,
   AMSG_SLOT_REALTIME_WORLD,
   AMSG_SLOT_SCENE,
@@ -876,18 +877,8 @@ export const buildFirePack = async (
     '【本次任务】',
     AMSG_SLOT_TASK_INSTRUCTION,
     '',
-    // 「这件事是不是已经聊过了」是语义问题，只有看得到完整对话的角色判得了。代码那道闸
-    // （utils/amsg2ExpireGuard.ts）只判「到点那会儿用户在不在聊天」这一件确定的事——早先
-    // 它还兼管一次性任务的「排完之后用户再开过口就作废」，那条规则没有时间窗，跨夜任务
-    // 几乎必然被误杀，现在整条交给这里。
-    // 判据必须是「这件事发生过没有」这种能对照上下文查证的事实。写成「你觉得合不合适」
-    // 的话，模型会拿「怕打扰」「时机不太对」当理由沉默，主动消息就整体哑掉了。
-    // 一个字都不输出 → worker 走 skip-push 出口：不推送、不占连发额度、面板照实说明。
-    '【开口之前】',
-    '先对照上面的【最近对话上下文】：这条任务要说的事，是不是已经在你们的对话里发生过、或者已经聊完了？',
-    '已经发生过 → 什么都不要输出。一个字都不要写，也不要解释自己为什么不说。这次就当没有这条任务。',
-    '还没发生 → 照常说你要说的话。',
-    '判据只有「这件事发生过没有」这一条。不要因为「怕打扰」「时机好像不太对」而沉默，那些不归你判。',
+    // 到点说不说由角色自己判（见 amsgFirePack 的 BEFORE_SPEAK_LINES）。
+    ...BEFORE_SPEAK_LINES,
     '',
     // recency 末位人声锚：上面【角色系统设定】里已带「回到你自己」钢印，但被任务说明压在后面、
     // 失了 recency。这里在最后一句把它拎回来，让主动消息也从「你这个人」长出来，而不是滑回均值腔。
@@ -2480,7 +2471,8 @@ export const ActiveMsgClient = {
         // worker 满血链路的 onLLMOutput 拿不到任务顶层的 messageType，靠 metadata 透传
         // 还原 push.messageType（老任务没这字段时 worker 回退 'auto'，收侧只展示不路由）。
         amsgMode: task.mode,
-        // 防穿帮闸字段：worker onBeforeFire 与客户端送达兜底都从这里读。
+        // 到点策略字段：worker onBeforeFire 从这里读；amsgClientTaskId 还随 push 落到气泡上，
+        // 是这条任务在客户端的归属键。
         // fixed 恒为 force——它走不了 worker 闸（taskNeedsLlm=false），语义统一钉死。
         // recurrenceType / occurrenceMs 不往这儿抄：库会把它们盖在每条 push 顶层，
         // 角色在 fire 里自排的任务也一样有，抄一份反而多一处会漏写的地方。
