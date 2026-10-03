@@ -1171,7 +1171,7 @@ export const useChatAI = ({
                 }
             }
             // 主动消息 2.0 本地工具：worker 已配置 + 角色没关掉时注入 schedule/cancel/renew/list，
-            // 并注入「排程现状」背景块（常驻能力简介 + 进行中任务 + 作废待处理，角色自行判断怎么接）。
+            // 并注入「排程现状」背景块（常驻能力简介 + 进行中任务 + 到点没发的回执，角色自行判断怎么接）。
             // 是否注入在上面 thinking 门那里就算好了（amsg2ToolsInjected）。
             let amsg2ExpiredIds: string[] = [];
             let amsg2Notices: Amsg2ExpiredNoticeRecord[] = [];
@@ -1179,16 +1179,16 @@ export const useChatAI = ({
                 baseReqBody.tools = [...(baseReqBody.tools || []), ...buildAmsg2Tools(resolveAmsgLimits(char.activeMsg2Config))];
                 if (!baseReqBody.tool_choice) baseReqBody.tool_choice = 'auto';
                 try {
-                    // 回执这半边是「检出 + 落台账」的结果，带副作用，一轮只算一次；
+                    // 回执这半边一轮只读一次台账；
                     // 进行中任务那半边每次发请求现取（见下面的 withAmsg2TaskContext）。
                     const taskContext = await replyStep(async () => collectAmsg2TaskContext(char, userProfile.name));
                     amsg2ExpiredIds = taskContext.expiredIds;
                     amsg2Notices = taskContext.notices;
                 } catch (e) {
                     replyRun.check();
-                    // 挂掉的只是作废回执这半边（它要读历史消息和台账）。进行中清单在内存里，
+                    // 挂掉的只是回执这半边（它要读台账）。进行中清单在内存里，
                     // 照常渲染——角色至少知道自己名下有哪些任务，不至于一问三不知再排一条。
-                    console.warn('[amsg2] 作废回执检出失败，本轮只带进行中清单', e);
+                    console.warn('[amsg2] 回执读取失败，本轮只带进行中清单', e);
                 }
             }
 
@@ -1245,9 +1245,9 @@ export const useChatAI = ({
             // 一台 enabled 的 MCP 服务器，即时对话就永远静默走回本地——设置页亮着
             // 「已开启」、界面毫无异样，用户查无可查。
             if (instantChatRoute) {
-                // 作废回执跟着 chat 段上云：检出（collectAmsg2TaskContext，带落台账的副作用）
-                // 在上面已经跑过了，本地路径靠 withAmsg2TaskContext 注入的排程清单和能力
-                // 简介到点由 worker 的 instant timely block 现算现渲，唯独回执云端没有——
+                // 回执跟着 chat 段上云：台账（collectAmsg2TaskContext）在上面已经读过了。
+                // 本地路径靠 withAmsg2TaskContext 注入的排程清单和能力简介，
+                // 到点由 worker 的 instant timely block 现算现渲，唯独回执云端没有——
                 // 只把这一样单独成块贴上，不带清单不带简介，别和到点渲染的那份撞车。
                 const amsg2NoticesBlock = amsg2ToolsInjected && amsg2Notices.length
                     ? buildAmsg2NoticesText(amsg2Notices, resolveCharTimeZone(char), userProfile.name)

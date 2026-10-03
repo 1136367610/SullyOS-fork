@@ -836,22 +836,6 @@ function isLastChunk(message: ActiveMsg2InboxMessage): boolean {
 }
 
 /**
- * 定时消息落库了：排程现状块若已把这次触发记成作废（消息当时还在路上），撤掉那条回执。
- * 回执 id 的拼法见 Amsg2ExpiredNoticeRecord.id；拿不准是一次性还是循环，两种都试。
- * best-effort：撤不掉只是角色下一轮多交代一句，不影响消息本身。
- */
-const retractExpiredNotice = async (message: ActiveMsg2InboxMessage): Promise<void> => {
-  if (!message.taskUuid) return;
-  const ids = [message.taskUuid];
-  if (typeof message.occurrenceMs === 'number') ids.push(`${message.taskUuid}:${message.occurrenceMs}`);
-  try {
-    await ActiveMsgStore.dropExpiredNotices(message.charId, ids);
-  } catch (error) {
-    log.warn('撤销作废回执失败', { messageId: message.messageId, error });
-  }
-};
-
-/**
  * 认领到新任务之后广播的事件名。detail 只带 charId，监听方（OSContext）自己重读角色、
  * 把新任务合并进内存清单并打脏。事件名和 detail 形状是两侧的约定，改这里要同步改那边。
  */
@@ -1819,7 +1803,6 @@ const flushInboxToChatImpl = async (trigger: FlushTrigger, charId?: string): Pro
       // 走到这里 = 这条真的落进聊天流了（主路径落库完 / 降级存了原稿）。上面每一个
       // continue 都是「没上屏」：跟已有的重了、等前面的分段、压回收件箱重试。
       landedMessageIds.push(message.messageId);
-      if (message.source === 'scheduled') void retractExpiredNotice(message);
 
       // 不管走 post-processing 还是 raw fallback, 单条 inbox message 触发一次 'active-msg-received',
       // 驱动 toast / 未读 / 通知。body 用原文做预览即可。

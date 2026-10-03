@@ -202,21 +202,6 @@ describe('生成前快速收件', () => {
     await flush;
     await flushInboxToChat('本地巡查');
   });
-
-  it('定时消息落库时撤掉台账上对应的作废回执，用户手动取消的回执不动', async () => {
-    const charId = 'prepare-retract';
-    vi.spyOn(ActiveMsgClient, 'ackOutboxMessages').mockResolvedValue(undefined);
-    const notice = { charId, occurrenceMs: 1_000, mode: 'auto', recurrenceType: 'none', createdAt: Date.now() } as any;
-    await ActiveMsgStore.upsertExpiredNotices(charId, [
-      { ...notice, id: 'retract-task', kind: 'expired' },
-      { ...notice, id: 'retract-task:cancelled', kind: 'user-cancelled' },
-    ]);
-    await saveIncoming(charId, { source: 'scheduled', taskUuid: 'retract-task', occurrenceMs: 1_000 });
-    await flushInboxToChat('SW通知');
-    await vi.waitFor(async () => {
-      expect((await ActiveMsgStore.getExpiredNotices(charId)).map(r => r.id)).toEqual(['retract-task:cancelled']);
-    });
-  });
 });
 afterEach(() => { vi.restoreAllMocks(); });
 

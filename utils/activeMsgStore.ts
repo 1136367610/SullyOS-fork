@@ -376,7 +376,7 @@ export const ActiveMsgStore = {
     return getKv<XhsSessionNotes>(`${XHS_SESSION_NOTES_PREFIX}${sessionId}`);
   },
 
-  // ─── 防穿帮闸·作废回执台账 ───
+  // ─── 回执台账（到点没发 / 用户手动取消）───
 
   async getExpiredNotices(charId: string): Promise<Amsg2ExpiredNoticeRecord[]> {
     const list = await getKv<Amsg2ExpiredNoticeRecord[]>(`${EXPIRED_NOTICES_PREFIX}${charId}`);
@@ -401,19 +401,11 @@ export const ActiveMsgStore = {
       const notified = alive.filter((r) => r.notifiedAt);
       next = [...unnotified, ...notified].slice(0, EXPIRED_NOTICES_MAX);
       if (unnotified.length > EXPIRED_NOTICES_MAX) {
-        console.warn('[ActiveMsgStore] 未告知作废回执超上限，最旧的被截断', { charId, dropped: unnotified.length - EXPIRED_NOTICES_MAX });
+        console.warn('[ActiveMsgStore] 未告知回执超上限，最旧的被截断', { charId, dropped: unnotified.length - EXPIRED_NOTICES_MAX });
       }
     }
     await setKv(`${EXPIRED_NOTICES_PREFIX}${charId}`, next);
     return next;
-  },
-
-  /** 这几次触发的消息实际送达了：把台账上对应的作废回执撤掉（用户手动取消的回执不动）。 */
-  async dropExpiredNotices(charId: string, ids: string[]): Promise<void> {
-    const idSet = new Set(ids);
-    const current = await this.getExpiredNotices(charId);
-    const next = current.filter((r) => !(r.kind !== 'user-cancelled' && idSet.has(r.id)));
-    if (next.length !== current.length) await setKv(`${EXPIRED_NOTICES_PREFIX}${charId}`, next);
   },
 
   async markExpiredNoticesNotified(charId: string, ids: string[]): Promise<void> {
