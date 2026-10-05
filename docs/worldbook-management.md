@@ -65,7 +65,7 @@
 
 ### 3D 实验分支对齐（2026-10-05）
 
-本分支沿用 master 的 `25468054`（PR #674）公共管线及其前置世界书修复，不维护第二套 contextRequest/worldbookRequest 组装器。本次仅移植相关管线与调用入口，并非整条分支合并最新 master。
+本分支沿用 master 的 `25468054`（PR #674）公共管线及其前置世界书修复，不维护第二套 contextRequest/worldbookRequest 组装器。随后已完整合并 master（0e8d3534），保留 3D 家园适配与分支功能。
 
 分支已有日程从 IndexedDB 异步读取，因此 `buildCoreContext`、`buildCharacterContext`、`buildCharacterRequest` 返回 Promise，调用时必须 await。世界书解析、消息角色和深度放置仍复用 master 的实现。
 

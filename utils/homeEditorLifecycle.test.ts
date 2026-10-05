@@ -5,7 +5,7 @@ import {it,expect,vi,afterEach} from 'vitest';
 import Home3DView from '../apps/room3d/Home3DView';
 const m=vi.hoisted(()=>({mount:vi.fn(),dispose:vi.fn()}));
 vi.mock('../apps/room3d/editor.js',()=>({mountHomeEditor:m.mount}));
-vi.mock('../utils/blobRef',()=>({useBlobRefUrl:()=>undefined}));
+vi.mock('../utils/blobRef',async original=>({...await original<typeof import('./blobRef')>(),useBlobRefUrl:()=>undefined}));
 vi.mock('../apps/room3d/HomeSocialPanel',()=>({HomeSocialPanel:()=>null}));
 vi.mock('../apps/room3d/HomeLifePanel',()=>({default:()=>null}));
 vi.mock('../apps/room3d/HomeSpeechBubble',()=>({HomeSpeechBubble:()=>null}));

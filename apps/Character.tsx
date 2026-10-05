@@ -1,3 +1,7 @@
+import CharacterApiPanel from '../components/character/CharacterApiPanel';
+import CharacterSettingsSection from '../components/character/CharacterSettingsSection';
+import CharacterStatsPanel from '../components/character/CharacterStatsPanel';
+import { characterRemark } from '../utils/characterRemark';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -13,6 +17,10 @@ import { DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
 import ImpressionPanel from '../components/character/ImpressionPanel';
 import RoomPlatePanel from '../components/character/RoomPlatePanel';
 import MemoryArchivist from '../components/character/MemoryArchivist';
+import { resolveLinkedArchives, useLinkedArchives } from '../utils/memoryPalace/linkedArchive';
+import { updateStoredMemoryNode } from '../utils/memoryPalace/vectorStore';
+import { MemoryNodeDB } from '../utils/memoryPalace/db';
+import { applyLinkedArchiveDeletion, LINKED_ARCHIVE_DELETED, type LinkedArchiveDeletionDetail } from '../utils/memoryPalace/linkedArchiveDeletion';
 import ChibiStudio, { ChibiShelfPanel } from '../components/character/ChibiStudio';
 import TokenImg from '../components/os/TokenImg';
 import { resolveBlobRefsDeep, migrateDataUrlToRef } from '../utils/blobRef';
@@ -62,6 +70,7 @@ const CharacterCard: React.FC<{
     onDelete: (e: React.MouseEvent) => void;
 }> = ({ char, active, onClick, onDelete }) => (
     <div
+        data-guide={char.id === 'preset-sully-v2' ? 'sully-card' : undefined}
         onClick={onClick}
         className={`relative px-4 py-3.5 rounded-3xl border bg-white transition-colors cursor-pointer group shrink-0 shadow-[0_2px_10px_rgba(140,120,200,0.07)] ${
             active ? 'border-violet-300' : 'border-slate-100 hover:border-violet-200'
@@ -114,11 +123,26 @@ const Character: React.FC = () => {
           return next;
       });
   };
-  const [detailTab, setDetailTab] = useState<'identity' | 'memory' | 'impression' | 'plates' | 'chibi'>(() => launchIntent?.openChibiStudio ? 'chibi' : 'identity');
+  const [detailTab, setDetailTab] = useState<'identity' | 'memory' | 'impression' | 'plates' | 'chibi' | 'stats'>(() => launchIntent?.openChibiStudio ? 'chibi' : 'identity');
   // QQ捏人工坊（手办柜）全屏覆盖层
   const [showChibiStudio, setShowChibiStudio] = useState(() => !!launchIntent?.openChibiStudio);
   const [editingId, setEditingId] = useState<string | null>(() => launchIntent?.charId || null);
   const [formData, setFormData] = useState<CharacterProfile | null>(null);
+  const memoryCharacter = characters.find(character => character.id === formData?.id) || formData;
+  const linkedMemoryEnabled = !!memoryCharacter?.memoryPalaceEnabled;
+  const archiveMemories = useLinkedArchives(formData?.id, formData?.memories, linkedMemoryEnabled);
+  const { memoryPalaceConfig, remoteVectorConfig } = useOS();
+  useEffect(() => {
+      const applyDeletion = (event: Event) => {
+          const detail = (event as CustomEvent<LinkedArchiveDeletionDetail>).detail;
+          if (!detail?.nodeId || !['delete', 'keep'].includes(detail.choice)) return;
+          setFormData(previous => previous?.id === detail.charId
+              ? { ...previous, memories: applyLinkedArchiveDeletion(previous.memories || [], detail.nodeId, detail.choice) }
+              : previous);
+      };
+      window.addEventListener(LINKED_ARCHIVE_DELETED, applyDeletion);
+      return () => window.removeEventListener(LINKED_ARCHIVE_DELETED, applyDeletion);
+  }, []);
   const [expandedMountedBookIds, setExpandedMountedBookIds] = useState<Set<string>>(new Set());
   const [isCompressing, setIsCompressing] = useState(false);
   // 头像 URL 输入的 draft, 不逐字 commit 到 formData.avatar —— 否则每输入一个字符,
@@ -566,7 +590,25 @@ const Character: React.FC = () => {
   };
 
   const handleDeleteMemories = (ids: string[]) => { if (!formData) return; handleChange('memories', (formData.memories || []).filter(m => !ids.includes(m.id))); addToast(`已删除 ${ids.length} 条记忆`, 'success'); };
-  const handleUpdateMemory = (id: string, newSummary: string) => { if (!formData) return; handleChange('memories', (formData.memories || []).map(m => m.id === id ? { ...m, summary: newSummary } : m)); addToast('记忆已更新', 'success'); };
+  const handleUpdateMemory = async (id: string, newSummary: string) => {
+      if (!formData) return;
+      const targetId = formData.id;
+      const memory = formData.memories?.find(item => item.id === id);
+      if (linkedMemoryEnabled && memory?.palaceMemoryId) {
+          const source = await MemoryNodeDB.getById(memory.palaceMemoryId);
+          if (!source || source.charId !== targetId) throw new Error('关联的宫殿记忆已不存在，档案文本仍保留；关闭宫殿后可按传统档案编辑');
+          await updateStoredMemoryNode(memory.palaceMemoryId, { content: newSummary }, memoryPalaceConfig.embedding, remoteVectorConfig);
+      }
+      // In traditional mode an edit becomes an independent archive; re-enabling must not undo it.
+      const update = (memories: MemoryFragment[]) => memories.map(item => item.id === id
+          ? { ...item, summary: newSummary, palaceMemoryId: linkedMemoryEnabled ? item.palaceMemoryId : undefined } : item);
+      if (editingIdRef.current === targetId) setFormData(previous => previous?.id === targetId ? { ...previous, memories: update(previous.memories || []) } : previous);
+      else {
+          const latest = (await DB.getAllCharacters()).find(character => character.id === targetId);
+          if (latest) updateCharacter(targetId, { memories: update(latest.memories || []) });
+      }
+      addToast('记忆已更新', 'success');
+  };
 
   /**
    * 按指定日期强制重新总结：读原始聊天记录（忽略 hideBeforeMessageId），LLM 总结，
@@ -658,7 +700,7 @@ const Character: React.FC = () => {
       addToast('核心记忆已删除', 'success');
   };
 
-  const handleExportPreview = () => { if (!formData) return; const mems = formData.memories as any[]; if (!mems || mems.length === 0) { addToast('暂无记忆数据可导出', 'info'); return; } const sortedMemories = [...mems].sort((a, b) => a.date.localeCompare(b.date)); let text = `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}\n\n`; if (formData.refinedMemories) { text += `=== 核心记忆 ===\n`; Object.entries(formData.refinedMemories).sort().forEach(([k, v]) => { text += `[${k}]: ${v}\n`; }); text += `\n=== 详细日志 ===\n`; } let currentYear = '', currentMonth = ''; sortedMemories.forEach(mem => { const match = mem.date.match(/(\d{4})[-/年](\d{1,2})/); if (match) { const y = match[1], m = match[2]; if (y !== currentYear) { text += `\n[ ${y}年 ]\n`; currentYear = y; currentMonth = ''; } if (m !== currentMonth) { text += `\n-- ${parseInt(m)}月 --\n\n`; currentMonth = m; } } text += `${mem.date} ${mem.mood ? `(#${mem.mood})` : ''}\n${mem.summary}\n\n--------------------------\n\n`; }); setExportText(text); setShowExportModal(true); navigator.clipboard.writeText(text).then(() => addToast('内容已自动复制到剪贴板', 'info')).catch(() => {}); };
+  const handleExportPreview = async () => { if (!formData) return; let mems: MemoryFragment[]; try { mems = linkedMemoryEnabled ? await resolveLinkedArchives(formData.id, formData.memories || [], true) : (formData.memories || []); } catch { addToast("读取关联记忆失败，请重试", "error"); return; } if (!mems || mems.length === 0) { addToast('暂无记忆数据可导出', 'info'); return; } const sortedMemories = [...mems].sort((a, b) => a.date.localeCompare(b.date)); let text = `【角色档案】\nName: ${formData.name}\nExported: ${new Date().toLocaleString()}\n\n`; if (formData.refinedMemories) { text += `=== 核心记忆 ===\n`; Object.entries(formData.refinedMemories).sort().forEach(([k, v]) => { text += `[${k}]: ${v}\n`; }); text += `\n=== 详细日志 ===\n`; } let currentYear = '', currentMonth = ''; sortedMemories.forEach(mem => { const match = mem.date.match(/(\d{4})[-/年](\d{1,2})/); if (match) { const y = match[1], m = match[2]; if (y !== currentYear) { text += `\n[ ${y}年 ]\n`; currentYear = y; currentMonth = ''; } if (m !== currentMonth) { text += `\n-- ${parseInt(m)}月 --\n\n`; currentMonth = m; } } text += `${mem.date} ${mem.mood ? `(#${mem.mood})` : ''}\n${mem.summary}\n\n--------------------------\n\n`; }); setExportText(text); setShowExportModal(true); navigator.clipboard.writeText(text).then(() => addToast('内容已自动复制到剪贴板', 'info')).catch(() => {}); };
   const handleExportMemoryFile = async () => {
       if (!exportText) return;
       try {
@@ -1302,14 +1344,15 @@ ${isInitialGeneration ? `
                  <div className="flex flex-col px-5 pt-2 pb-2">
                    <div className="flex justify-between items-center mb-3">
                        <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-white/60 flex items-center gap-1 text-slate-600"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg><span className="text-sm font-medium">列表</span></button>
-                       <button onClick={() => { setActiveCharacterId(formData.id); openApp(AppID.Chat); }} className="text-xs px-3 py-1.5 bg-primary text-white rounded-full font-bold shadow-sm shadow-primary/30 flex items-center gap-1 active:scale-95 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926H16.5a.75.75 0 0 1 0 1.5H3.693l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" /></svg>发消息</button>
+                       <button data-guide={formData.id === 'preset-sully-v2' ? 'sully-message' : undefined} onClick={() => { setActiveCharacterId(formData.id); openApp(AppID.Chat); }} className="text-xs px-3 py-1.5 bg-primary text-white rounded-full font-bold shadow-sm shadow-primary/30 flex items-center gap-1 active:scale-95 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926H16.5a.75.75 0 0 1 0 1.5H3.693l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" /></svg>发消息</button>
                    </div>
-                   <div className="flex gap-6 text-sm font-medium text-slate-400 pl-1">
+                   <div className="flex gap-5 overflow-x-auto whitespace-nowrap no-scrollbar [&>button]:shrink-0 text-sm font-medium text-slate-400 pl-1">
                        <button onClick={() => { setDetailTab('identity'); trackEvent('切换角色详情标签页', { tab: 'identity' }); }} className={`pb-2 transition-colors relative ${detailTab === 'identity' ? 'text-slate-800' : ''}`}>设定{detailTab === 'identity' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full"></div>}</button>
                        <button onClick={() => { setDetailTab('memory'); trackEvent('切换角色详情标签页', { tab: 'memory' }); }} className={`pb-2 transition-colors relative ${detailTab === 'memory' ? 'text-slate-800' : ''}`}>记忆 ({(formData.memories || []).length}){detailTab === 'memory' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full"></div>}</button>
                        <button onClick={() => { setDetailTab('impression'); trackEvent('切换角色详情标签页', { tab: 'impression' }); }} className={`pb-2 transition-colors relative ${detailTab === 'impression' ? 'text-slate-800' : ''}`}>印象{detailTab === 'impression' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full"></div>}</button>
                        <button onClick={() => { setDetailTab('plates'); trackEvent('切换角色详情标签页', { tab: 'plates' }); }} className={`pb-2 transition-colors relative ${detailTab === 'plates' ? 'text-slate-800' : ''}`}>门牌{detailTab === 'plates' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full"></div>}</button>
                        <button onClick={() => { setDetailTab('chibi'); trackEvent('切换角色详情标签页', { tab: 'chibi' }); }} className={`pb-2 transition-colors relative ${detailTab === 'chibi' ? 'text-slate-800' : ''}`}>手办{detailTab === 'chibi' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full"></div>}</button>
+                       <button onClick={() => setDetailTab('stats')} className={`pb-2 transition-colors relative ${detailTab === 'stats' ? 'text-slate-800' : ''}`}>角色统计{detailTab === 'stats' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-full" />}</button>
                    </div>
                  </div>
                </div>
@@ -1321,13 +1364,20 @@ ${isInitialGeneration ? `
                                    <div className="w-full h-full rounded-[2rem] shadow-md bg-white border-4 border-white overflow-hidden relative"><TokenImg value={formData.avatar} className={`w-full h-full object-cover ${isCompressing ? 'opacity-50 blur-sm' : ''}`} alt="A" /></div>
                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                                </div>
-                               <div className="flex-1 space-y-3">
+                               <div className="min-w-0 flex-1 space-y-3">
                                    <input value={formData.name} onChange={(e) => handleChange('name', e.target.value)} className="w-full bg-transparent py-1 text-xl font-medium text-slate-800 border-b border-slate-200" placeholder="名称" />
-                                   <input value={formData.description} onChange={(e) => handleChange('description', e.target.value)} className="w-full bg-transparent py-1 text-sm text-slate-500 border-b border-slate-200" placeholder="描述" />
+                                   <div className="flex min-w-0 items-center gap-2 border-b border-slate-200">
+                                       <input value={characterRemark(formData.description)} onChange={(e) => handleChange('description', e.target.value)} className="min-w-0 flex-1 bg-transparent py-1 text-sm text-slate-500 outline-none focus-visible:ring-1 focus-visible:ring-primary" placeholder="输入备注" aria-label="输入备注" />
+                                       <label title="聊天显示备注" className="relative flex shrink-0 cursor-pointer items-center gap-1.5 py-2 text-[10px] text-slate-400">
+                                           <span>聊天显示</span>
+                                           <input type="checkbox" role="switch" aria-label="聊天显示备注" checked={!!formData.chatShowRemark} onChange={e => handleChange('chatShowRemark', e.target.checked)} className="peer sr-only" />
+                                           <span aria-hidden="true" className="relative h-4 w-7 rounded-full bg-slate-200 transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3" />
+                                       </label>
+                                   </div>
                                    {/* 头像 URL 入口: 与左侧上传文件平级. 走 draft -> 失焦/回车 commit,
                                        避免逐字 commit 导致所有引用 char.avatar 的 <img> 在打字时疯狂
-                                       请求不完整 URL. https URL 会作为 Instant Push 通知图标传到 worker;
-                                       本地上传 (data URL) 仅本地显示, 不进 push payload (data: 被 0.6+ 拒). */}
+                                       请求不完整 URL. https URL 会作为主动消息的通知图标传到 worker;
+                                       本地上传 (data URL) 仅本地显示, 不进 push payload. */}
                                    <input
                                        type="url"
                                        value={avatarUrlDraft}
@@ -1415,6 +1465,7 @@ ${isInitialGeneration ? `
                                 />
                            </div>
 
+                           <CharacterSettingsSection title="时间感知与时区" summary={formData.customTimezoneEnabled ? formData.customTimezone || '自定义时区' : '跟随本机时区'}>
                            {/* 时间感知 & 时区：三个独立开关，可任意组合（聊天时间感知 / 自定义时区 / 线下时间感知） */}
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
                                <div>
@@ -1427,7 +1478,7 @@ ${isInitialGeneration ? `
                                    <div className="flex items-center justify-between gap-3">
                                        <div className="min-w-0">
                                            <p className="text-xs font-bold text-slate-700">聊天 · 时间感知强化</p>
-                                           <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">默认开。开启后角色会记得你们多久没聊、主动贴近真实时间；关掉后这种感觉会变弱。</p>
+                                           <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">默认开。开启后角色会知道现实时间和你们多久没聊；关掉后不再提供现实时间与消息时间戳，更适合架空剧情。</p>
                                        </div>
                                        <button
                                            onClick={() => handleChange('timeAwarenessEnabled', formData.timeAwarenessEnabled === false)}
@@ -1483,6 +1534,9 @@ ${isInitialGeneration ? `
                                </div>
                            </div>
 
+                           </CharacterSettingsSection>
+
+                           <CharacterSettingsSection title="生活记录注入" summary={formData.lifeRecordEnabled ? '已开启' : '未开启'}>
                            {/* 生活记录注入：总开关 + 4 个模块小开关（数据在档案 App「生活记录」里维护） */}
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
                                <div>
@@ -1530,6 +1584,9 @@ ${isInitialGeneration ? `
                                </div>
                            </div>
 
+                           </CharacterSettingsSection>
+
+                           <CharacterSettingsSection title="角色语音音色" summary={formData.voiceProfile?.voiceName || '音色与合成参数'}>
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-3">
                                <div className="flex items-center justify-between">
                                    <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><SpeakerHigh size={12} /> 角色语音音色</label>
@@ -1707,6 +1764,10 @@ ${isInitialGeneration ? `
                                )}
                            </div>
 
+                           </CharacterSettingsSection>
+
+                           <CharacterApiPanel key={formData.id} character={formData} onChange={api => handleChange('dialogueApi', api)} />
+
                            {/* Worldbook Section */}
                            <div>
                                <div className="flex justify-between items-center mb-2 px-1">
@@ -1772,7 +1833,8 @@ ${isInitialGeneration ? `
                                <button onClick={handleExportPreview} className="px-4 py-2 bg-white rounded-full text-xs font-semibold text-slate-500 shadow-sm border border-slate-100">备份</button>
                            </div>
                            <MemoryArchivist
-                               memories={formData.memories || []}
+                               memories={archiveMemories}
+                               linkedMemoryEnabled={linkedMemoryEnabled}
                                refinedMemories={formData.refinedMemories || {}}
                                activeMemoryMonths={formData.activeMemoryMonths || []}
                                charName={formData.name || ''}
@@ -1803,6 +1865,8 @@ ${isInitialGeneration ? `
                    {detailTab === 'chibi' && formData.id && (
                        <ChibiShelfPanel charId={formData.id} onOpen={() => { setShowChibiStudio(true); trackEvent('打开QQ捏人工坊'); }} />
                    )}
+
+                   {detailTab === 'stats' && <CharacterStatsPanel character={formData} user={userProfile} onOpenMemory={() => setDetailTab('memory')} />}
 
                    {detailTab === 'plates' && formData.id && (
                        <RoomPlatePanel charId={formData.id} userName={userProfile.name} />

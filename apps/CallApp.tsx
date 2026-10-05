@@ -1,7 +1,8 @@
+import { resolveDialogueApi } from '../utils/characterApi';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import { canAnalyzeVoiceSource, isVoiceAudioPriming, primeVoiceAudio, voicePlaybackErrorMessage } from '../utils/voicePlayback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Microphone, SpeakerHigh, SpeakerSlash, PhoneDisconnect, Translate, Gear, Clock, CaretLeft, CaretRight, Phone, VideoCamera, VideoCameraSlash, Cube, FolderOpen, FileZip, Moon, Sun, Check } from '@phosphor-icons/react';
+import { Microphone, SpeakerHigh, SpeakerSlash, PhoneDisconnect, Translate, Gear, Clock, CaretLeft, CaretRight, Phone, VideoCamera, VideoCameraSlash, Cube, FolderOpen, FileZip, Moon, Sun, Check, ArrowsClockwise } from '@phosphor-icons/react';
 import { useOS } from '../context/OSContext';
 import { extractContent, safeFetchJson } from '../utils/safeApi';
 import { minimaxFetch } from '../utils/minimaxEndpoint';
@@ -611,6 +612,7 @@ const CallApp: React.FC = () => {
   const userCameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const userCameraStreamRef = useRef<MediaStream | null>(null);
   const userCameraRequestRef = useRef(0);
+  const [userCameraFacing, setUserCameraFacing] = useState<'user' | 'environment'>('user');
   const detectedUserEmotionTimerRef = useRef<number | null>(null);
   const callSetupGuideOpenRef = useRef(false);
   useEffect(() => {
@@ -646,7 +648,7 @@ const CallApp: React.FC = () => {
     clearDetectedUserEmotion();
     releaseUserCameraEmotionDetector();
   };
-  const startUserCamera = async (nextMode: Extract<UserCameraMode, 'emotion' | 'snapshot'>) => {
+  const startUserCamera = async (nextMode: Extract<UserCameraMode, 'emotion' | 'snapshot'>, facing = userCameraFacing) => {
     if (userCameraLoading) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       addToast('当前浏览器不支持摄像头，或页面不是安全连接', 'error');
@@ -654,9 +656,15 @@ const CallApp: React.FC = () => {
     }
     const requestId = ++userCameraRequestRef.current;
     setUserCameraLoading(true);
+    // Mobile devices often cannot open the opposite camera until the old one is released.
+    const previousStream = userCameraStreamRef.current;
+    userCameraStreamRef.current = null;
+    previousStream?.getTracks().forEach(track => track.stop());
+    if (userCameraVideoRef.current) userCameraVideoRef.current.srcObject = null;
+    clearDetectedUserEmotion();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 }, frameRate: { ideal: 15, max: 24 } },
+        video: { facingMode: { ideal: facing }, width: { ideal: 480 }, height: { ideal: 640 }, frameRate: { ideal: 15, max: 24 } },
         audio: false,
       });
       if (requestId !== userCameraRequestRef.current) {
@@ -669,6 +677,8 @@ const CallApp: React.FC = () => {
         if (userCameraStreamRef.current === stream) stopUserCamera();
       }, { once: true });
       userCameraStreamRef.current = stream;
+      const actualFacing = track.getSettings().facingMode;
+      setUserCameraFacing(actualFacing === 'user' || actualFacing === 'environment' ? actualFacing : facing);
       setUserCameraMode(nextMode);
       setShowUserCameraModePicker(false);
       if (nextMode === 'emotion') {
@@ -682,6 +692,7 @@ const CallApp: React.FC = () => {
         releaseUserCameraEmotionDetector();
       }
     } catch (error: any) {
+      if (requestId !== userCameraRequestRef.current) return;
       const denied = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError';
       addToast(denied ? '没有获得摄像头权限' : (error?.message || '摄像头开启失败'), 'error');
       stopUserCamera();
@@ -774,7 +785,7 @@ const CallApp: React.FC = () => {
     try {
       const result = await detectUserCameraEmotion(video);
       // Camera may have been turned off while the three-frame sample was running.
-      if (!result || !userCameraStreamRef.current?.active || userCameraMode !== 'emotion') return '';
+      if (!result || userCameraStreamRef.current !== stream || !stream.active || userCameraMode !== 'emotion') return '';
       revealDetectedUserEmotion(result);
       return buildUserCameraEmotionPrompt(result);
     } catch (error) {
@@ -799,7 +810,7 @@ const CallApp: React.FC = () => {
     if (!video || !userCameraEnabled || !stream) return;
     video.srcObject = stream;
     void video.play().catch(() => { /* muted inline preview can retry after the next user gesture */ });
-  }, [userCameraEnabled, userCameraMode]);
+  }, [userCameraEnabled, userCameraMode, userCameraLoading]);
   useEffect(() => {
     if (viewMode === 'in-call' && callMode === 'video') return;
     if (userCameraMode !== 'off' || userCameraLoading) stopUserCamera();
@@ -1063,7 +1074,7 @@ const CallApp: React.FC = () => {
     const character = selectedChar;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.vrm,.vroid,.zip,model/gltf-binary,application/zip';
+    // iOS 可能无法识别 .vrm 的系统文件类型；不设 accept，选中后再校验扩展名和文件头。
     input.style.display = 'none';
     document.body.appendChild(input);
     const removeInput = () => { if (input.parentElement) input.remove(); };
@@ -1895,8 +1906,8 @@ ${sentencePlan}`;
     includeUserCameraContext = false,
     userCameraSnapshotForTurn?: string,
   ): Promise<ParsedCallReply> => {
-
-    const baseUrl = apiConfig.baseUrl?.replace(/\/+$/, '');
+    const dialogueApi = resolveDialogueApi(apiConfig, selectedChar);
+    const baseUrl = dialogueApi.baseUrl?.replace(/\/+$/, '');
     if (!baseUrl) throw new Error('请先在设置里配置聊天 API URL');
     const userName = userProfile?.name?.trim() || '用户';
     if (selectedChar) {
@@ -1959,15 +1970,15 @@ ${sentencePlan}`;
       purpose: string,
     ) => safeFetchJson(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey || 'sk-none'}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dialogueApi.apiKey || 'sk-none'}` },
       body: JSON.stringify({
-        model: apiConfig.model,
+        model: dialogueApi.model,
         messages: [{ role: 'system', content: nextSystemPrompt }, ...nextMessages],
-        temperature: 0.85,
+        temperature: dialogueApi.temperature ?? 0.85,
         // max_tokens 是 Claude 原生 API 的必填字段；缺了它，OpenAI→Claude 中转会被
         // 上游打回，包成 502 / bad_response_status_code。与私聊 (useChatAI.ts) 对齐。
         max_tokens: 8000,
-        stream: false,
+        stream: dialogueApi.stream ?? false,
       }),
     }, maxRetries, 0, { appName: '电话', charId: selectedChar?.id, charName: selectedChar?.name, purpose });
     let chatData: any;
@@ -3614,7 +3625,13 @@ ${sentencePlan}`;
                   ? fakeUserCameraUrl
                     ? <img src={fakeUserCameraUrl} alt="用户静态画面" className="h-full w-full object-cover" />
                     : <div className="flex h-full w-full items-center justify-center text-[8px] text-white/35">NO IMAGE</div>
-                  : <video ref={userCameraVideoRef} muted playsInline autoPlay className="h-full w-full scale-x-[-1] object-cover" />}
+                  : <video ref={userCameraVideoRef} muted playsInline autoPlay className="h-full w-full object-cover" style={{ transform: userCameraFacing === 'user' ? 'scaleX(-1)' : undefined }} />}
+                {(userCameraMode === 'emotion' || userCameraMode === 'snapshot') && <button
+                  type="button" aria-label="切换前后摄像头" title="切换前后摄像头"
+                  disabled={userCameraLoading}
+                  onClick={() => void startUserCamera(userCameraMode, userCameraFacing === 'user' ? 'environment' : 'user')}
+                  className="absolute right-1 top-1 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white disabled:opacity-40"
+                ><ArrowsClockwise size={19} /></button>}
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/70 to-transparent" aria-hidden />
                 <span
                   className={`absolute left-2 top-2 rounded-full border border-white/15 bg-black/50 px-1.5 py-0.5 text-[6px] font-semibold tracking-[0.14em] backdrop-blur-md ${userCameraMode === 'emotion' ? 'text-emerald-200' : userCameraMode === 'snapshot' ? 'text-violet-200' : 'text-white/70'}`}

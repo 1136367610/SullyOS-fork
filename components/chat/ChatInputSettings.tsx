@@ -27,21 +27,29 @@ const ChatInputSettings: React.FC<ChatInputSettingsProps> = ({ value, onChange, 
                 {
                     key: 'autoReply',
                     label: '发完后自动生成回复',
-                    help: '发过文字、图片或表情后，等输入框没有草稿和光标、加号等底部面板全部收起，再等 2 秒让对方回复。继续输入、打开面板或发送新消息，就重新等待。倒计时可以取消。' + (scope === 'group' ? '群聊沿用本群的导演或轮询模式；退出群聊会取消等待。' : '这项开启时，Instant Push 的发送即回复也会按这里等。'),
+                    help: '发过文字、图片或表情后，等输入框没有草稿和光标、加号等底部面板全部收起，再等 2 秒让对方回复。继续输入、打开面板或发送新消息，就重新等待。倒计时可以取消。' + (scope === 'group' ? '群聊沿用本群的导演或轮询模式；退出群聊会取消等待。' : ''),
                 },
                 {
                     key: 'emojiSuggestions',
                     label: '表情包智能匹配',
                     help: '输入“抱”就会联想名称里有“抱”的表情包，点击候选即可发送。私聊匹配当前角色可见的所有分类，群聊匹配群聊表情库的所有分类，文字草稿会保留。两者共用开关，默认关闭。',
                 },
-            ] as const).map(({ key, label, help }) => (
+                {
+                    key: 'linkCards', label: '分享链接自动转卡片（私聊）',
+                    help: '自动解析抖音、网易云等网页分享链接。关闭后原文和链接直接发给角色，可交给你配置的 MCP 处理；小红书由下面的独立开关控制。卡片也会保留原链接和附带文字。',
+                },
+                {
+                    key: 'xhsCards', label: '小红书链接自动转卡片（私聊）',
+                    help: '独立识别小红书官网和 xhslink.com / xhslink.cn 分享链接。关闭后直接发送原文；不影响角色主动浏览小红书的配置。',
+                },
+            ] as const).filter(item => scope === 'private' || !['linkCards', 'xhsCards'].includes(item.key)).map(({ key, label, help }) => (
                 <div key={key}>
                     <div className="flex items-center gap-1">
                         <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-xs font-bold text-slate-600">
                             <span>{label}</span>
                             <input
                                 type="checkbox"
-                                checked={value[key]}
+                                checked={key === 'linkCards' || key === 'xhsCards' ? value[key] !== false : value[key] === true}
                                 onChange={event => onChange({ ...value, [key]: event.target.checked })}
                                 className="h-5 w-5 shrink-0 cursor-pointer accent-primary"
                             />

@@ -1,4 +1,5 @@
 import {makeDebugLogger} from './devDebug';
+import {resolveDialogueApi} from './characterApi';
 const timingLog=makeDebugLogger('api','Home timing');
 import {awaitHomeStage} from './homeReplyStage';
 import {evaluateHomeReplyEmotion} from './homeReplyEmotion';
@@ -69,7 +70,8 @@ export async function buildHomeConversationPayload(args:HomeReplyRequest){
 
 export async function generateHomeReply(args:HomeReplyRequest):Promise<HomeReply>{
  args={...args,scene:{...args.scene,actions:args.scene.actions.map(action=>({...action}))}};
- const {char,api,scene,signal}=args;
+ const {char,scene,signal}=args;
+ const api=resolveDialogueApi(args.api,char);
  if(!api.baseUrl||!api.model)throw Error('先在系统设置中配置聊天 API');
  const started=performance.now();
  const payload=await buildHomeConversationRequest(args);
@@ -79,7 +81,7 @@ export async function generateHomeReply(args:HomeReplyRequest):Promise<HomeReply
  args.onStage?.('等待角色回复');
  const request=fetch(`${api.baseUrl.replace(/\/+$/,'')}/chat/completions`,{
   method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${api.apiKey||'sk-none'}`},signal,
-  body:JSON.stringify({model:api.model,messages,temperature:.8,max_tokens:2500,stream:false}),
+  body:JSON.stringify({model:api.model,messages,temperature:api.temperature??.8,max_tokens:2500,stream:false}),
   __sullyMeta:{appName:'3D家园',charId:char.id,charName:char.name,purpose:'家园交流'},
  } as RequestInit);
  void evaluateHomeReplyEmotion(args,messages);

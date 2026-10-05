@@ -8,7 +8,7 @@ export enum AppID {
   Gallery = 'gallery',
   Music = 'music',
   Browser = 'browser',
-  ThemeMaker = 'thememaker',
+  ThemeMaker = 'thememaker', // Legacy shortcut ID; opens the embedded bubble maker, not an installed App.
   Appearance = 'appearance',
   Date = 'date',
   User = 'user',
@@ -104,6 +104,7 @@ export interface JournalAppearance {
 }
 
 export interface OSTheme {
+  storyAppearance?: import('./utils/meetingAppearance').MeetingAppearance;
   hue: number;
   saturation: number;
   lightness: number;
@@ -126,6 +127,7 @@ export interface OSTheme {
   skin?: 'default' | 'animalcrossing' | 'mobilegame' | 'tamagotchi' | 'companion';
   /** 默认桌面的视觉版本：纸感是现行默认，nostalgia 是用户主动选择的最初粉绿白玻璃界面。 */
   desktopVariant?: 'paper' | 'nostalgia';
+  desktopClockStyle?: 'serif' | 'bold' | 'system';
   /** 动森皮肤下，聊天 App 是否也跟随换成动森界面。默认 true（undefined 视为 true）。关掉则聊天保持原样式。 */
   acnhChatSync?: boolean;
   launcherWidgetImage?: string; // DEPRECATED: always stripped on load — never renders.
@@ -134,6 +136,9 @@ export interface OSTheme {
   launcherAppOrder?: string[];
   launcherDockOrder?: string[];
   launcherPinwheelOrder?: Array<'music' | 'appsA' | 'appsB' | 'image'>;
+  /** 默认桌面组件可见性；旧存档未设置时保持显示。随主题备份。 */
+  launcherMusicVisible?: boolean;
+  launcherImageVisible?: boolean;
   /** 自定义透明图标是否保留原始轮廓并移除系统圆角底框。默认 false。 */
   preserveCustomIconOutlines?: boolean;
   /** 默认皮肤桌面「正在播放」音乐卡片改用浅色系样式（新安装默认 true）。 */
@@ -189,11 +194,11 @@ export interface OSTheme {
   chatHeaderDensity?: 'compact' | 'default' | 'airy';
   chatStatusStyle?: 'subtle' | 'pill' | 'dot';
   chatSendButtonStyle?: 'circle' | 'pill' | 'minimal';
-  /** Instant Push 用户气泡左侧的"准备中"圆点动画。默认开启。 */
-  chatPendingIndicator?: boolean;
   /** 聊天「白框」自定义 CSS：作用于 .sully-chat-root 下的顶栏、输入栏与消息布局钩子。
    *  可换色 / 贴图 / 改外形 / 挪位；稳定选择器清单见 ChromeCssEditor。 */
   chatChromeCustomCss?: string;
+  /** 心象外观的全局默认值；不包含显示开关或生成提示词。 */
+  chatPsyche?: import('./utils/psycheAppearance').PsycheAppearance;
   /** 全局默认「白框提示音」：某角色未单独设提示音时回落到这里。src 同角色版（内置 key / 音频直链 / data:audio）。 */
   chatSound?: { src: string; volume?: number };
   /** 隐藏顶栏的情绪 buff 栏。 */
@@ -263,6 +268,9 @@ export interface VisionApiConfig {
   model: string;
 }
 
+/** A complete dialogue endpoint, separate from TTS/vision configuration. */
+export type DialogueApiConfig = Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model' | 'stream' | 'temperature'>;
+
 export interface APIConfig {
   baseUrl: string;
   apiKey: string;
@@ -312,35 +320,8 @@ export interface APIConfig {
   temperature?: number;
 }
 
-export interface InstantPushConfig {
-  enabled: boolean;
-  workerUrl: string;        // https://your-instant.workers.dev
-  // VAPID 公私钥已迁移到 utils/pushVapid.ts (push_vapid_v1)，与 Proactive Push
-  // 共享同一份，避免两边互相 unsubscribe 抢同一个 pushManager 订阅。
-  clientToken?: string;     // 对应 Worker 的 AMSG_CLIENT_TOKEN
-  // 发送文本后是否自动触发 AI 回复 (worker 端跑 + push 回写). 仅控制"自动触发"这件事,
-  // 不改变 instant push 本身的开关含义. 关闭时 instant 模式也保留手动 ⚡, 跟本地模式一致.
-  // 缺省 (undefined) 视为关闭 — 避免"启用 instant = 自动回复"的反直觉强绑定.
-  autoTriggerOnSend?: boolean;
-  // 大 payload 的传输方式默认走 multipart。只有连接测试确认 Worker 绑定了可用 D1 后,
-  // 前台才允许用户打开 D1 envelope。
-  useD1BlobStore?: boolean;
-  d1Available?: boolean;
-  d1CheckedAt?: number;
-  d1CheckedWorkerUrl?: string;
-  updatedAt?: number;
-}
-
-export type InstantOversizeTransport = 'multipart' | 'd1';
-
 export type ActiveMsg2Mode = 'fixed' | 'auto' | 'prompted';
 export type ActiveMsg2Recurrence = 'none' | 'daily' | 'weekly';
-
-export interface ActiveMsg2ApiConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
 
 export interface ActiveMsg2GlobalConfig {
   userId: string;
@@ -378,6 +359,17 @@ export interface ActiveMsg2GlobalConfig {
    * 而不是知道它不行；握手时会补探一次，之后就有准数了。
    */
   instantChatSupported?: boolean;
+  /**
+   * 上一次探到的「那台 Worker 贴的是哪一版 bundle」（GET /config-check 的 workerVersion，
+   * 由 ActiveMsgClient.probeInstantChatSupportDetailed / probeWorkerVersion 顺手记下）。
+   *
+   * 和 AMSG_BUNDLE_VERSION 相等 = 那台 Worker 跑的就是本 App 认的这份代码。即时对话里
+   * 需要新协议的回合（SAR 模块生效期的信封回复）靠它判断能不能上云。
+   *
+   * null = 问到了，但老 bundle 不报这个字段（确实旧）；undefined = 还没探过，按放行处理。
+   * 和 instantChatSupported 一样只记探测结果，备份还原时不抄回来。
+   */
+  workerBundleVersion?: string | null;
   /**
    * 上一次探到的「这台 Worker 能不能把 LLM 凭据存成表里的一行」
    * （GET /capabilities 的 features 含 'llm-credentials'，见 ActiveMsgClient.probeLlmCredentialsSupport）。
@@ -449,12 +441,25 @@ export interface ActiveMsg2CharacterConfig {
   maxTokens?: number;
   /**
    * 「我没回的时候，TA 最多连续主动发几条」。0 = 不限；没设 = 默认值
-   * （amsgFirePack.DEFAULT_MAX_UNANSWERED_SENDS）。管的是角色自己排的后续
+   * （amsgLimits.DEFAULT_MAX_UNANSWERED_SENDS）。管的是角色自己排的后续
    * （含 fire 里的自排链），用户在面板里亲手排的任务不受它管；用户一回复就重新计数。
    */
   maxUnansweredSends?: number;
-  useSecondaryApi?: boolean;
-  secondaryApi?: ActiveMsg2ApiConfig;
+  /**
+   * ↓「频率与额度」的其余几项（面板「主动频率」那一页），没设 = 用 utils/amsgLimits 里的默认值。
+   * 两条主动消息之间至少隔几分钟（只管角色自己排的）。0 = 不额外限制。
+   */
+  minSendGapMinutes?: number;
+  /** 每天最多主动发几次（用户手动排的也算，即时对话的回复不算）。0 / 没设 = 不限。 */
+  dailySendCap?: number;
+  /** 每天/每周重复的消息，用户连续几次没回就先停（回话后恢复）。0 = 不停。 */
+  recurringStopAfter?: number;
+  /** 同时最多排着几条（用户和角色共用）。 */
+  maxActiveTasks?: number;
+  /** 角色能不能自己排每天/每周重复的消息。没设 = 不能。 */
+  allowSelfRecurring?: boolean;
+  /** 角色能不能自己排「到点必发」（用户正在聊天也照发）的消息。没设 = 不能。 */
+  allowSelfForce?: boolean;
   lastSyncedAt?: number;
   lastError?: string;
 }
@@ -462,7 +467,7 @@ export interface ActiveMsg2CharacterConfig {
 /** 任务「没了」的回执台账（amsg-local IDB kv，按角色一条数组）。 */
 export interface Amsg2ExpiredNoticeRecord {
   /**
-   * 防穿帮闸作废：一次性任务 = taskUuid，循环任务 = `${taskUuid}:${occurrenceMs}`；
+   * 到点没发：一次性任务 = taskUuid，循环任务 = `${taskUuid}:${occurrenceMs}`；
    * 用户手动取消 = `${taskUuid}:cancelled`（同一条任务可能两件事都发生过，各占一条）。
    */
   id: string;
@@ -472,10 +477,12 @@ export interface Amsg2ExpiredNoticeRecord {
   promptHint?: string;
   recurrenceType: ActiveMsg2Recurrence;
   /**
-   * 这条回执是怎么来的：闸自动作废（缺省）还是用户在面板里手动取消。
-   * 两者给角色的交代不一样——作废可以续期补上，手动取消是用户不要了。
+   * 这条回执是怎么来的：到点没发（缺省）还是用户在面板里手动取消。
+   * 两者给角色的交代不一样——没发的可以续期补上，手动取消是用户不要了。
    */
   kind?: 'expired' | 'user-cancelled';
+  /** 到点没发的原因，云端给的（见 utils/amsgFireSkipResult）。手动取消的没有。 */
+  reason?: import('./utils/amsgFireSkipResult').AmsgFireSkipReason;
   /** 已注入过排程现状块（角色已知情），不再重复注入。 */
   notifiedAt?: number;
   createdAt: number;
@@ -511,61 +518,8 @@ export interface ActiveMsg2InboxMessage {
   processAttempts?: number;
 }
 
-// Phase 2 Round 1 — Instant Push agentic loop session state, written client-side
-// before /instant and consumed by /continue. See plans/instant-push-agentic-loop-phase2.md
-export interface InstantPushOutboundSession {
-  sessionId: string;
-  charId: string;
-  /** Conversation messages snapshot at /instant call time — fed to /continue as agentic-loop history. */
-  messages: any[];
-  /** API credentials needed to resume via /continue when worker calls back. */
-  apiCredentials: { baseUrl: string; apiKey: string; model: string };
-  createdAt: number;
-}
-
-// Phase 2 Round 2 — SW will populate these stores; Round 1 just defines schema (empty).
-export interface InstantPushPendingToolCall {
-  sessionId: string;
-  charId: string;
-  /** OpenAI-shape tool_calls from worker LLM emit, ready to dispatch via agenticTools. */
-  toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
-  /** Pre-tool-call LLM text output, used to prefix assistant-side content if needed. */
-  llmOutputText: string;
-  /**
-   * Agentic-loop iteration that produced this tool_request (0-indexed at worker side, see
-   * amsg-instant SessionContext.iteration). Client POST /continue must use iteration + 1,
-   * worker rejects non-incrementing values with HTTP 400. Default 0 for safety when the
-   * push didn't carry metadata.iteration (e.g. legacy worker).
-   */
-  iteration: number;
-  createdAt: number;
-}
-
-/**
- * SW writes reasoning_buffer when amsg-instant emits ReasoningPush.
- * 0.8.0-next.2 起, ReasoningPush 自带 (messageIndex, totalMessages, chunkIndex,
- * totalChunks) 四个字段 — long reasoning_content 会被 amsg-instant 按 UTF-8
- * 字节自动切多 push (默认 reasoningChunkBytes=2000), 多 push 通过 chunks[]
- * 累积, claimReasoning 按 (messageIndex, chunkIndex) 排序后拼接成完整 reasoning.
- *
- * `reasoningContent` 字段是 claimReasoning 输出 (向后兼容老 Round 1 buffer 形态).
- * `chunks` 字段是 SW 累积形态 (新 push 进来 read-modify-write 追加一条).
- */
-export interface InstantPushReasoningBufferEntry {
-  sessionId: string;
-  charId: string;
-  /** 拼接后的完整 reasoning. claimReasoning 输出时填这个字段; SW 写入时可省略. */
-  reasoningContent?: string;
-  /** SW 累积式 buffer — 每条 ReasoningPush 进来追加一条. */
-  chunks?: Array<{
-    messageIndex: number;
-    chunkIndex: number;
-    reasoningContent: string;
-  }>;
-  receivedAt: number;
-}
-
 export interface ApiPreset {
+  group?: string;
   id: string;
   name: string;
   config: APIConfig;
@@ -585,6 +539,7 @@ export interface CharacterBuff {
 
 // 实时上下文配置 - 让AI角色感知真实世界
 export interface RealtimeConfig {
+    userHolidays?: import('./utils/userHolidays').UserHolidayConfig;
   // 天气配置
   weatherEnabled: boolean;
   weatherApiKey: string;  // OpenWeatherMap API Key（可选；留空走免 key 的 Open-Meteo）
@@ -636,6 +591,7 @@ export interface HotNewsSnapshot {
 }
 
 export interface MemoryPalaceBackupConfig {
+  relativeTimeAnnotations?: boolean;
   embedding: {
     baseUrl: string;
     apiKey: string;
@@ -685,6 +641,8 @@ export interface MemoryFragment {
   date: string;
   summary: string;
   mood?: string;
+  /** Only new automatic archives carry a palace link; summary remains an offline/legacy fallback. */
+  palaceMemoryId?: string;
 }
 
 export interface SpriteConfig {
@@ -703,6 +661,8 @@ export interface CompanionAvatarConfig {
   version: 1;
   /** Shared desktop/video visual source: model uses VRM/Live2D; upload/date use a flat portrait. */
   source: 'model' | 'upload' | 'date';
+  /** Desktop composition is independent for uploaded images and date portraits. */
+  portraitConfigs?: Partial<Record<'upload' | 'date', SpriteConfig>>;
   /** Original PNG / GIF stored in blob_assets. Kept while switching sources. */
   imageRef?: string;
   fileName?: string;
@@ -1241,6 +1201,9 @@ export interface VRWorldNovel {
     updatedAt: number;
 }
 
+/** Lightweight library list entry; fetch the full novel only when opening it. */
+export type VRWorldNovelSummary = Omit<VRWorldNovel, 'segments'> & { segmentCount: number };
+
 export interface VRLibraryCategory { id: string; name: string; }
 
 /** 小说里的一个阅读单元（原文段落块）。 */
@@ -1722,6 +1685,10 @@ export interface WorldCharBeat {
 
 /** 一轮演绎（"观测"或离线 tick 触发，推进半天剧情时间；IndexedDB world_episodes 表）。 */
 export interface WorldEpisode {
+    /** Read-time observation ordinal; does not replace round used by historical message references. */
+    observationNumber?: number;
+    /** 本轮关系变化之前的快照，供重演恢复数值和标签。 */
+    relationshipsBefore?: WorldRelationship[];
     id: string;
     worldId: string;
     /** 第几轮（= 演绎完成后的 storyClock） */
@@ -2735,6 +2702,8 @@ export interface MemoryPalaceWaterlineConfig {
 }
 
 export interface CharacterProfile {
+  /** Local default for this character's dialogue; absent means follow Settings. Never shared in cards. */
+  dialogueApi?: DialogueApiConfig;
   id: string;
   name: string;
   avatar: string;
@@ -2877,6 +2846,8 @@ export interface CharacterProfile {
    * 或 http(s) 图床直链。空 = 默认时段天光。
    */
   companionBackground?: string;
+  /** 陪伴桌面的手动主题色（#rrggbb）；留空时沿用自动取色。随角色备份。 */
+  companionThemeColor?: string;
   /**
    * 触感陪伴桌面的本地反馈包。用户只在设置中主动生成一次；之后每次触碰
    * 都从这里轮播台词与演出，不再逐次请求主聊天 API。
@@ -2896,6 +2867,8 @@ export interface CharacterProfile {
   videoCallPerformancePersona?: string;
   videoCallPerformancePersonaGeneratedAt?: number;
   description: string;
+  /** Only the chat title uses the remark; the canonical name stays unchanged. */
+  chatShowRemark?: boolean;
   systemPrompt: string;
   worldview?: string;
   /** 角色分组：指向 CharacterGroup.id；空或指向已删分组 = 未分组。仅本地组织用，不随角色卡导出 */
@@ -2949,10 +2922,12 @@ export interface CharacterProfile {
   spriteConfig?: SpriteConfig;
   customDateSprites?: string[]; // User-added custom emotion names for date mode (per-character)
   dateLightReading?: boolean;   // Light reading mode for novel/text view in date
+  dateAppearance?: import('./utils/meetingAppearance').MeetingAppearance;
   dateReadingShowAvatars?: boolean; // Show both participants' avatars beside messages in date reading mode
   dateSkinSets?: SkinSet[];     // Multiple skin sets for portrait mode
   activeSkinSetId?: string;     // Currently active skin set ID
   dateStyleConfig?: DateStyleConfig; // 见面模式文风（写作风格 / 叙事人称 / 自定义补充）
+  dateExtraPresets?: Array<{ id: string; name: string; content: string }>; // 当前角色的见面自定义补充预设
   /** 观测协议 OBSERVE：开启后每条回复注入「时间/地点/状态/细节」结构化观测，渲染成全息 HUD（样式/字段可自定义） */
   dateObserve?: DateObserveConfig;
 
@@ -3032,9 +3007,8 @@ export interface CharacterProfile {
       pitch?: number;
   };
 
-  // 时间感知强化：开启（默认）时会向上下文注入「距离上次聊天已过去多久」的强化提示，
-  // 让角色强化时间观念、主动匹配现实世界时间。关掉后不再注入这组提示词
-  // （注意：历史消息本身仍带时间戳，关掉后弱化程度取决于模型自身理解）。
+  // 聊天时间感知：默认开启，注入当前真实时间、历史消息时间戳与互动间隔。
+  // 关闭后不再附加这些现实时间信息；消息存档与界面收发时间不变。
   timeAwarenessEnabled?: boolean;
 
   // 自定义时区（异国恋 / 角色身处异国等场景）。与「时间感知强化」完全独立、可任意组合：
@@ -3043,8 +3017,8 @@ export interface CharacterProfile {
   customTimezoneEnabled?: boolean;
   customTimezone?: string; // IANA 时区 id，如 'Asia/Tokyo'
 
-  // 线下时间感知（约会 / 见面 App）：开启（默认）时向见面 system prompt 注入「当前真实时间」。
-  // 关掉后见面场景不再注入时间，让剧情脱离现实时间线。独立开关。
+  // 线下时间感知（约会 / 见面 App）：默认开启，独立控制见面的当前真实时间、
+  // 历史消息时间戳与互动间隔。关闭后按剧情时间衔接，不按现实间隔跳时。
   dateTimeAwarenessEnabled?: boolean;
 
   // ─── 生活记录注入（档案 App「生活记录」→ 聊天提示词，per-character）───
@@ -3075,12 +3049,6 @@ export interface CharacterProfile {
   proactiveConfig?: {
     enabled: boolean;
     intervalMinutes: number; // 30, 60, 120, 240, etc.
-    useSecondaryApi?: boolean;
-    secondaryApi?: {
-      baseUrl: string;
-      apiKey: string;
-      model: string;
-    };
   };
 
   // 情绪Buff系统
@@ -3930,13 +3898,14 @@ export interface Emoji {
 }
 
 export interface FullBackupData {
+    /** 纯文字备份单独携带收藏索引，不覆盖整个资源库。 */
+    contentFavoritesIndex?: unknown;
     timestamp: number;
     version: number;
     theme?: OSTheme;
     apiConfig?: APIConfig;
     /** 查手机 App 独立 API；null/缺省时跟随聊天默认。 */
     checkPhoneApi?: APIConfig | null;
-    instantPushConfig?: InstantPushConfig;
     pushVapid?: { vapidPublicKey: string; vapidPrivateKey: string; vapidEmail?: string; updatedAt?: number; };
     /**
      * 主动消息 2.0 的全局配置：Worker 地址、共享密钥、一键部署生成的 AMSG_MASTER_KEY、
@@ -4006,6 +3975,8 @@ export interface FullBackupData {
     mcdLocal?: Record<string, string>;         // 麦当劳：token + 启用状态（存 localStorage）
     mcpLocal?: Record<string, string>;         // 通用 MCP：用户自配的服务器列表（存 localStorage）
     chatInputPreferences?: import('./utils/chatInputPreferences').ChatInputPreferences;
+    beautyPreferences?: import('./utils/beautyPreferencesBackup').BeautyPreferencesBackup;
+    beautyAuthorLocal?: import('./utils/beautyAuthorBackup').BeautyAuthorBackup; // 仅个人完整备份，公开美化包不携带
     desktopSkinLocal?: Record<string, string>; // 桌面皮肤偏好：电子宠物/手游风的界面配色 + 看板 banner（存 localStorage；看板图令牌导出时解析为 data URL）
     songs?: SongSheet[]; // Songwriting app data
     
@@ -4023,6 +3994,7 @@ export interface FullBackupData {
     
     mediaAssets?: {
         charId: string;
+        decoration?: import('./utils/decorationMediaBackup').DecorationMediaBackup;
         avatar?: string;
         companionAvatar?: CompanionAvatarConfig;
         companionTouchSettings?: CompanionTouchSettings;

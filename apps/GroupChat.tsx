@@ -1,6 +1,9 @@
+import { resolveDialogueApi } from '../utils/characterApi';
+import {ChatCardSurface} from '../components/chat/ChatCardSurface';
 import { avatarDecorationImageStyle, isAnniversaryFrame } from '../utils/anniversaryGifts';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
+import BlobRefStyle from '../components/chat/BlobRefStyle';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useOS } from '../context/OSContext';
@@ -21,7 +24,7 @@ import { parseDirectorActions, stripSkipMarker, parseGroupTopicBox } from '../ut
 import { GroupPacketMeta, PacketReceiptMeta, ClaimResult, claimPacket, effectivePacketStatus, makePacketMeta } from '../utils/groupChat/redpacket';
 import { messageLogText } from '../utils/groupChat/format';
 import { trackEvent } from '../utils/analytics';
-import { markAmsgStateDirty } from '../utils/amsgStateSync';
+import { markAmsgStateDirty, type AmsgDirtyReason } from '../utils/amsgStateSync';
 import { buildMemberTimeline, DEFAULT_MEMBER_TIMELINE_CAP } from '../utils/groupChat/timeline';
 import { buildEmojiContextStr, buildGroupHistoryBlock, buildDirectorInstruction, buildRoundRobinInstruction, GroupHistoryBlock } from '../utils/groupChat/prompts';
 import { dispatchMemberActions } from '../utils/groupChat/dispatch';
@@ -36,7 +39,8 @@ import { loadChatInputPreferences, saveChatInputPreferences } from '../utils/cha
 import ChatInputSettings from '../components/chat/ChatInputSettings';
 import { useChatAutoReply } from '../hooks/useChatAutoReply';
 import TokenImg from '../components/os/TokenImg';
-import { useBlobRefUrl, isBlobRef, getBlobForRef, migrateDataUrlToRef } from '../utils/blobRef';
+import { ImageViewer } from '../components/chat/ChatImage';
+import { useBlobRefUrl, migrateDataUrlToRef } from '../utils/blobRef';
 import { buildReplySnapshotContent } from '../utils/applyAssistantPostProcessing';
 import ChromeCssEditor from '../components/chat/ChromeCssEditor';
 import WhiteboxSoundEditor from '../components/chat/WhiteboxSoundEditor';
@@ -337,7 +341,7 @@ const GroupMessageItem = React.memo(({
                 return (
                     <div className="relative group cursor-pointer" onClick={(e) => {
                         if (selectionMode) handleClick(e);
-                        else onImageClick(msg.content);
+                        else { e.stopPropagation(); onImageClick(msg.content); }
                     }}>
                         <TokenImg value={msg.content} className="max-w-[200px] max-h-[200px] rounded-xl shadow-sm border border-black/5" loading="lazy" />
                     </div>
@@ -460,7 +464,7 @@ const GroupMessageItem = React.memo(({
                         <span className="sully-chat-message-sender text-[10px] text-slate-400 ml-1 mb-1">{name}</span>
                     )}
                     <div className={selectionMode ? 'pointer-events-none' : ''}>
-                        {renderContent()}
+                        <ChatCardSurface message={msg}>{renderContent()}</ChatCardSurface>
                     </div>
                     {isLastInGroup && showTimestamp !== 'never' && (
                         <span className={`absolute top-full ${isUser ? 'right-0' : 'left-0'} mt-0.5 px-1 text-[9px] text-slate-400/80 font-medium whitespace-nowrap pointer-events-none ${showTimestamp === 'hover' ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}`}>{timeStr}</span>
@@ -520,10 +524,10 @@ const GroupChat: React.FC = () => {
     // 历史里写卡片 —— 两者都是主动消息 2.0 云端快照（fire_pack）的素材。群里有事就给成员
     // 逐个打脏，不然角色到点还活在上一次私聊那会儿的群里。同一轮里的多次调用会在微任务内
     // 合并成一次上传，没开主动消息的成员被 markAmsgStateDirty 内部的门筛掉。
-    const markGroupMembersDirty = useCallback((memberIds: string[]) => {
+    const markGroupMembersDirty = useCallback((memberIds: string[], reason: AmsgDirtyReason = 'refresh') => {
         for (const memberId of memberIds) {
             const member = charactersRef.current.find(c => c.id === memberId);
-            if (member) markAmsgStateDirty({ char: member, userProfile, groups, realtimeConfig });
+            if (member) markAmsgStateDirty({ char: member, userProfile, groups, realtimeConfig }, reason);
         }
     }, [userProfile, groups, realtimeConfig]);
 
@@ -904,6 +908,11 @@ const GroupChat: React.FC = () => {
         setMessages(remaining);
         setTotalMsgCount(remaining.length);
 
+        // 群里说过的话会进每个成员私聊 fire_pack 的【群聊背景】块，所以清空群聊之后，
+        // 成员在云端那份快照里还带着这段刚被删掉的群聊。这条路以前一次打脏都没有，
+        // 用 invalidate 是因为没有待触发任务的成员轮不到重传，普通打脏会被门丢掉。
+        markGroupMembersDirty(activeGroup.members || [], 'invalidate');
+
         addToast(`已清理 ${msgsToDelete.length} 条记录${preserveContext ? ' (保留最近10条)' : ''}`, 'success');
         trackEvent('清空群聊记录', { preserve: preserveContext ? 'on' : 'off' });
         setModalType('none');
@@ -1015,17 +1024,9 @@ const GroupChat: React.FC = () => {
         setModalType('packet-detail');
     }, []);
 
-    // 点图看大图：新标签页只认得真正的 URL，blobref 令牌得先换成 objectURL 再开
-    // （data: 顶层导航被浏览器挡，只能走 objectURL）。开完不立刻回收——新标签页还在
-    // 用它加载；留一分钟再 revoke，图早读完了，也不至于把整张图一直挂在内存里。
-    const handleGroupImageClick = useCallback(async (url: string) => {
-        if (!isBlobRef(url)) { window.open(url, '_blank'); return; }
-        const blob = await getBlobForRef(url);
-        if (!blob) { addToast('图片数据已丢失', 'error'); return; }
-        const objectUrl = URL.createObjectURL(blob);
-        window.open(objectUrl, '_blank');
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-    }, [addToast]);
+    // 应用内预览，避免移动浏览器打开 blob 新页时白屏或被拦截。
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const handleGroupImageClick = useCallback((url: string) => setPreviewImage(url), []);
     const handleGroupReply = useCallback((target: Message) => { setReplyTarget(target); trackEvent('引用回复一条群消息'); }, []);
 
     // 用户抢/收/退：updater 内重跑状态机（以库内最新 claims 判重，防与 AI 派发并发双写）
@@ -1452,10 +1453,10 @@ ${memberTimeline || '(暂无互动记录)'}
                 });
             }
 
-            // 两层容错解析（严格 JSON → 逐对象抢救），两层皆空且模型确实吐了内容
+            // 严格 JSON → 逐对象抢救 → 按当前群成员姓名恢复掉格式的正文。
             // 时明确提示用户，不再"正在输入…"消失后什么都不发生
             const rawContent = data.choices?.[0]?.message?.content ?? '';
-            const actions = parseDirectorActions(rawContent);
+            const actions = parseDirectorActions(rawContent, groupMembers);
             if (actions.length === 0 && String(rawContent).trim()) {
                 console.error('Director Parse Error', rawContent);
                 addToast('AI 输出格式无法解析，请重试', 'error');
@@ -1499,10 +1500,6 @@ ${memberTimeline || '(暂无互动记录)'}
     const triggerRoundRobin = async (currentMsgs: Message[]) => {
 
         if (!activeGroup) return;
-        if (!apiConfig.apiKey) {
-            addToast('请先在设置里填好 API', 'error');
-            return;
-        }
         setIsTyping(true);
         const abort = new AbortController();
         abortRef.current = abort;
@@ -1518,6 +1515,8 @@ ${memberTimeline || '(暂无互动记录)'}
             for (const member of groupMembers) {
                 if (abort.signal.aborted) break;
                 try {
+                    const dialogueApi = resolveDialogueApi(apiConfig, member);
+                    if (!dialogueApi.baseUrl || !dialogueApi.model) throw new Error("请配置该角色或设置中的 API");
                     // 每位成员基于"此刻"的群历史构建上下文——包含本轮先发言成员的新消息
                     const { header, sharedScene } = buildGroupSystemHeader(roundMsgs, groupMembers);
                     const memberBlock = await buildMemberBlock(member, roundMsgs, sharedScene);
@@ -1542,12 +1541,13 @@ ${memberTimeline || '(暂无互动记录)'}
                     const prompt = `${header}${memberBlock}\n\n${buildRoundRobinInstruction(member.name, { ...history, text: '（见下方独立消息历史）' }, emojiContextStr)}${htmlPromptExt}\n`;
 
                     const data = await completeGroupChatWithMcp({
-                        url: `${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`,
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
+                        url: `${dialogueApi.baseUrl.replace(/\/+$/, '')}/chat/completions`,
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dialogueApi.apiKey || 'sk-none'}` },
                         body: {
-                            model: apiConfig.model,
+                            model: dialogueApi.model,
                             messages: buildGroupRequestMessages([member], prompt, history),
-                            temperature: 0.9,
+                            temperature: dialogueApi.temperature ?? 0.9,
+                            stream: dialogueApi.stream ?? false,
                             max_tokens: 2000
                         },
                         groupId: activeGroup.id,
@@ -1570,12 +1570,7 @@ ${memberTimeline || '(暂无互动记录)'}
                         });
                     }
 
-                    let text = String(data.choices?.[0]?.message?.content ?? '').trim();
-                    // 剥模型自作主张加的名字前缀（提示词禁止了，但仍要兜底）
-                    if (text.startsWith(`${member.name}:`) || text.startsWith(`${member.name}：`)) {
-                        text = text.slice(member.name.length + 1).trim();
-                    }
-                    const { skipped, content } = stripSkipMarker(text);
+                    const { skipped, content } = stripSkipMarker(String(data.choices?.[0]?.message?.content ?? ''), member.name);
                     if (skipped) continue; // 本轮潜水
 
                     await dispatchMemberActions([{ charId: member.id, content }], {
@@ -1769,8 +1764,8 @@ ${memberTimeline || '(暂无互动记录)'}
             {/* 外观 App 的全局聊天细节与私聊共用同一份生成 CSS。 */}
             {groupFineTuneCss && <style>{groupFineTuneCss}</style>}
             {/* 白框自定义 CSS：全局默认在前、群专属在后（后者叠加覆盖）。作用于 .sully-chat-* 各零件。 */}
-            {osTheme.chatChromeCustomCss && <style>{osTheme.chatChromeCustomCss}</style>}
-            {activeGroup?.chromeCustomCss && <style>{activeGroup.chromeCustomCss}</style>}
+            {osTheme.chatChromeCustomCss && <BlobRefStyle css={osTheme.chatChromeCustomCss}/>}
+            {activeGroup?.chromeCustomCss && <BlobRefStyle css={activeGroup.chromeCustomCss}/>}
             {/* 气泡工坊 CSS 排在白框之后，与私聊优先级一致；每套成员主题都限定在自己的消息上。 */}
             {groupBubbleCustomCss && <style>{groupBubbleCustomCss}</style>}
             <style>{`
@@ -1935,6 +1930,7 @@ ${memberTimeline || '(暂无互动记录)'}
 
             {/* 输入区 — 复用私聊 ChatInputArea（输入/表情面板/多选删除随 OS 外观设置），
                 actions 面板整体替换为群聊自己的 4 格 */}
+            {previewImage && <ImageViewer value={previewImage} fallback={previewImage} onClose={() => setPreviewImage(null)} />}
             <ChatInputArea
                 input={input}
                 setInput={setInput}

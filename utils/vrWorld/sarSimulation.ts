@@ -1,3 +1,4 @@
+import { resolveDialogueApi } from '../characterApi';
 import type { APIConfig, CharacterProfile, GroupProfile, Message, RealtimeConfig, UserProfile } from '../../types';
 import { findSARPendingReply, isSARDeletedReply, replaceSARSimulationReply, resolveSARReplyRetry } from './sarSimulationEdits';
 import { DB } from '../db';
@@ -7,6 +8,7 @@ import { safeFetchJson } from '../safeApi';
 import { getSARModuleById, readSARGachaState, type SARModuleDefinition } from './sarGacha';
 import { getVRApi, logVRApiCall } from './vrApi';
 import { latestSARDirectorState, normalizeSARDirectorState, SAR_NARRATIVE_RULES, type SARDirectorState } from './sarNarrative';
+import { parseMarketReplyJson } from './marketReplyJson';
 
 export const SAR_SIMULATION_STORAGE_KEY = 'vr_sar_simulations_v1';
 export const SAR_SIMULATION_MAX_INTERACTIONS = 50;
@@ -69,6 +71,7 @@ export type SARIdentityCard = {
     id: string;
     charId: string;
     charName: string;
+    /** 仅兼容旧档；新卡不复制头像，显示时按 charId 读取角色资料。 */
     charAvatar?: string;
     variantId: string;
     storyId: string;
@@ -77,6 +80,8 @@ export type SARIdentityCard = {
     profile: SARIdentityProfile;
     /** v1 推演蓝图迁移而来，原始资料没有独立钢印/代价字段。 */
     legacy?: boolean;
+    /** Retryable deletion across localStorage (index) and IndexedDB (story text). */
+    deletionPending?: boolean;
 };
 
 /** 身份卡可以长期收藏；每一次五十轮生命则是独立实例。 */
@@ -122,6 +127,11 @@ const parseJsonCandidates = (raw: string) => {
     return candidates;
 };
 
+const parseSimulationJson = (candidate: string): any => {
+    try { return JSON.parse(candidate); }
+    catch { return parseMarketReplyJson(candidate); }
+};
+
 export type SARSimulationReply = {
     /** 本轮可感知的旁白；安静的关系场景允许为空。 */
     worldNarration: string;
@@ -138,7 +148,7 @@ export type SARSimulationReply = {
 export const parseSARSimulationReply = (raw: string): SARSimulationReply | null => {
     for (const candidate of parseJsonCandidates(raw)) {
         try {
-            const parsed = JSON.parse(candidate);
+            const parsed = parseSimulationJson(candidate);
             const narration = cleanText(parsed?.worldNarration ?? parsed?.world ?? parsed?.narrator ?? parsed?.gm ?? parsed?.director, 2400);
             const worldNarration = narration === '必要旁白，或空字符串' ? '' : narration;
             const character = cleanText(parsed?.character ?? parsed?.char ?? parsed?.reply, 12000);
@@ -163,7 +173,7 @@ export const getSARWorldNarration = (message: Pick<Message, 'metadata'>) =>
 export const parseSARIdentityProfile = (raw: string): SARIdentityProfile | null => {
     for (const candidate of parseJsonCandidates(raw)) {
         try {
-            const parsed = JSON.parse(candidate);
+            const parsed = parseSimulationJson(candidate);
             const result: SARIdentityProfile = {
                 title: cleanText(parsed?.title, 80),
                 logline: cleanText(parsed?.logline, 240),
@@ -225,7 +235,6 @@ const migrateLegacyRecord = (record: any): { card: SARIdentityCard; run: SARSimu
             id: cardId,
             charId: record.charId,
             charName: cleanText(record.charName, 100) || '未命名角色',
-            charAvatar: typeof record.charAvatar === 'string' ? record.charAvatar : undefined,
             variantId: record.variantId,
             storyId: record.storyId,
             createdAt: now,
@@ -281,19 +290,50 @@ export const readSARSimulationState = (storage: StorageLike | undefined = browse
 };
 
 export const writeSARSimulationState = (state: SARSimulationState, storage: StorageLike | undefined = browserStorage()) => {
-    const normalized: SARSimulationState = { version: 2, cards: state.cards.slice(0, 100), runs: state.runs.slice(0, 160) };
-    try { storage?.setItem(SAR_SIMULATION_STORAGE_KEY, JSON.stringify(normalized)); } catch { /* ignore */ }
+    // Avatars belong to CharacterProfile. Drop all legacy copies (including
+    // links/blobrefs), and resolve the current character by charId in the UI.
+    const cards = state.cards.slice(0, 100).map(card => {
+        const { charAvatar, ...compact } = card;
+        return compact;
+    });
+    const normalized: SARSimulationState = { version: 2, cards, runs: state.runs.slice(0, 160) };
+    try {
+        if (!storage) throw new Error('Storage unavailable');
+        storage.setItem(SAR_SIMULATION_STORAGE_KEY, JSON.stringify(normalized));
+    } catch {
+        throw new Error('异格档案保存失败，本地存储可能已满或不可用。请先备份数据并释放空间，再重试。');
+    }
     return normalized;
 };
+
+export class SARIdentitySaveError extends Error {
+    constructor(public card: SARIdentityCard, cause: unknown) {
+        super(cause instanceof Error ? cause.message : '异格档案保存失败');
+        this.name = 'SARIdentitySaveError';
+    }
+}
 
 export const saveSARIdentityCard = (card: SARIdentityCard, storage: StorageLike | undefined = browserStorage()) => {
     const current = readSARSimulationState(storage);
     return writeSARSimulationState({ ...current, cards: [card, ...current.cards.filter(item => item.id !== card.id)] }, storage);
 };
 
+/** Keep a retryable index until every story thread has been cleared successfully. */
+export const deleteSARIdentityCard = async (cardId: string, storage: StorageLike | undefined = browserStorage()) => {
+    const current = readSARSimulationState(storage);
+    if (!current.cards.some(card => card.id === cardId)) throw new Error('异格身份卡不存在');
+    const runs = current.runs.filter(run => run.cardId === cardId);
+    if (runs.some(run => generatingRuns.has(run.id))) throw new Error('故事正在生成，请等回复结束后再删除');
+    writeSARSimulationState({ ...current, cards: current.cards.map(card => card.id === cardId ? { ...card, deletionPending: true } : card) }, storage);
+    for (const run of runs) await DB.clearMessages(getSARSimulationThreadId(run.id));
+    const latest = readSARSimulationState(storage);
+    return writeSARSimulationState({ ...latest, cards: latest.cards.filter(card => card.id !== cardId), runs: latest.runs.filter(run => run.cardId !== cardId) }, storage);
+};
+
 export const startSARSimulationRun = (cardId: string, storage: StorageLike | undefined = browserStorage()) => {
     const current = readSARSimulationState(storage);
     if (!current.cards.some(card => card.id === cardId)) throw new Error('异格身份卡不存在');
+    if (current.cards.find(card => card.id === cardId)?.deletionPending) throw new Error('这张档案正在删除，请先完成删除');
     const active = current.runs.find(run => run.cardId === cardId && run.status === 'active');
     if (active) return active;
     const now = Date.now();
@@ -775,7 +815,7 @@ ${directorState ? JSON.stringify(directorState) : '暂无独立记录，依据�
 {"worldNarration":"必要旁白，或空字符串","character":"本轮角色真正呈现给 User 的动作与台词","directorState":{"sceneFacts":[],"openThreads":[],"offscreenFacts":[],"declinedHooks":[],"revealedFacts":[]}}`;
 
 export const resolveSARSimulationApi = (char: CharacterProfile, vrGlobalApi: APIConfig | null, chatApi: APIConfig): APIConfig =>
-    char.vrState?.api?.baseUrl ? { ...chatApi, ...char.vrState.api } : (vrGlobalApi?.baseUrl ? vrGlobalApi : chatApi);
+    resolveDialogueApi(chatApi, char, vrGlobalApi?.baseUrl ? vrGlobalApi : undefined);
 
 export async function forgeSARIdentityCard(input: ForgeSARIdentityInput): Promise<SARIdentityCard> {
     const { char, variant, story, apiConfig, userProfile } = input;
@@ -784,7 +824,8 @@ export async function forgeSARIdentityCard(input: ForgeSARIdentityInput): Promis
     if (!collection[variant.id] || !collection[story.id]) throw new Error('装入的模块不在陈列收藏中');
 
     const vrGlobalApi = await getVRApi();
-    const api = resolveSARSimulationApi(char, vrGlobalApi, apiConfig);
+    // 铸造身份卡是系统任务，保持彼方 / 全局配置。
+    const api = vrGlobalApi?.baseUrl ? vrGlobalApi : apiConfig;
     if (!api?.baseUrl || !api.model) throw new Error('请先在「彼方 → API」配置可用模型');
 
     const longTermContext = await prepareSARDoorplateContext(char, userProfile, true);
@@ -821,14 +862,14 @@ export async function forgeSARIdentityCard(input: ForgeSARIdentityInput): Promis
         id: `sar_card_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
         charId: char.id,
         charName: char.name,
-        charAvatar: char.avatar || undefined,
         variantId: variant.id,
         storyId: story.id,
         createdAt: now,
         updatedAt: now,
         profile,
     };
-    saveSARIdentityCard(card);
+    try { saveSARIdentityCard(card); }
+    catch (cause) { throw new SARIdentitySaveError(card, cause); }
     return card;
 }
 
@@ -872,7 +913,9 @@ async function generateSARSimulationTurn(input: RunSARSimulationTurnInput) {
     if (!retry && run.status !== 'active') throw new Error('这段推演已经封存');
     if (!retry && run.interactionsUsed >= SAR_SIMULATION_MAX_INTERACTIONS) throw new Error('这段推演已经完成五十次互动');
 
-    const persisted = readSARSimulationState().runs.find(item => item.id === run.id);
+    const persistedState = readSARSimulationState();
+    if (persistedState.cards.find(item => item.id === card.id)?.deletionPending) throw new Error('这张档案正在删除，无法继续生成');
+    const persisted = persistedState.runs.find(item => item.id === run.id);
     if (!persisted || (!retry && persisted.status !== 'active')) throw new Error('这段推演已经封存');
     if (persisted.interactionsUsed !== run.interactionsUsed) throw new Error('推演进度已变化，请重新进入');
 
@@ -929,8 +972,17 @@ async function generateSARSimulationTurn(input: RunSARSimulationTurnInput) {
     }
 
     const parsedReply = parseSARSimulationReply(extractSARAssistantRaw(data));
-    if (!parsedReply?.character) throw new Error('模型没有返回可保存的推演正文，请重试');
+    if (!parsedReply?.character) throw new Error(data?.choices?.[0]?.finish_reason === 'length'
+        ? '模型回复被长度上限截断，未保存，也未消耗互动次数。请重试或让本轮回复简短一些。'
+        : '模型回复格式不完整，未保存，也未消耗互动次数，请重试');
     const reply = parsedReply.character;
+
+    // Another tab may have deleted the archive while this network request was in flight.
+    const latestState = readSARSimulationState();
+    const latestCard = latestState.cards.find(item => item.id === card.id);
+    if (!latestCard || latestCard.deletionPending || !latestState.runs.some(item => item.id === run.id)) {
+        throw new Error('这张档案已删除或正在删除，本轮回复未保存');
+    }
 
     if (retry) {
         await replaceSARSimulationReply(run.id, retry.reply, { content: reply, worldNarration: parsedReply.worldNarration, directorState: parsedReply.directorState });

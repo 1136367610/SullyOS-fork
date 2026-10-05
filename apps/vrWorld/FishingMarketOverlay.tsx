@@ -1,4 +1,8 @@
+import { MarketResponseDetails } from './MarketResponseDetails';
+import { MarketNPCReplyError } from '../../utils/vrWorld/marketNPCSession';
 import { sarNpcContentEnabled } from '../../utils/vrWorld/sarNpcPreference';
+import { acknowledgeSARUpdateNotice, hasReadSARUpdateNotice } from '../../utils/vrWorld/sarUpdateNotices';
+import { SARUpdateDialogue } from './SARUpdateDialogue';
 import { runMarketNPCSession } from '../../utils/vrWorld/marketNPCSession';
 import { rollMarketVisitor } from '../../utils/vrWorld/marketRefresh';
 import { SARFacilityGuide } from './SARFacilityGuide';
@@ -29,8 +33,8 @@ const rarityLabel: Record<string,string> = {common:'常见',uncommon:'少见',ra
 const statusLabel: Record<string,string> = {open:'展板中',sold:'已售出',fulfilled:'已完成',removed:'主动撤下',expired:'已到期'};
 const ownerId = (p:BoardPost) => 'sellerId' in p ? p.sellerId : p.authorId;
 const ownerName = (p:BoardPost) => p.alias || ('sellerName' in p ? p.sellerName : p.authorName);
-const isFreeNote = (p:BoardPost) => 'kind' in p && p.kind==='favor' && p.offer===0;
-const postKind = (p:BoardPost) => 'price' in p ? '转让' : p.kind==='item' ? '求物' : p.kind==='favor' ? (isFreeNote(p)?'便笺':'求回应') : '收心意';
+const isFreeNote = (p:BoardPost) => !p.encounter && 'kind' in p && p.kind==='favor' && p.offer===0;
+const postKind = (p:BoardPost) => p.encounter ? ('price' in p ? (p.price?'路人交易':'路人邀约') : '临时招募') : 'price' in p ? '转让' : p.kind==='item' ? '求物' : p.kind==='favor' ? (isFreeNote(p)?'便笺':'求回应') : '收心意';
 const postAmount = (p:BoardPost) => 'price' in p ? p.price : p.offer;
 const amountLabel = (p:BoardPost) => 'price' in p ? '售价' : p.kind==='tip' ? '心意' : '酬谢';
 const specimenLabel = (c:MarketCatchSnapshot) => `${c.nickname?c.nickname+' · ':''}${speciesById(c.speciesId)?.name||'藏品'} · ${c.sizeCm} cm · ${c.quality} 星`;
@@ -50,8 +54,10 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
     const user=actors[0];
     const [state,setState]=useState<FishingMarketState>(()=>{try{return ensureMarketDay(readFishingMarketState());}catch{return createFishingMarketState();}});
     const [error,setError]=useState('');
+    const [failedResponse,setFailedResponse]=useState<string|undefined>();
     const [weather,setWeather]=useState<FishingWeather|null>(null);
     const [tab,setTab]=useState<Tab>(initialEntry==='sell'?'catalog':initialEntry);
+    const [boardNoticeRead,setBoardNoticeRead]=useState(()=>hasReadSARUpdateNotice('board'));
     const selling=initialEntry==='sell'&&tab==='catalog';
     const atWater=tab==='water'||tab==='catalog';
     const mainRef=useRef<HTMLElement>(null);
@@ -100,9 +106,10 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
         try{await flushFishingDeliveries(characters);await flushMarketReceipts(characters);}catch{setError('交易已保存；角色回执暂未同步，下次进入水域或布告板会重试。');}
         return next;
     };
+    const actionInFlight=useRef(false);
     const act=async(change:(s:FishingMarketState)=>FishingMarketState,after?:()=>void)=>{
-        if(busy)return;setBusy(true);setError('');
-        try{await commit(change);after?.();}catch(e){report(e);}finally{setBusy(false);}
+        if(busy||actionInFlight.current)return;actionInFlight.current=true;setBusy(true);setError('');
+        try{await commit(change);after?.();}catch(e){report(e);}finally{actionInFlight.current=false;setBusy(false);}
     };
     const sellToAiven=async(catchId:string)=>{
         if(busy||saleInFlight.current)return;
@@ -117,7 +124,7 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
     useEffect(()=>()=>npcAbort.current?.abort(),[]);
     const refreshVisitors = async () => {
         if (refreshInFlight.current || busy || trip) return;
-        refreshInFlight.current = true; setBusy(true); setError(''); setRefreshNotice('');
+        refreshInFlight.current = true; setBusy(true); setError(''); setFailedResponse(undefined); setRefreshNotice('');
         try {
             const visitor = rollMarketVisitor(characters,Math.random,sarNpcContentEnabled());
             if (visitor) {
@@ -136,7 +143,7 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
                 setRefreshNotice(result.visitors.map(v=>v.name).join('、')+'来过了。'+(result.skipped.length?'有 '+result.skipped.length+' 项行动因便笺或余额变化未执行。':''));
             }
             setNow(Date.now());
-        } catch (cause) { setRefreshNotice(''); report(cause); }
+        } catch (cause) { setRefreshNotice(''); setFailedResponse(cause instanceof MarketNPCReplyError ? cause.responseText : undefined); report(cause); }
         finally { npcAbort.current=null;refreshInFlight.current = false; setBusy(false); }
     };
     const onCaught=async(c:FishingCatch)=>{await commit(s=>addCatchToState(s,c));};
@@ -175,7 +182,7 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
     const latestTrip=(state.fishingTrips||[]).filter(t=>t.catch.ownerId===tripChar).at(-1);
     const deliveryPending=(state.fishingTrips||[]).some(t=>t.catch.ownerId===tripChar&&t.status==='settled'&&(!t.cardSent||(t.result?.shareToUser&&!t.shareSent)));
     const retryDelivery=()=>void (async()=>{if(busy)return;setBusy(true);setError('');try{await flushFishingDeliveries(characters);await flushMarketReceipts(characters);refresh();}catch(e){report(e);}finally{setBusy(false);}})();
-    const archive=[...state.listings,...state.requests].filter(p=>p.status!=='open'&&ownerId(p)===actor.id).sort((a,b)=>(b.closedAt||b.createdAt)-(a.closedAt||a.createdAt));
+    const archive=[...state.listings,...state.requests].filter(p=>p.status!=='open'&&(ownerId(p)===actor.id||p.encounterResult?.participantId===actor.id)).sort((a,b)=>(b.closedAt||b.createdAt)-(a.closedAt||a.createdAt));
     const activePost=selectedPost?[...state.listings,...state.requests].find(p=>p.id===selectedPost.id):null;
     const draftCatch=state.inventory.find(c=>c.id===draft.catchId);
     const needsSpecimen=activePost&&'kind' in activePost&&activePost.kind==='item'&&activePost.authorId!==user.id&&activePost.status==='open';
@@ -225,9 +232,11 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
         {atWater&&<nav className="fish-divider grid shrink-0 grid-cols-2 border-b border-[#c8e0ea21] px-3">
             {([['water','钓鱼',Fish],['catalog',initialEntry==='sell'?'卖鱼':'图鉴',BookOpen]] as const).map(([id,label,Icon])=><button key={id} aria-current={tab===id?'page':undefined} className={`flex items-center justify-center gap-1.5 border-b-2 py-3 ${tab===id?'border-[#a7cebd] text-[#dfeee4]':'border-transparent text-[#8a9eab]'}`} onClick={()=>goTo(id)}><Icon size={15}/>{label}</button>)}
         </nav>}
+        {tab==='board'&&!boardNoticeRead&&sarNpcContentEnabled()&&<SARUpdateDialogue notice="board" onComplete={()=>{acknowledgeSARUpdateNotice('board');setBoardNoticeRead(true);}}/>}
         <main ref={mainRef} className={`min-h-0 flex-1 overflow-y-auto vr-reader-scroll ${tab==='water'?'fishing-water-main':atWater?'px-4 pt-4':'board-content'}`} style={tab==='water'?undefined:{paddingBottom:'calc(var(--safe-bottom) + 1.5rem)'}}>
             <div className={tab==='water'?'fishing-water-content':'mx-auto w-full max-w-[560px]'}>
                 {error&&<p role="alert" className="mb-3 rounded-lg bg-amber-200/10 px-3 py-2 text-[12px] leading-6 text-amber-100">{error}</p>}
+            {tab==='board' && failedResponse && <MarketResponseDetails text={failedResponse} />}
                 {tab==='water'&&<>
                     {weather?<FishingGame weather={weather} onCast={()=>rollFishingCatch(user,weather)} onCaught={onCaught} onOpenCollection={()=>{goTo('catalog');setViewer('user');}}/>:<div className="grid flex-1 place-items-center fish-note">水面正在醒来……</div>}
                     <details className="fishing-companions"><summary>角色钓鱼<CaretRight size={14}/></summary>{characterTripControls('fishing')}</details>
@@ -315,13 +324,21 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
         {activePost&&<BoardPage title="便笺" label={activePost.itemLabel} onClose={()=>setSelectedPost(null)}>
             <div className="fish-note">{ownerName(activePost)} · {activePost.status==='open'?countdown(activePost.expiresAt,now)+' 后封存':statusLabel[activePost.status]}</div>
             <h2 className="board-detail-title">{activePost.itemLabel}</h2>
-            {'price' in activePost&&!activePost.catchId&&<p className="fish-note mt-2">文字商品 · 自愿交易，不会获得实体藏品。</p>}
+            {activePost.npcPersona&&<p className="fish-note mt-2">{activePost.npcPersona.identity}</p>}
+            {activePost.encounter&&activePost.status==='open'&&<p className="fish-note mt-2">参与后，看看这位路人的生活会发生什么。</p>}
+            {'price' in activePost&&!activePost.catchId&&!activePost.encounter&&<p className="fish-note mt-2">文字商品 · 自愿交易，不会获得实体藏品。</p>}
             {postSpecimen(activePost)&&<p className="fish-note mt-2 break-words">{activePost.status==='fulfilled'?'已交付':'实物'}：{specimenLabel(postSpecimen(activePost)!)}</p>}
             {'buyerName' in activePost&&activePost.buyerName&&<p className="fish-note mt-2">成交买家：{activePost.buyerName}</p>}
             {'fulfillerName' in activePost&&activePost.fulfillerName&&<p className="fish-note mt-2">{activePost.kind==='tip'?'打赏人':'交付人'}：{activePost.fulfillerName}</p>}
             <p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-7">{'price' in activePost?activePost.note:activePost.body}</p>
             <div className="board-detail-price">{isFreeNote(activePost)?<span>一张便笺，随意聊聊。</span>:<><span>{amountLabel(activePost)}</span><strong>{postAmount(activePost)} <small>鳞币</small></strong></>}</div>
             {'submission' in activePost&&activePost.submission&&<p className="fish-note mt-2">交付内容：{activePost.submission}</p>}
+            {activePost.encounterResult&&<section className="fish-divider mt-4 pt-4" aria-label="路人小事件" aria-live="polite">
+                <h3 className="text-sm font-bold">然后，事情变成了这样……</h3>
+                <p className="fish-note mt-1">{activePost.encounterResult.participantName}的这次偶遇</p>
+                <p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-7">{activePost.encounterResult.story}</p>
+                {activePost.encounterResult.reaction&&<p className="mt-3 whitespace-pre-wrap break-words text-[13px] leading-7">{activePost.encounterResult.participantName}：{activePost.encounterResult.reaction}</p>}
+            </section>}
             {activePost.comments.length>0&&<div className="fish-divider mt-4 space-y-3 pt-3">{activePost.comments.map(c=><div key={c.id} className="text-[12px] leading-6"><span className="board-comment-author">{c.alias||c.authorName}</span>：<span className="whitespace-pre-wrap break-words">{c.content}</span></div>)}</div>}
             {activePost.status==='open'&&<><label className="block fish-note mt-5">{'kind' in activePost&&activePost.kind==='favor'?'写下你的回应':'留句话'}<textarea aria-label="回复或交付内容" className="fish-input mt-1" rows={3} value={postText} maxLength={240} placeholder="说点什么……" onChange={e=>setPostText(e.target.value)}/></label>
                 {needsSpecimen&&<div className="mt-3">
@@ -332,7 +349,7 @@ export const FishingMarketOverlay:React.FC<Props> = ({initialEntry='water',apiCo
                     <p className="fish-note mt-1">{fulfillmentCatches.length?'交付后，这件藏品归对方，你收到出价的鳞币。':'没有可交付的同种藏品；已挂板、孵化中或等待角色处理的藏品不能交付。'}</p>
                 </div>}
                 <div className="board-detail-actions">
-                {ownerId(activePost)!=='user'&&<button disabled={busy||!!needsSpecimen&&!fulfillmentCatches.some(c=>c.id===fulfillmentCatchId)} className="fish-action primary" onClick={()=>void act(s=>'price' in activePost?buyListing(s,activePost.id,user):fulfillRequest(s,activePost.id,user,postText,Date.now(),fulfillmentCatchId))}>{'price' in activePost?`支付 ${activePost.price} 鳞币，买下`:activePost.kind==='tip'?`赠予 ${activePost.offer} 鳞币`:activePost.kind==='favor'?(isFreeNote(activePost)?'提交回应并完成':`提交并领取 ${activePost.offer} 鳞币`):`交付并领取 ${activePost.offer} 鳞币`}</button>}
+                {ownerId(activePost)!=='user'&&<button disabled={busy||!!needsSpecimen&&!fulfillmentCatches.some(c=>c.id===fulfillmentCatchId)} className="fish-action primary" onClick={()=>void act(s=>'price' in activePost?buyListing(s,activePost.id,user):fulfillRequest(s,activePost.id,user,postText,Date.now(),fulfillmentCatchId))}>{activePost.encounter?('price' in activePost?(activePost.price?`支付 ${activePost.price} 鳞币，参与`:'去看看'):activePost.offer?`接下这份活 · 酬谢 ${activePost.offer} 鳞币`:'接受邀请'):'price' in activePost?`支付 ${activePost.price} 鳞币，买下`:activePost.kind==='tip'?`赠予 ${activePost.offer} 鳞币`:activePost.kind==='favor'?(isFreeNote(activePost)?'提交回应并完成':`提交并领取 ${activePost.offer} 鳞币`):`交付并领取 ${activePost.offer} 鳞币`}</button>}
                 <div className="flex justify-between gap-3"><button disabled={busy||!postText.trim()} className="board-text-button" onClick={()=>void act(s=>commentOnPost(s,activePost.id,user,postText),()=>setPostText(''))}>{isFreeNote(activePost)?'回复':'仅回复'}</button>{ownerId(activePost)==='user'&&<button disabled={busy} className="board-text-button" onClick={()=>void act(s=>removeMarketPost(s,activePost.id,'user'))}>撤下并存档</button>}</div></div></>}
             {error&&<p role="alert" className="mt-3 text-[12px] text-amber-100">{error}</p>}
             {activePost.alias&&ownerId(activePost)==='user'&&<p className="fish-note mt-3">你的匿名发帖；在这张便笺下回复会沿用「{activePost.alias}」。</p>}

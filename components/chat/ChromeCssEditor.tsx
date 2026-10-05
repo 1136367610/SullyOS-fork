@@ -1,7 +1,13 @@
+import BeautyConfirmDialog from '../share/BeautyConfirmDialog';
+import {readCssAttribution,stampBeautyCss} from '../../utils/beautyCssAttribution';
+import BeautyPresetPreview from '../share/BeautyPresetPreview';
+import {WHITEBOX_AI_PROMPT as AI_PROMPT} from '../../utils/chatWhitebox';
+import {portableCssImages} from '../../utils/cssImageAssets';
 import React, { useEffect, useRef, useState } from 'react';
 import { DB } from '../../utils/db';
 import { shareOrDownloadFile } from '../../utils/shareExport';
 import { readShareText } from '../../utils/pngShare';
+import { FileOrImageImport } from '../share/FileOrImageImport';
 
 // 聊天「白框」自定义 CSS 编辑器（Appearance 全局默认 与 单角色定制 共用）。
 // 选择器钩子覆盖顶栏、输入栏、整屏背景与普通消息布局；完整清单见下方 AI_PROMPT。
@@ -9,66 +15,6 @@ import { readShareText } from '../../utils/pngShare';
 const PRESET_STORE_KEY = 'sully_chrome_css_presets_v1';
 
 // 丢给别的 AI 的提示词（让它按想要的风格生成整段 CSS）。
-const AI_PROMPT = `你是一个 CSS 设计师。我在用一个叫 SullyOS·糯米机 的「浏览器里的虚拟手机」聊天 App，
-它允许我用一段自定义 CSS 来重新设计聊天外壳与消息布局。
-这段 CSS 会被注入到聊天界面里，通过下面这些固定类名生效。请帮我写一整段 CSS，
-实现我想要的风格——你有很高的自由度，不要只改颜色，可以大胆重构整个顶栏的视觉。
-
-【可用的类名（只能用这些，别用全局选择器）】
-- .sully-chat-root      整个聊天屏（最外层背景）
-- .sully-chat-header    顶栏整块（已是 position: relative，可在内部绝对定位子元素）
-- .sully-chat-back      左侧返回箭头按钮
-- .sully-chat-avatar    角色头像（默认圆形 img，可改尺寸/形状/位置/遮罩）
-- .sully-chat-name      角色名字
-- .sully-chat-status    名字旁/下的在线状态区
-- .sully-chat-buffs     情绪状态栏容器；其中每个情绪胶囊是 .sully-chat-buffs button
-- .sully-chat-token     右上角 token 用量小标签
-- .sully-chat-trigger   右侧「触发 AI」的小闪电按钮
-- .sully-chat-inputbar  底部输入栏整块
-- .sully-chat-composer 输入栏内的输入行（建议用此类名，不依赖子元素序号）
-- .sully-chat-input-wrap / .sully-chat-textarea 输入框外壳 / 文本输入框
-- .sully-chat-actions-button / .sully-chat-send-button 功能按钮 / 发送按钮
-- .sully-chat-emoji-suggestions 表情联想区（输入栏外的独立同级区域）
-- .sully-chat-auto-reply 自动回复倒计时（输入栏外的独立同级区域）
-- .sully-chat-panel     点「＋」拉起的功能面板（表情/动作菜单），其中按钮是 .sully-chat-panel button
-- .sully-chat-message   普通消息整行；同时带 -ai / -user 和 -group-first / -group-last 状态类
-- .sully-chat-message-content 该条消息的气泡列
-- .sully-chat-message-avatar  默认贴在组末气泡旁的头像
-- .sully-chat-turn-avatar-slot 每组首条的头像槽（默认 display:none，内部已有正确的双方头像）
-- .sully-chat-turn-avatar      上述头像槽里的头像容器；图片是 .sully-chat-message-avatar-img
-- .sully-bubble-ai / .sully-bubble-user 角色 / 用户气泡
-- .sully-schedule-change      角色修改未来日程后浮出的整张回执
-- .sully-schedule-change-head / -mark / -kicker  回执标题行 / 勾选标记 / 标题文字
-- .sully-schedule-change-list / -row             修改列表 / 单条修改
-- .sully-schedule-change-time / -before / -arrow / -after  时段 / 原计划 / 箭头 / 新计划
-- .sully-schedule-change-shine                    掠过回执的一次性高光
-
-【必须遵守的规范】
-1. 覆盖默认样式必须加 !important（尤其 .sully-chat-buffs button 带内联样式，不加 !important 盖不掉）。
-2. 只允许使用上面的 .sully-chat-* / .sully-bubble-* / .sully-schedule-change* 选择器及其后代/伪元素，禁止写 body、*、div、html 这类全局选择器（会污染其它界面）。
-3. 这是移动端窄屏（宽约 390px），尺寸请克制、用相对单位或小数值。
-4. 顶栏顶部已自动留出状态栏安全区。装饰若要贴最顶部，用 top: calc(var(--safe-top) + 数值)。
-5. 不要 display:none 掉 .sully-chat-back（否则用户无法返回），除非我明确要求。
-6. 想让装饰溢出到顶栏外（如垂下的挂饰、超出的波浪），需给 .sully-chat-header 加 overflow: visible。
-7. 性能：可以用静态 backdrop-filter/blur，但不要对 blur/backdrop 做持续动画。
-8. 若要“每轮头像在气泡上方”：显示 .sully-chat-turn-avatar-slot、隐藏 .sully-chat-message-avatar，
-   给 .sully-chat-message-group-first 留出顶部空间，并清零 .sully-chat-message-content 的左右 margin。
-
-【可以自由发挥的部分】
-- 背景：纯色、渐变、重复图案、图片（background: url(图片直链)）、多层叠加，随意。
-- 形状：border-radius、clip-path（不规则切角/波浪）任意；不规则形状不必额外垫白底。
-- 质感：box-shadow、inset 阴影、发光、描边。
-- 头像：加边框、光环、改大小/形状（甚至异形/横幅）。
-- 文字：字色、字重、字间距、文字阴影/发光。
-- 情绪胶囊 / token / 面板按钮：背景色、字色、边框、圆角。
-- 重新布局：用 position: absolute 把头像/名字/闪电/token 摆到顶栏里的任意位置。
-- 装饰元素：用 ::before / ::after 加角标、条纹、图标、挂件、光带等（记得写 content 和 position）。
-- 动画：可用 @keyframes + animation（适度、别太晃眼）。
-
-【输出要求】
-直接输出一整段可用的 CSS（可以带少量注释说明），不需要长篇解释。
-我现在想要的风格是：______（在这里填你的需求，例如「赛博朋克霓虹」「和风温泉」「Y2K 千禧辣妹」「极简性冷淡」等）`;
-
 type Preset = { name: string; code: string; swatch?: string };
 
 // 从一段 CSS 里尽力抠出 .sully-chat-header 的背景值，给「我的预设」生成缩略色块（抠不到则用中性灰）。
@@ -291,10 +237,15 @@ const copyText = async (text: string): Promise<boolean> => {
 };
 
 const ChromeCssEditor: React.FC<{ value: string; onChange: (css: string) => void }> = ({ value, onChange }) => {
+    const [exportMode,setExportMode]=useState<'current'|'batch'|null>(null);
+    const [exportCredit,setExportCredit]=useState(()=>{try{return JSON.parse(localStorage.getItem('sully-beauty-author-defaults-v1')||'{}').credit||'';}catch{return '';}});
+    const [exportNotice,setExportNotice]=useState('');
+    const signedCss=(css:string,name:string)=>{const old=readCssAttribution(css);if(old?.allowRedistribute===false)throw Error('作者禁止二次传播');return stampBeautyCss(css,old||{name,credit:exportCredit,category:'whitebox'});};
     const [copied, setCopied] = useState(false);
     const [custom, setCustom] = useState<Preset[]>([]);
-    const txtImportRef = useRef<HTMLInputElement>(null);
     const presetImageRef = useRef<HTMLInputElement>(null);
+    const [previewOpen,setPreviewOpen]=useState(false);
+    const previewPack=React.useMemo(()=>({format:'sullyos-chat-decoration',version:1,name:'白框预览',parts:{css:value}}),[value]);
 
     useEffect(() => {
         let alive = true;
@@ -332,31 +283,17 @@ const ChromeCssEditor: React.FC<{ value: string; onChange: (css: string) => void
         }
     };
 
-    const handleTxtExport = async () => {
-        if (!value.trim()) {
-            window.alert('当前没有可导出的 CSS。');
-            return;
+    const handleTxtExport = () => setExportMode('current');
+    const handleExport = () => setExportMode('batch');
+    const confirmShare=async()=>{
+        if(exportMode==='batch'){
+            const list=await Promise.all(custom.map(async item=>({...item,code:signedCss(await portableCssImages(item.code),item.name)})));
+            if(!await copyText(encodePresets(list)))throw Error('复制失败，请重试');
+            setExportNotice(`已复制 ${list.length} 套带署名的预设`);
+        }else{
+            const content=signedCss(await portableCssImages(value),'白框样式');const author=readCssAttribution(content)!.credit;
+            await shareOrDownloadFile({card:{kind:'chrome-css',title:'白框样式',author},content,fileName:'sullyos-whitebox.css',mimeType:'text/css;charset=utf-8',shareTitle:'SullyOS·糯米机 白框样式'});
         }
-        const date = new Date();
-        const dateKey = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-        const fileName = `sullyos-whitebox-${dateKey}.txt`;
-        try {
-            await shareOrDownloadFile({
-                card: { kind: 'chrome-css', title: '白框样式' },
-                content: value,
-                fileName,
-                mimeType: 'text/plain;charset=utf-8',
-                shareTitle: 'SullyOS·糯米机 白框样式',
-            });
-        } catch (error: any) {
-            if (error?.name !== 'AbortError') window.alert('TXT 导出失败，请重试。');
-        }
-    };
-
-    const handleExport = async () => {
-        if (!custom.length) { window.alert('还没有「我的预设」可导出。'); return; }
-        const ok = await copyText(encodePresets(custom));
-        window.alert(ok ? `已复制 ${custom.length} 套预设的导出码到剪贴板，发给别人或换机粘贴导入即可。` : '复制失败，请重试。');
     };
     const handleImport = () => {
         if (typeof window === 'undefined') return;
@@ -380,6 +317,10 @@ const ChromeCssEditor: React.FC<{ value: string; onChange: (css: string) => void
 
     return (
         <div className="space-y-4">
+            {exportNotice&&<p role="status">{exportNotice}</p>}
+            {exportMode&&<BeautyConfirmDialog title="带上作者署名" confirm={exportMode==='batch'?'复制预设':'分享 CSS'} onClose={()=>setExportMode(null)} onConfirm={confirmShare}><p>已有署名会原样保留。为没有署名的样式填写作者名称。</p><label>作者署名<input maxLength={60} value={exportCredit} onChange={e=>setExportCredit(e.target.value)}/></label></BeautyConfirmDialog>}
+
+            <details className="mb-4" onToggle={event=>setPreviewOpen(event.currentTarget.open)}><summary className="cursor-pointer text-sm py-2">预览完整聊天 · 虚构示例</summary>{previewOpen&&<BeautyPresetPreview data={previewPack}/>}</details>
             {/* 需要灵感：复制提示词给 AI */}
             <button onClick={handleCopyPrompt}
                 className="flex w-full items-center gap-2.5 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 px-3.5 py-3 text-left transition-all hover:from-indigo-100 hover:to-violet-100 active:scale-[0.99]">
@@ -446,8 +387,7 @@ const ChromeCssEditor: React.FC<{ value: string; onChange: (css: string) => void
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-bold text-slate-500">CSS 代码 <span className="font-normal text-slate-400">· 可手改 / 粘贴</span></span>
                     <div className="flex items-center gap-1">
-                        <input ref={txtImportRef} type="file" accept=".png,.css,.txt,image/png,text/css,text/plain" className="hidden" onChange={handleTxtImport} />
-                        <button onClick={() => txtImportRef.current?.click()} className="rounded-lg px-2 py-1 text-[10px] font-semibold text-indigo-500 hover:bg-indigo-50">导入 PNG / CSS</button>
+                        <FileOrImageImport onChange={handleTxtImport} className="rounded-lg px-2 py-1 text-[10px] font-semibold text-indigo-500 hover:bg-indigo-50" />
                         <button onClick={handleTxtExport} disabled={!value.trim()} className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${value.trim() ? 'text-indigo-500 hover:bg-indigo-50' : 'text-slate-300'}`}>导出分享</button>
                         {value && <button onClick={() => onChange('')} className="rounded-lg px-2 py-1 text-[10px] font-semibold text-rose-400 hover:bg-rose-50 hover:text-rose-500">清空</button>}
                     </div>

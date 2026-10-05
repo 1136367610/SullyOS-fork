@@ -5,7 +5,6 @@ import { trackSARFeature } from '../utils/sarAnalytics';
 import { SARFamiliarityDialog } from './vrWorld/SARFamiliarityDialog';
 import { flushFishingDeliveries } from '../utils/vrWorld/fishingDelivery';
 import { flushMarketReceipts } from '../utils/vrWorld/fishingCharacter';
-import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useOS } from '../context/OSContext';
 import {
@@ -106,7 +105,7 @@ const stripSelfName = (text: string | undefined, name: string | undefined): stri
     }
     return text;
 };
-import type { CharacterProfile, UserProfile, VRWorldNovel, VRNovelAnnotation, VRCardMeta, VRRoomId, VRMusicRoomState, CharPlaylistSong, VRGuestbookState, VRGuestbookMessage, VRLetter, ApiPreset, APIConfig } from '../types';
+import type { CharacterProfile, UserProfile, VRWorldNovel, VRWorldNovelSummary, VRNovelAnnotation, VRCardMeta, VRRoomId, VRMusicRoomState, CharPlaylistSong, VRGuestbookState, VRGuestbookMessage, VRLetter, ApiPreset, APIConfig } from '../types';
 
 // ============ chibi 形象解析（vrState.chibi → 立绘 → 头像） ============
 import { getChibi } from '../utils/vrWorld/chibi';
@@ -120,7 +119,6 @@ type Tab = 'world' | 'sar' | 'library' | 'settings' | 'api';
 interface FeedItem {
     msgId: number; charId: string; charName: string; avatar: string;
     timestamp: number; meta: VRCardMeta; content: string;
-    hidden: boolean; // 对 AI 上下文不可见（归档隐藏起点之前 / 记忆宫殿高水位之前）
 }
 
 // 每个房间的 chibi 站位（百分比坐标，底对齐）
@@ -160,10 +158,14 @@ const VRWorldApp: React.FC = () => {
     const userName = userProfile?.name || '我';
     const [tab, setTab] = useState<Tab>(() => sarLaunch.peek() ? 'sar' : 'world');
     useEffect(() => { sarLaunch.consume(); }, []);
-    const [novels, setNovels] = useState<VRWorldNovel[]>([]);
+    const [novels, setNovels] = useState<VRWorldNovelSummary[]>([]);
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [poBadge, setPoBadge] = useState<{ toSend: number; toCollect: number }>({ toSend: 0, toCollect: 0 });
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string[]>([]);
+    const reloadGeneration = useRef(0);
+    const feedLoadGeneration = useRef(0);
+    useEffect(() => () => { feedLoadGeneration.current++; reloadGeneration.current++; }, []);
 
     // 邮局徽标：本地待寄出/待发送 + 后端待收取的回信（best-effort 探测）
     const refreshPoBadge = useCallback(async () => {
@@ -341,13 +343,14 @@ const VRWorldApp: React.FC = () => {
     }, [familiarity, sarHubPanel, tab, loading, enterRoom, sarPromptStep, showSarDialogue, showSarGacha, showSarCabinet, showSarModuleShop, showFishingMarket, showHelp, sarState, worldPage]);
 
     const loadNovels = useCallback(async () => {
-        const [books, categories] = await Promise.all([DB.getVRNovels(), DB.getVRLibraryCategories()]);
+        const [books, categories] = await Promise.all([DB.getVRNovelSummaries(), DB.getVRLibraryCategories()]);
         setNovels(books); setLibraryCategories(categories);
     }, []);
     const loadFeed = useCallback(async () => {
+        const generation = ++feedLoadGeneration.current;
         const items: FeedItem[] = [];
         for (const c of characters) {
-            // 彼方动态取数走 getVRCardsByCharId：全量捞该角色的 vr_card，不受"最近 N 条窗口"、
+            // 首页只展示最近 50 条动态，按角色限量读取；不受聊天的"最近 N 条窗口"、
             // 记忆宫殿高水位线（mp_lastMsgId_<charId>）、归档隐藏起点（hideBeforeMessageId）影响。
             // 这些机制只管「LLM 上下文能不能看到」——而彼方动态是用户自己的浏览界面，
             // 只要消息还在 IndexedDB 里就该一直能看到：
@@ -355,17 +358,20 @@ const VRWorldApp: React.FC = () => {
             //   · 角色记忆归档把旧聊天标记为"对 AI 隐藏" → 这些动态依旧存在，用户仍要能回看；
             //   · 聊天攒多了把旧 vr_card 挤出最近窗口 → 不该因此从动态流消失。
             // （清空聊天会真删消息，删掉就没了——那是预期行为，逻辑不变。）
-            const msgs = await DB.getVRCardsByCharId(c.id);
-            // 可见性与实际发送的自适应/手动范围保持一致。
-            const visibleIds = new Set((await loadCharacterContextMessages(c)).map(message => message.id));
+            const msgs = await DB.getVRCardsByCharId(c.id, 50, m => !m.metadata?.userBoardPost);
+            if (generation !== feedLoadGeneration.current) return;
+            if (!msgs.length) continue;
             for (const m of msgs) {
                 // 用户在留言簿的发言会广播进每个角色的 vr_card（供 LLM 上下文用），
                 // 但它不是"角色自己的动态"——不进动态流，也不当作 chibi 气泡。
                 if (!m.metadata?.userBoardPost) {
-                    items.push({ msgId: m.id, charId: c.id, charName: c.name, avatar: c.avatar, timestamp: m.timestamp, meta: m.metadata as VRCardMeta, content: m.content, hidden: !visibleIds.has(m.id) });
+                    items.push({ msgId: m.id, charId: c.id, charName: c.name, avatar: c.avatar, timestamp: m.timestamp, meta: m.metadata as VRCardMeta, content: m.content });
                 }
             }
+            items.sort((a, b) => b.timestamp - a.timestamp);
+            items.length = Math.min(items.length, 50);
         }
+        if (generation !== feedLoadGeneration.current) return;
         items.sort((a, b) => b.timestamp - a.timestamp);
         setFeed(items.slice(0, 50));
     }, [characters]);
@@ -373,7 +379,10 @@ const VRWorldApp: React.FC = () => {
     const reloadAll = useCallback(async () => {
         // Background refresh must not unmount the library and reset its filter/selection.
         // Initial loading is already true until the first load finishes.
-        await Promise.all([loadNovels(), loadFeed()]);
+        const generation = ++reloadGeneration.current;
+        const results = await Promise.allSettled([loadNovels(), loadFeed()]);
+        if (generation !== reloadGeneration.current) return;
+        setLoadError(results.flatMap((result, index) => result.status === 'rejected' ? [index === 0 ? '书库' : '动态'] : []));
         setLoading(false);
     }, [loadNovels, loadFeed]);
 
@@ -437,11 +446,23 @@ const VRWorldApp: React.FC = () => {
     }), [registerBackHandler, tab, familiarity, sarHubPanel, showFishingMarket, showSarModuleShop, showSarCabinet, showSarGacha, showSarRewindConfirm, showSarDialogue, readingPreferenceCharId, chibiEditChar, chibiEditUser, showUpload, readerJump, readerNovel, enterRoom]);
 
     // 从动态/批注点回原文：peek 模式打开阅读器跳到该段，不动用户书签
+    const readerLoadGeneration = useRef(0);
+    useEffect(() => () => { readerLoadGeneration.current++; }, []);
+    const openNovel = useCallback(async (novelId: string, segIdx?: number) => {
+        const generation = ++readerLoadGeneration.current;
+        try {
+            const novel = await DB.getVRNovel(novelId);
+            if (generation !== readerLoadGeneration.current) return;
+            if (!novel) { addToast?.('这本书已不存在，请刷新书库', 'info'); return; }
+            if (segIdx === undefined) setReaderNovel(novel);
+            else setReaderJump({ novel, seg: segIdx });
+        } catch {
+            if (generation === readerLoadGeneration.current) addToast?.('书籍载入失败，请重试', 'error');
+        }
+    }, [addToast]);
     const jumpToAnnotation = useCallback((novelId: string | undefined, segIdx: number) => {
-        if (!novelId) return;
-        const n = novels.find(x => x.id === novelId);
-        if (n) setReaderJump({ novel: n, seg: segIdx });
-    }, [novels]);
+        if (novelId) void openNovel(novelId, segIdx);
+    }, [openNovel]);
 
     // 用户在留言簿发言：落墙 + 以小卡片广播给所有接入彼方的角色私聊
     const onUserBoardPost = useCallback(async (content: string, replyTo?: VRGuestbookMessage) => {
@@ -577,7 +598,12 @@ const VRWorldApp: React.FC = () => {
 
             {/* 滚动容器不同于浮动 dock：滚到底时最后一条内容贴 viewport bottom = 屏幕底，必须 + safe-bottom 让位 home 条，否则翻页按钮被压（即原 #158 报的问题）。 */}
             <div className="vr-world-scroll relative flex-1 overflow-y-auto vr-reader-scroll px-4 z-10" style={{ paddingTop: '1rem', paddingBottom: `calc(1rem + ${VR_SAFE_BOTTOM})` }}>
-                {loading ? (
+                {loading && <p role="status" className="px-5 py-2 text-center text-xs text-white/40">正在读取本地书库与动态，其他功能可先使用。</p>}
+                {loadError.length > 0 && <div role="alert" className="px-5 py-3 text-center text-xs text-white/70">
+                    {loadError.join('、')}读取未完成，请重试；持续失败时请关闭其他糯米机页面后重新打开。无需清理记忆或角色数据。
+                    <button className="ml-3 underline" onClick={() => void reloadAll()}>重新载入</button>
+                </div>}
+                {loading && tab === 'library' ? (
                     <div className="text-center text-white/40 text-[13px] tracking-[0.2em] py-12" style={{ fontFamily: `'Noto Serif SC',serif` }}>载入彼方…</div>
                 ) : tab === 'sar' ? (
                     <SARWorldPage occupants={occupantsByRoom.sar || []} npcEnabled={sarState.npcPreference === 'show'} caianMet={sarState.caianMet}
@@ -594,7 +620,7 @@ const VRWorldApp: React.FC = () => {
                         onDeleteFeed={onDeleteFeed} onDeleteFeedMany={onDeleteFeedMany}
                         roomPage={worldPage} onRoomPageChange={setWorldPage}/>
                 ) : tab === 'library' ? (
-                    <LibraryView novels={novels} categories={libraryCategories} characters={characters} onOpen={setReaderNovel}
+                    <LibraryView novels={novels} categories={libraryCategories} characters={characters} onOpen={novel => { void openNovel(novel.id); }}
                         onEdit={async edit => { await DB.editVRLibrary(edit); await loadNovels(); }}
                         onPreference={char => setReadingPreferenceCharId(char.id)}
                         onAdd={categoryId => { setUploadCategoryId(categoryId); setShowUpload(true); trackEvent('打开小说上架弹窗'); }}
@@ -1514,14 +1540,14 @@ const WorldView: React.FC<{
     );
 };
 
-// 单条动态卡片：非管理态长按删除；管理态点击多选。已隐藏（对 AI 不可见）的暗显并标「已隐藏」。
+// 单条动态卡片：非管理态长按删除；管理态点击多选。只展示数据库中仍存在的记录。
 const FeedCard: React.FC<{ item: FeedItem; onJump: (novelId: string | undefined, segIdx: number) => void; onRequestDelete: (item: FeedItem) => void; manageMode?: boolean; selected?: boolean; onToggleSelect?: (msgId: number) => void }> = ({ item, onJump, onRequestDelete, manageMode, selected, onToggleSelect }) => {
     const room = getRoom(item.meta.room);
     const { pressing, handlers } = useLongPress(() => onRequestDelete(item), 550);
     const cardHandlers = manageMode ? { onClick: () => onToggleSelect?.(item.msgId) } : handlers;
     return (
         <div {...cardHandlers}
-            className={`relative rounded-2xl p-3 flex gap-3 backdrop-blur-sm transition-transform ${pressing ? 'scale-[0.97]' : ''} ${manageMode ? 'cursor-pointer' : ''} ${item.hidden && !selected ? 'opacity-55' : ''}`}
+            className={`relative rounded-2xl p-3 flex gap-3 backdrop-blur-sm transition-transform ${pressing ? 'scale-[0.97]' : ''} ${manageMode ? 'cursor-pointer' : ''}`}
             style={{ background: selected ? 'rgba(99,102,241,0.20)' : pressing ? 'rgba(244,63,94,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${selected ? 'rgba(129,140,248,0.6)' : pressing ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.07)'}`, boxShadow: '0 4px 18px rgba(0,0,0,.22)' }}>
             {manageMode && (
                 <div className="self-center shrink-0 h-5 w-5 rounded-full flex items-center justify-center" style={{ border: `1.5px solid ${selected ? '#818cf8' : 'rgba(255,255,255,.35)'}`, background: selected ? '#6366f1' : 'transparent' }}>
@@ -1533,7 +1559,6 @@ const FeedCard: React.FC<{ item: FeedItem; onJump: (novelId: string | undefined,
                 <div className="flex items-center gap-1.5 text-[11px]">
                     <span className="font-bold text-amber-200">{item.charName}</span>
                     <span className="text-indigo-300/50">{room.name}</span>
-                    {item.hidden && <span className="text-[8px] text-white/55 rounded-full px-1.5 py-[1px] leading-none shrink-0" style={{ border: '1px solid rgba(255,255,255,.2)', background: 'rgba(0,0,0,.28)' }}>已隐藏</span>}
                     <span className="ml-auto text-indigo-300/40 text-[9px] shrink-0">{new Date(item.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <p className="text-[11.5px] text-indigo-50/90 mt-0.5 leading-snug">{stripSelfName(item.meta.activity, item.charName)}</p>
@@ -2693,6 +2718,29 @@ const SignalPanel: React.FC<{ addToast?: (m: string, t?: any) => void; character
     );
 };
 
+const GuestbookMessageButton: React.FC<{
+    message: VRGuestbookMessage; selected: boolean;
+    onReply: () => void; onMenu: () => void;
+}> = ({ message: m, selected, onReply, onMenu }) => {
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const held = useRef(false);
+    const pressOrigin = useRef({ x: 0, y: 0 });
+    const cancel = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
+    useEffect(() => cancel, []);
+    return <button type="button"
+        onPointerDown={e => { if (e.button !== 0) return; cancel(); pressOrigin.current = { x: e.clientX, y: e.clientY }; held.current = false; timer.current = setTimeout(() => { held.current = true; onMenu(); }, 500); }}
+        onPointerUp={cancel} onPointerMove={e => { if (Math.hypot(e.clientX - pressOrigin.current.x, e.clientY - pressOrigin.current.y) > 10) cancel(); }} onPointerCancel={cancel} onPointerLeave={cancel}
+        onContextMenu={e => { e.preventDefault(); cancel(); held.current = true; onMenu(); }}
+        onClick={() => { if (!held.current) onReply(); held.current = false; }}
+        aria-label={`${m.authorName}：${m.content}，长按编辑或删除`}
+        className="block text-left text-[12.5px] leading-relaxed text-white/85 px-2.5 py-1 rounded-lg w-fit max-w-full select-none"
+        style={{ background: selected ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.055)', border: selected ? '1px solid rgba(125,211,252,.35)' : '1px solid transparent', WebkitTouchCallout: 'none' }}>
+        {m.replyToName && <span className="text-[10px] text-sky-200/45 mr-1">↩{m.replyToName}</span>}
+        {m.content}
+        {m.authorId !== 'user' && <span className="ml-2 text-[9px] text-sky-200/35">回复</span>}
+    </button>;
+};
+
 const RoomScene: React.FC<{
     roomId: VRRoomId; occupants: CharacterProfile[];
     latestByChar: Record<string, FeedItem>; onClose: () => void;
@@ -2719,6 +2767,22 @@ const RoomScene: React.FC<{
     const [posting, setPosting] = useState(false);
     const [gbPage, setGbPage] = useState(0);          // 留言墙翻页：0 = 最新一页
     const [confirmClear, setConfirmClear] = useState(false); // 一键清空二次确认
+    const [messageMenu, setMessageMenu] = useState<VRGuestbookMessage | null>(null);
+    const [editingMessage, setEditingMessage] = useState<VRGuestbookMessage | null>(null);
+    const [messageDraft, setMessageDraft] = useState('');
+    const [deletingMessage, setDeletingMessage] = useState<VRGuestbookMessage | null>(null);
+    const [savingMessage, setSavingMessage] = useState(false);
+    const changeMessage = async (message: VRGuestbookMessage, content: string | null) => {
+        if (savingMessage) return;
+        setSavingMessage(true);
+        try {
+            await DB.editVRGuestbookMessage(message.id, content);
+            setBoard(await DB.getVRGuestbook());
+            if (replyingTo?.id === message.id) setReplyingTo(content === null ? null : { ...message, content });
+            setEditingMessage(null); setDeletingMessage(null);
+        } catch { addToast?.('留言保存失败，请重试', 'error'); }
+        finally { setSavingMessage(false); }
+    };
     const [hideChibi, setHideChibi] = useState(false);  // 隐藏小人（留言簿等文字面板会被小人挡住时用）
     const music = useMusic();
 
@@ -2905,14 +2969,7 @@ const RoomScene: React.FC<{
                                                 </div>
                                                 <div className="mt-1 space-y-1">
                                                     {g.map(m => (
-                                                        <button key={m.id} type="button" onClick={() => startReply(m)} disabled={m.authorId === 'user'}
-                                                            aria-label={m.authorId === 'user' ? undefined : `回复 ${m.authorName}：${m.content}`}
-                                                            className="block text-left text-[12.5px] leading-relaxed text-white/85 px-2.5 py-1 rounded-lg w-fit max-w-full disabled:cursor-default active:scale-[0.99]"
-                                                            style={{ background: replyingTo?.id === m.id ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.055)', border: replyingTo?.id === m.id ? '1px solid rgba(125,211,252,.35)' : '1px solid transparent' }}>
-                                                            {m.replyToName && <span className="text-[10px] text-sky-200/45 mr-1">↩{m.replyToName}</span>}
-                                                            {m.content}
-                                                            {m.authorId !== 'user' && <span className="ml-2 text-[9px] text-sky-200/35">回复</span>}
-                                                        </button>
+                                                        <GuestbookMessageButton key={m.id} message={m} selected={replyingTo?.id === m.id} onReply={() => startReply(m)} onMenu={() => setMessageMenu(m)} />
                                                     ))}
                                                 </div>
                                             </div>
@@ -2934,6 +2991,18 @@ const RoomScene: React.FC<{
                 })()}
 
                 {/* 邮局：信件管理面板 */}
+                <ActionSheet open={!!messageMenu} title={messageMenu?.authorName} onClose={() => setMessageMenu(null)} actions={[
+                    { label: '编辑留言', onClick: () => { setEditingMessage(messageMenu); setMessageDraft(messageMenu?.content || ''); setMessageMenu(null); } },
+                    { label: '删除留言', danger: true, onClick: () => { setDeletingMessage(messageMenu); setMessageMenu(null); } },
+                ]} />
+                <ConfirmDialog open={!!deletingMessage} title="删除这条留言？" message="只删除留言墙上的这条记录。" onCancel={() => { if (!savingMessage) setDeletingMessage(null); }} onConfirm={() => { if (deletingMessage) void changeMessage(deletingMessage, null); }} />
+                {editingMessage && <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center p-5" role="dialog" aria-modal="true" aria-label="编辑留言">
+                    <div className="w-full max-w-md rounded-2xl bg-slate-900 p-4 text-white">
+                        <h3>编辑留言</h3>
+                        <textarea autoFocus aria-label="留言内容" value={messageDraft} onChange={e => setMessageDraft(e.target.value)} className="w-full h-32 my-3 p-3 rounded-xl bg-white/10" />
+                        <div className="flex justify-end gap-4"><button disabled={savingMessage} onClick={() => setEditingMessage(null)}>取消</button><button disabled={savingMessage || !messageDraft.trim()} onClick={() => void changeMessage(editingMessage, messageDraft.trim())}>{savingMessage ? '保存中…' : '保存'}</button></div>
+                    </div>
+                </div>}
                 {isPostOffice && <PostOfficePanel addToast={addToast} characters={characters} userName={userName} />}
 
                 {/* 剧院：话剧部门面板（投稿 / 编排 / 演出 / 历史） */}
@@ -3752,7 +3821,7 @@ const SettingsView: React.FC<{
     characters: CharacterProfile[];
     updateCharacter: ReturnType<typeof useOS>['updateCharacter'];
     addToast?: (msg: string, type?: any) => void;
-    novels: VRWorldNovel[]; onReload: () => void;
+    novels: VRWorldNovelSummary[]; onReload: () => void;
     onRequestEnable: (char: CharacterProfile) => void;
     onEditChibi: (char: CharacterProfile) => void;
     onEditReadingPreference: (char: CharacterProfile) => void;
@@ -3928,7 +3997,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
 
     const choose = (cfg: APIConfig | null) => {
         void setVRApi(cfg); setVr(cfg); setTestResult(null);
-        addToast?.(cfg ? '已切换彼方 API' : '彼方改为跟随聊天默认', 'success');
+        addToast?.(cfg ? '已切换彼方 API' : '彼方改为角色回复跟随角色 API，未设置则跟随全局', 'success');
     };
 
     const test = async () => {
@@ -3973,17 +4042,17 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
     return (
         <div className="space-y-3">
             <p className="text-[11px] text-indigo-300/60 leading-relaxed">
-                彼方里的角色会自主、按间隔登入触发模型调用，比较费 API。你可以在这里给彼方<b className="text-indigo-200">单独指定一份 API</b>（和「设置」里保存的预设共用同一批），不设则跟随聊天默认。
+                彼方里的角色会自主、按间隔登入触发模型调用，比较费 API。你可以在这里给彼方<b className="text-indigo-200">单独指定一份 API</b>（和「设置」里保存的预设共用同一批），不设则角色回复跟随角色 API，未设置则跟随全局。
             </p>
 
             {/* 当前生效 */}
             <div className="rounded-2xl p-3.5" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="text-[10px] tracking-[0.2em] text-indigo-200/60 mb-1.5" style={{ fontFamily: `'Noto Serif SC',serif` }}>当前生效</div>
-                <div className="text-[12.5px] text-white/90 font-semibold">{effective?.model || '未配置'}</div>
-                <div className="text-[10px] text-white/40 mt-0.5">{host(effective?.baseUrl)} · {follow ? '跟随聊天默认' : '彼方独立'}</div>
+                <div className="text-[12.5px] text-white/90 font-semibold">{follow ? '按角色使用模型' : effective?.model || '未配置'}</div>
+                <div className="text-[10px] text-white/40 mt-0.5">{follow ? `全局备用：${chatApi.model || '未配置'} · ${host(chatApi.baseUrl)}` : `${host(effective?.baseUrl)} · 彼方独立`}</div>
                 <button onClick={test} disabled={testing} className="mt-2.5 text-[11px] px-3 py-1.5 rounded-full font-semibold disabled:opacity-50"
                     style={{ background: 'rgba(120,180,255,.16)', color: '#bcd4ff', border: '1px solid rgba(140,180,255,.3)' }}>
-                    {testing ? '测试中…' : '测试连接'}
+                    {testing ? '测试中…' : follow ? '测试全局备用 API' : '测试连接'}
                 </button>
                 {testResult && <div className={`mt-2 text-[10.5px] px-2.5 py-1.5 rounded-lg leading-snug ${testResult.startsWith('连接成功') ? 'text-emerald-300' : 'text-rose-300'}`} style={{ background: 'rgba(0,0,0,.25)' }}>{testResult}</div>}
             </div>
@@ -3995,7 +4064,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
                     className="w-full flex items-center gap-2 rounded-xl p-3 mb-1.5 text-left active:scale-[0.99] transition-transform"
                     style={{ background: follow ? 'rgba(120,180,255,.12)' : 'rgba(255,255,255,.04)', border: `1px solid ${follow ? 'rgba(140,180,255,.4)' : 'rgba(255,255,255,.07)'}` }}>
                     <div className="flex-1 min-w-0">
-                        <div className="text-[12px] text-white/90 font-semibold">跟随聊天默认</div>
+                        <div className="text-[12px] text-white/90 font-semibold">跟随角色设置</div>
                         <div className="text-[10px] text-white/40 truncate">{chatApi?.model || '未配置'} · {host(chatApi?.baseUrl)}</div>
                     </div>
                     {follow && <span className="text-[10px] text-sky-300 font-bold shrink-0">✓ 使用中</span>}
@@ -4048,7 +4117,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
                         {log.slice(0, 60).map((l, i) => {
                             const diag = !!l.kind;   // 诊断行：调度到点了，但这一轮没走到模型
                             return (
-                                <div key={i} className="flex items-start gap-2 text-[10.5px] py-1 border-b border-white/5 last:border-0">
+                                <div key={i} className="flex flex-wrap items-start gap-2 text-[10.5px] py-1 border-b border-white/5 last:border-0">
                                     <span className={`shrink-0 ${diag ? 'text-amber-400/70' : l.ok ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{diag ? '◌' : l.ok ? '●' : '○'}</span>
                                     <span className="text-white/75 truncate shrink-0">{l.charName || l.charId?.slice(-4) || '—'}</span>
                                     {diag ? (
@@ -4062,6 +4131,7 @@ const VRApiSettings: React.FC<{ apiPresets: ApiPreset[]; chatApi: APIConfig; add
                                         </>
                                     )}
                                     <span className="text-white/35 shrink-0 tabular-nums w-[68px] text-right">{new Date(l.ts).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                    {l.error && <p className="w-full break-words text-rose-300/90">{l.error}</p>}
                                 </div>
                             );
                         })}

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { DailySchedule, ScheduleSlot, CharacterProfile } from '../../types';
+import { DailySchedule, ScheduleSlot, CharacterProfile, OSTheme } from '../../types';
 import { getCurrentScheduleSlotIndex, getScheduleWallClock } from '../../utils/scheduleTime';
 import { resolveCharTimeZone, tzShortLabel } from '../../utils/timezone';
 import { useOS } from '../../context/OSContext';
@@ -8,6 +8,8 @@ import { resolveScheduleCardPalette } from '../../utils/scheduleAppearance';
 import ScheduleAppearanceButton, { ScheduleCustomCssStyle } from './ScheduleAppearanceButton';
 import TokenImg from '../os/TokenImg';
 import {homePositionLabel} from '../../utils/homeSchedule';
+
+import { putImageBlob } from '../../utils/blobRef';
 
 interface ScheduleCardProps {
     schedule: DailySchedule | null;
@@ -17,7 +19,7 @@ interface ScheduleCardProps {
     onEdit?: (index: number, slot: ScheduleSlot) => void;
     onDelete?: (index: number) => void;
     onReroll?: () => void;
-    onCoverImageChange?: (dataUrl: string) => void;
+    onCoverImageChange?: (imageRef: string) => void | Promise<void>;
     onPlayTheater?: (index: number) => void; // 点某个「已过去/正在进行」时段的播放按钮 → 小剧场
     isGenerating?: boolean;
 }
@@ -35,16 +37,18 @@ const formatClock = (now: Date): string =>
  * 每分钟走一次的「此刻」。卡片可能一直开着，不刷新的话顶部的钟会停，
  * NOW 标记也不会随着时间推进挪到下一个时段。
  */
-const useTickingNow = (): Date => {
-    const [now, setNow] = useState(() => new Date());
+const useTickingNow = (fixed?:Date): Date => {
+    const [now, setNow] = useState(() => fixed || new Date());
     useEffect(() => {
+        if(fixed)return;
         const id = window.setInterval(() => setNow(new Date()), 30_000);
         return () => window.clearInterval(id);
-    }, []);
-    return now;
+    }, [fixed]);
+    return fixed||now;
 };
 
-const ScheduleCard: React.FC<ScheduleCardProps> = ({
+export const ScheduleCardView: React.FC<ScheduleCardProps & {theme:OSTheme;previewNow?:Date}> = ({
+    theme,previewNow,
     schedule,
     character,
     contentColor: inheritedContentColor = '#ffffff',
@@ -56,7 +60,6 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
     onPlayTheater,
     isGenerating = false,
 }) => {
-    const { theme } = useOS();
     const [editingIdx, setEditingIdx] = useState<number | null>(null);
     const [editTime, setEditTime] = useState('');
     const [editActivity, setEditActivity] = useState('');
@@ -64,6 +67,7 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
     const [editEmoji, setEditEmoji] = useState('');
     const [editHomePosition, setEditHomePosition] = useState('');
     const coverInputRef = useRef<HTMLInputElement>(null);
+    const [coverUploadError, setCoverUploadError] = useState('');
 
     // 长按菜单状态：记录哪一条日程被长按触发 action sheet（修改 / 删除）
     const [actionIdx, setActionIdx] = useState<number | null>(null);
@@ -96,7 +100,7 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
         }
     };
 
-    const tickingNow = useTickingNow();
+    const tickingNow = useTickingNow(previewNow);
     const wallClock = getScheduleWallClock(character, tickingNow);
     const currentIdx = schedule ? getCurrentScheduleSlotIndex(schedule.slots, character, tickingNow) : -1;
     // 角色设了自己的时区时，上面那个钟走的是 ta 那边的时间——标出地名，
@@ -132,25 +136,15 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
         setEditingIdx(null);
     };
 
-    const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !onCoverImageChange) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const img = new window.Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const maxW = 400;
-                const scale = Math.min(1, maxW / img.width);
-                canvas.width = img.width * scale;
-                canvas.height = img.height * scale;
-                canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-                onCoverImageChange(canvas.toDataURL('image/jpeg', 0.8));
-            };
-            img.src = ev.target?.result as string;
-        };
-        reader.readAsDataURL(file);
         e.target.value = '';
+        setCoverUploadError('');
+        try {
+            // Store original pixels once; each day's schedule keeps a durable token.
+            await onCoverImageChange(await putImageBlob(file));
+        } catch { setCoverUploadError('头图保存失败，请重试'); }
     };
 
     const palette = resolveScheduleCardPalette(
@@ -181,7 +175,7 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
                 border: `1px solid ${palette.line}`,
             }}
         >
-            <ScheduleCustomCssStyle />
+
             {/* Header */}
             <div className="sully-schedule-header relative px-5 pt-5 pb-3 flex items-start justify-between">
                 <div>
@@ -209,7 +203,7 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
                         >
                             {formatDate(wallClock)}
                         </span>
-                        <ScheduleAppearanceButton compact />
+                        {!previewNow&&<ScheduleAppearanceButton compact />}
                     </div>
                     {charTzName && (
                         <span className="text-[9px] font-bold opacity-40 tracking-wide">
@@ -229,6 +223,7 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
                 </div>
             </div>
 
+            {coverUploadError && <p role="alert" className="px-4 py-2 text-xs text-red-500">{coverUploadError}</p>}
             {/* Content: Character Image Banner on top, Schedule List below */}
             <div className="flex flex-col">
                 {/* Character Image Banner */}
@@ -502,4 +497,5 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
     );
 };
 
+const ScheduleCard:React.FC<ScheduleCardProps> = props => {const {theme}=useOS();return <><ScheduleCustomCssStyle/><ScheduleCardView {...props} theme={theme}/></>;};
 export default ScheduleCard;

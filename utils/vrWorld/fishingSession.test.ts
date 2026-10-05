@@ -10,8 +10,9 @@ import { flushFishingDeliveries } from './fishingDelivery';
 import {ensureDinosaurGarden,setGardenVisits,editDino,gardenResidents,findGardenSpace} from './dinosaurGarden';
 const mocks=vi.hoisted(()=>({messages:[] as any[],board:{id:'board',messages:[] as any[],updatedAt:0}}));
 vi.mock('../db',()=>({DB:{
+    ensureHomeContextMessages:vi.fn(async()=>{}),
     getVRNovels:vi.fn(async()=>[]),getVRMusicRoom:vi.fn(async()=>null),getEmojis:vi.fn(async()=>[]),getEmojiCategories:vi.fn(async()=>[]),
-    getRecentMessagesByCharId:vi.fn(async(id:string)=>mocks.messages.filter(m=>m.charId===id)),getVRCardsByCharId:vi.fn(async(id:string)=>mocks.messages.filter(m=>m.charId===id)),
+    getRecentMessagesByCharId:vi.fn(async(id:string)=>mocks.messages.filter(m=>m.charId===id)),getVRCardsByCharId:vi.fn(async(id:string)=>mocks.messages.filter(m=>m.charId===id)),getVRMarketEventIds:vi.fn(async(id:string)=>mocks.messages.filter(m=>m.charId===id).map(m=>m.metadata?.marketEventId).filter(Boolean)),
     saveMessageOnce:vi.fn(async(key:string,m:any)=>{const found=mocks.messages.find(x=>x.charId===m.charId&&x.metadata?.deliveryId===key);if(!found)mocks.messages.push({...m,metadata:{...m.metadata,deliveryId:key}});return 1;}),
     appendVRGuestbookMessages:vi.fn(async(messages:any[])=>{for(const m of messages)if(!mocks.board.messages.some(x=>x.id===m.id))mocks.board.messages.push(m);}),
     saveMessage:vi.fn(async(m:any)=>{mocks.messages.push(m);return 1;}),getVRGuestbook:vi.fn(async()=>mocks.board),saveVRGuestbook:vi.fn(async(b:any)=>{mocks.board=b;}),
@@ -26,6 +27,28 @@ const b={id:'b',name:'旁边那位',vrState:{enabled:true,intervalMinutes:120}} 
 const deps={char:a,characters:[a,b],userProfile:{name:'用户'} as any,apiConfig:{baseUrl:'https://model.invalid/v1',apiKey:'fake',model:'test'} as any,groups:[],updateCharacter:vi.fn(),forcedRoom:'sar' as const,manual:true};
 const answer=(text:string)=>vi.mocked(safeFetchJson).mockResolvedValue({choices:[{message:{content:text}}]});
 beforeEach(()=>{vi.restoreAllMocks();localStorage.clear();mocks.messages=[];mocks.board={id:'board',messages:[],updatedAt:0};vi.clearAllMocks();saveFishingMarketState({...ensureActorAccounts(createFishingMarketState(42),[{id:'a',name:'艾文',kind:'character'},{id:'b',name:'旁边那位',kind:'character'},{id:'user',name:'用户',kind:'user'}]),lastPulseAt:Date.now()});});
+it('a board encounter uses one character call and saves the committed scene and reaction in activity cards',async()=>{
+    let state=ensureActorAccounts(readFishingMarketState(),[{id:'wanderer:0',name:'临时售票员',kind:'wanderer'}]);
+    state=createRequest(state,{id:'wanderer:0',name:'临时售票员',kind:'wanderer'},undefined,'替风扇鼓掌',7,'需要一位热心观众',Date.now(),'favor');
+    const post=state.requests[0];post.npcPersona={name:'临时售票员',identity:'风扇的经纪人'};post.encounter={story:'{{participant}}刚站稳，风扇就谢幕了。经纪人说它今天转得太投入。'};
+    saveFishingMarketState(state);
+    answer(`<ACTION>fulfill</ACTION><TARGET>${post.id}</TARGET><NOTE>去看看这场演出。</NOTE><REACTION>它的返场是不是得插电？</REACTION>`);
+    expect(await runVRSession({...deps,forcedSARActivity:'market'})).toMatchObject({ok:true});
+    expect(safeFetchJson).toHaveBeenCalledTimes(1);
+    const cards=mocks.messages.filter(m=>m.type==='vr_card');
+    expect(cards.some(m=>m.metadata?.marketActivity&&m.content.includes('风扇就谢幕了')&&m.content.includes('返场是不是得插电'))).toBe(true);
+    expect(readFishingMarketState().requests[0].encounterResult?.participantId).toBe('a');
+});
+it('a rejected encounter does not publish the prewritten scene or the character reaction as experienced',async()=>{
+    let state=ensureActorAccounts(readFishingMarketState(),[{id:'wanderer:0',name:'临时售票员',kind:'wanderer'}]);
+    state=createRequest(state,{id:'wanderer:0',name:'临时售票员',kind:'wanderer'},undefined,'替风扇鼓掌',7,'需要观众',Date.now(),'favor');
+    const post=state.requests[0];post.npcPersona={name:'临时售票员',identity:'风扇经纪人'};post.encounter={story:'风扇居然谢幕了。'};state.accounts['wanderer:0']=0;
+    saveFishingMarketState(state);
+    answer(`<ACTION>fulfill</ACTION><TARGET>${post.id}</TARGET><NOTE>去看看。</NOTE><REACTION>没想到还有返场。</REACTION>`);
+    await runVRSession({...deps,forcedSARActivity:'market'});
+    expect(mocks.messages.some(m=>m.content.includes('风扇居然谢幕了')||m.content.includes('没想到还有返场'))).toBe(false);
+    expect(readFishingMarketState().requests[0].encounterResult).toBeUndefined();
+});
 it('manual-only participants cannot be started by a stale timer, but explicit invitations work',async()=>{
     const char={...a,vrState:{...a.vrState,activityMode:'manual'}};
     expect(await runVRSession({...deps,char,manual:false,forcedSARActivity:'market'})).toMatchObject({ok:false,reason:'manual-only'});
