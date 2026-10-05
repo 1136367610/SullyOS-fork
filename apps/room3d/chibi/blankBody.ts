@@ -57,6 +57,7 @@ export function createBlankBody(appearance:'skin'|'hair'|'outfit',options?:BodyP
  const indices:number[]=[];
  buckets.forEach((bucket,material)=>{const start=indices.length;indices.push(...bucket);if(bucket.length)g.addGroup(start,bucket.length,material);});
  g.userData.bodyHeight=height;
+ g.userData.headSize=headSize;
  g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setAttribute('normal',new T.Float32BufferAttribute(normals,3));g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeBoundingBox();g.computeBoundingSphere();
  return g;
 }

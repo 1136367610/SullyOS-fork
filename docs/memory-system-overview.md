@@ -2,6 +2,10 @@
 
 本项目包含两套并行运行的记忆系统：传统日度/月度总结（Legacy）和向量化记忆宫殿（主系统）。
 
+## 角色页与像素家园入口
+
+角色宫殿概览现在有「记忆房间 / 像素家园」两页，第二页沿用原像素家园的地图、装修、潜行、人物及导入导出。退出返回同一角色的概览。未启用记忆宫殿的角色也可进入像素家园，不因打开家园而开启记忆提取。原像素存档仍保存在 pixel_home_layouts / pixel_home_assets 和原有角色键中；只移动入口，不重建布局或迁移数据。RoomApp 原位置改为「拜访（测试版）3D」，使用独立的 CharacterProfile.home3D。
+
 ---
 
 ## 系统一：传统日度/月度总结
@@ -23,6 +27,7 @@
 - `buildCoreContext(char, user, true)`（用于聊天）：
   - 月度总结 → "长期核心记忆"
   - `activeMemoryMonths` 对应的详细日志 → "激活的详细回忆"
+- `buildCoreContext(..., false)` 仅省略神经链接激活月份的详细日志，月度总结保持原行为。向量召回独立：上游已提供的结果不受 true/false 限制，核心块或实时状态块统一注入；组装器不会因此新增召回调用。记忆宫殿关闭时仍不注入旧缓存。
 - AI 可以用 `[[RECALL: YYYY-MM]]` 语法主动拉取某个月的详细日志
 
 ### 管理
@@ -288,6 +293,8 @@ active(新建) → anchor(7天+，心理锚点) → fulfilled / disappointed
 
 **注入**：`injectMemoryPalace` 每轮纯 IDB 读出 → `char.roomPlatesInjection` → `buildCoreContext` 在印象档案之后注入（受 `memoryPalaceEnabled` 把关防残留）。注入框架把门牌定位为 **constraint 而非 topic**："你早已知道的背景，不要主动提起，只在相关时自然影响反应"——对应人脑背景知识"常在但低激活"的状态。
 
+**家园聊天入口**：`homeConversation.ts` 直接调用 ChatApp 的 `buildChatRequestPayload`。`home_3d` 与 `chat_app` 共用交互召回策略、完整可见消息范围及注入位置；每次使用请求内角色副本清空旧召回和门牌。共用 `injectMemoryPalace` 在检查 embedding 配置前读取门牌，因此开启宫殿但未配置向量时，私聊和家园都能读到门牌。家园只替换现场/动作及输出协议提示词。
+
 **审计**：神经链接 app「门牌」标签页（`RoomPlatePanel`）可查看/改写/删除——蒸错的事实一旦常驻会被自信地重复很久，必须有人工纠错口。一键清空（wipe）会连门牌一起清。
 
 **备份**：门牌与消化日志都随「设置-导出」全量备份走（v2 分片，导出装配在 OSContext、还原在 `importFullData`，clear-and-add 语义）；门牌另随记忆宫殿导出/导入迁移（`export.ts`，合并语义：同文本去重、尊重容量上限、条目重生成 ID）。
@@ -343,3 +350,22 @@ active(新建) → anchor(7天+，心理锚点) → fulfilled / disappointed
 - 打开入口时先关闭聊天加号面板；退出整个记忆链接时再次清空面板状态，保证落回聊天正文。线索编辑抽屉的关闭只返回本次修补现场，不会丢失诊断结果。
 
 关键实现：`components/chat/MemoryRepairPortal.tsx`、`utils/memoryPalace/memoryRepair.ts`。
+
+### 3D 家园上下文与后处理（2026-10-04）
+
+- `homeConversation.ts` 与 ChatApp / DateApp 共用 `loadCharacterContextRange` 和历史格式化；自适应遵守水位快照，忽略旧手动条数，用户断点继续收窄。开启宫殿本身不强制覆盖用户的手动模式；模式沿用统一设置。`contextEntryParity.test.ts` 对照三个入口的最终原文及召回材料，覆盖超过 200 条、手动区间、断点和一键入宫。
+- 家园当前回合替换同 ID 的历史投影，重生成排除后续原文；关键词世界书从同一可见历史扫描。家园一轮行为与双方对话仍合为一条时间线消息。
+- 3D 家园此前只落库、未挂接整理（旧文中的世界家园 engine 是另一入口）。现在 OSContext 的角色保存成功后调用 `homeMemoryPostHook.ts`：新回合或新角色回复检查共用整理阈值，读取最新宫殿开关，复用 `processNewMessagesWithAutoArchive`；新回复累计共用认知消化轮次。重存、编辑、关联动作不重复计轮，按角色排队。保存失败不会触发，未到阈值不调用整理 LLM。
+- 2026-10-05：3D 家园使用独立 Trace 标识 `home_3d`，与 `chat_app` 共用完整载荷、交互召回增强和实时数据注入。旧 `world_home` 仍指另一套世界家园，不扩大其策略范围；DateApp 也保持原策略。范围先按 ID 水位/断点筛选，之后按 timestamp（同时间以 ID 打破平局）排序；两边的召回、世界书扫描和历史格式化均消费此顺序，不使用 UI 近窗替代。
+
+
+### 情绪上下文的入口边界
+
+ContextBuilder.buildEmotionContext 统一组装 buffInjection 和共享缓存 innerState。仅 chat/home 入口且角色日程功能、情绪开关开启时注入；未声明入口默认不注入。私聊与家园的实时块复用此函数，不清空其他入口的角色状态。innerState 使用同一情绪评估落库函数写入的角色缓存，下一轮实时读取，不依赖当天日程是否存在。私聊和家园重生成显式省略旧情绪输入，并重新评估。家园评估与主回复并行，评估看到本轮实际发送的 system 和历史。
+
+
+### 全入口日程上下文
+
+ContextBuilder 的 buildCoreContext、buildVolatileCoreState、buildRoleSettingsContext 为异步入口，调用方必须 await 后再拼接或发送。角色日程功能开启后统一按角色时区从 IndexedDB 读取当前日程，注入全天安排、当前时段和日程旁白；false/skipMemories 不控制日程。没有日程只返回空日程段，不调用 LLM 生成。关闭角色日程总开关才停止读取与注入。
+
+私聊的日程放在 ContextBuilder 实时状态块中，不再在 ChatPrompts 额外拼接；后者在每轮建立一次日程读取 Promise，交给 ContextBuilder 和音乐氛围共用；null 也复用，不跨轮缓存。日程修改指令仅提供给有对应解析器的私聊，其他入口照样得到日程内容。时间感知关闭只隐藏钟点，不隐藏安排。后台 fire-pack 将日程读取延后到 worker 真正执行时，避免把打包时的旧状态冻结在提示词中。

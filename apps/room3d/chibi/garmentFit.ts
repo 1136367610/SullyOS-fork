@@ -48,7 +48,7 @@ export function garmentTransform(slot:WardrobeSlot,fit:GarmentFit,height:number,
  const reference=(v:T.Vector3)=>new T.Vector3(v.x,bodyBaseY(v.y,height)*height,v.z);
  const bounds=new T.Box3(reference(actualBounds.min),reference(actualBounds.max));
  const pairedCenters=actualCenters?{left:reference(actualCenters.left),right:reference(actualCenters.right)}:undefined;
- const upper=slot==='top'||slot==='outer'||slot==='onepiece',lower=slot==='bottom',feet=slot==='shoes'||slot==='socks',headwear=slot==='headwear';
+ const upper=slot==='top'||slot==='outer'||slot==='onepiece',lower=slot==='bottom',feet=slot==='shoes'||slot==='socks',headwear=slot==='headwear'||slot==='ears'||slot==='tail';
  const center=bounds.getCenter(new T.Vector3());
  const sleeveExtent=Math.max(Math.abs(bounds.min.x),Math.abs(bounds.max.x));
  // Sleeve-only accessories start at the forearm instead of the shoulder.

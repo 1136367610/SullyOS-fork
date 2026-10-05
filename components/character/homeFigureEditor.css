@@ -1,0 +1,7 @@
+.home-figure-editor{box-sizing:border-box;overflow:hidden}
+.home-figure-editor-header{position:relative;z-index:2;background:#f4f5ef;flex-wrap:nowrap}
+.home-figure-editor-header>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-figure-editor-header>button{flex-shrink:0;white-space:nowrap}
+.home-figure-editor-content{position:relative;overflow:hidden}
+.home-figure-editor-content>.hair-editor{position:absolute;inset:0;z-index:0}
+.home-figure-editor .home-figure-save{min-height:44px;padding:0 14px}

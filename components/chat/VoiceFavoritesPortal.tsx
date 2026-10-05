@@ -36,6 +36,7 @@ type FavoriteTab = 'chat' | 'voice' | 'image';
 type VoiceSourceFilter = 'all' | VoiceFavoriteSource;
 
 interface FavoritesPortalProps {
+    inline?: boolean;
     onClose: () => void;
     onJumpToMessage?: (charId: string, messageId: number) => void;
 }
@@ -69,7 +70,7 @@ const messageTypeLabel = (type?: string): string => ({
     life_card: '生活记录',
 }[type || ''] || '聊天消息');
 
-const FavoritesPortal: React.FC<FavoritesPortalProps> = ({ onClose, onJumpToMessage }) => {
+const FavoritesPortal: React.FC<FavoritesPortalProps> = ({ onClose, onJumpToMessage, inline=false }) => {
     const [tab, setTab] = useState<FavoriteTab>('chat');
     const [contentItems, setContentItems] = useState<ContentFavorite[]>([]);
     const [voiceItems, setVoiceItems] = useState<VoiceFavorite[]>([]);
@@ -481,7 +482,7 @@ const FavoritesPortal: React.FC<FavoritesPortalProps> = ({ onClose, onJumpToMess
         </div>
     );
 
-    return createPortal(portal, document.body);
+    return inline?portal:createPortal(portal, document.body);
 };
 
 export default FavoritesPortal;

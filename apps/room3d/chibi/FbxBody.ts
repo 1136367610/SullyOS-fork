@@ -1,3 +1,4 @@
+import {actionExpression,actionMouthFrame} from './actionExpression';
 import {bindBlankBody} from './blankRig';
 import {createBlankMotion} from './blankMotion';
 import {mirrorFrame} from '../mirrorMotion.js';
@@ -52,7 +53,7 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
     const facePlacement={eyes:{x:0,y:blank?-16:0},mouth:{x:0,y:blank?-16:0}};
     let faceSettings:FaceSettings|undefined,faceImages:Awaited<ReturnType<typeof loadFaceImages>>|undefined,faceVersion=0,disposed=false;
     keep({dispose(){disposed=true;faceVersion++;}});
-    const makeTexture=(keys:string[],fill?:string,eyes:'original'|'sleep'|'squeeze'='original',target?:T.Texture)=>{
+    const makeTexture=(keys:string[],fill?:string,eyes:'original'|'sleep'|'squeeze'='original',target?:T.Texture,mouth:'base'|'closed'|'open'|'smile'='base')=>{
         // Supersample only the facial atlas, preserving the original 472px
         // artwork coordinates. This avoids extra loss when positioning features.
         const facial=keys.includes('eyes'),resolution=facial?2:1;
@@ -60,29 +61,40 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         const ctx=canvas.getContext('2d')!;
         ctx.scale(resolution,resolution);ctx.imageSmoothingQuality='high';
         if(fill){ctx.fillStyle=fill;ctx.fillRect(0,0,472,472);}
-        const splitFace=faceSettings?.enabled&&faceImages?composeFace(faceSettings,faceImages,eyes==='sleep'?'closed':eyes==='squeeze'?'happy':faceSettings.eyeState):undefined;
+        const splitFace=faceSettings?.enabled&&faceImages?composeFace(mouth==='base'?faceSettings:{...faceSettings,mouth:faceSettings.mouths?.[mouth]??faceSettings.mouth},faceImages,eyes==='sleep'?'closed':eyes==='squeeze'?'happy':faceSettings.eyeState):undefined;
         keys.forEach(k=>{
-            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace?splitFace.eyes:k==='mouth'&&splitFace?splitFace.mouth:parts[k];
-            if(!drawable)return;
+            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace&&!faceSettings?.useBaseEyes?splitFace.eyes:k==='mouth'&&splitFace&&(!faceSettings?.useBaseMouth||mouth!=='base')?splitFace.mouth:parts[k];
+            if(!drawable&&!(k==='mouth'&&mouth!=='base'))return;
             ctx.save();
             if(k==='eyes'||k==='mouth')ctx.translate(facePlacement[k].x,-facePlacement[k].y);
             // Keep marks and accessories aligned with the -16 facial baseline.
             if(blank&&(k==='facemark'||k==='faceDecor'))ctx.translate(0,16);
+            if(k==='facemark'||k==='faceDecor'){
+                const layer=hair?.layers[k==='faceDecor'?'decor':'facemark'];
+                const safe=(v:unknown,min:number,max:number,fallback:number)=>typeof v==='number'&&Number.isFinite(v)?T.MathUtils.clamp(v,min,max):fallback;
+                const size=safe(layer?.width,.5,1.5,1);
+                ctx.translate(236+safe(layer?.offsetX,-80,80,0),268-safe(layer?.offsetY,-80,80,0));
+                ctx.rotate(safe(layer?.rotation,-45,45,0)*Math.PI/180);ctx.scale(size,size);ctx.translate(-236,-268);
+            }
             // Move the fringe artwork down while keeping its shell fitted to the head.
             if(blank&&k==='fronthair')ctx.translate(0,16);
             // Lift the facial cluster by 8 creator pixels and gently compact it.
             // Garments/hair retain their original registration against the body.
             if(k==='eyes'||k==='mouth'||k==='facemark')ctx.transform(.97,0,0,.96,237*.03,268*.04-8);
-            if(k==='eyes'&&!splitFace&&eyes==='squeeze'){
+            if(k==='eyes'&&(!splitFace||faceSettings?.useBaseEyes)&&eyes==='squeeze'){
                 ctx.strokeStyle='#514747';ctx.lineWidth=7;ctx.lineCap='round';ctx.lineJoin='round';
                 // Draw > on the left and < on the right in the original eye area.
                 for(const [x,direction] of [[177,1],[297,-1]]){
                     ctx.beginPath();ctx.moveTo(x-direction*18,252);ctx.lineTo(x+direction*18,270);ctx.lineTo(x-direction*18,288);ctx.stroke();
                 }
-            }else if(k==='eyes'&&!splitFace&&eyes==='sleep'){
+            }else if(k==='eyes'&&(!splitFace||faceSettings?.useBaseEyes)&&eyes==='sleep'){
                 ctx.strokeStyle='#514747';ctx.lineWidth=6;ctx.lineCap='round';
                 for(const x of [177,297]){ctx.beginPath();ctx.moveTo(x-25,270);ctx.quadraticCurveTo(x,288,x+25,270);ctx.stroke();}
-            }else ctx.drawImage(drawable,0,0,472,472);
+            }else if(k==='mouth'&&mouth!=='base'&&!splitFace){
+                ctx.strokeStyle='#664549';ctx.fillStyle='#804b55';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
+                if(mouth==='open'){ctx.ellipse(237,312,7,9,0,0,Math.PI*2);ctx.fill();}
+                else {ctx.moveTo(228,310);ctx.quadraticCurveTo(237,mouth==='smile'?321:312,246,310);ctx.stroke();}
+            }else ctx.drawImage(drawable!,0,0,472,472);
             ctx.restore();
         });
         const texture=target??keep(new T.CanvasTexture(canvas));texture.colorSpace=T.SRGBColorSpace;texture.needsUpdate=true;
@@ -99,13 +111,23 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
     const frontCloth=keep(new T.MeshStandardMaterial({map:appearance==='outfit'?garmentMap(false):makeTexture([],skin),roughness:1}));
     const faceKeys=appearance==='outfit'&&!blank?['facemark','eyes','mouth','outfit','faceDecor']:['facemark','eyes','mouth','faceDecor'];
     const front=keep(new T.MeshStandardMaterial({map:makeTexture(faceKeys,skin),roughness:1}));
+    front.userData.illustrationFace=true;
     const awakeMap=front.map;
     const asleepMap=makeTexture(faceKeys,skin,'sleep');
     const cuteMap=makeTexture(faceKeys,skin,'squeeze');
+    const expressionMaps=new Map<string,T.Texture>();
+    const clearExpressionMaps=()=>{for(const map of expressionMaps.values()){map.dispose();const i=resources.indexOf(map);if(i>=0)resources.splice(i,1);}expressionMaps.clear();};
+    const setExpressionFace=(eyes:'open'|'closed'|'happy',mouth:'base'|'closed'|'open'|'smile'='base')=>{
+        if(mouth==='base'){front.map=eyes==='closed'?asleepMap:eyes==='happy'?cuteMap:awakeMap;return;}
+        const key=eyes+':'+mouth;let map=expressionMaps.get(key);
+        if(!map){map=makeTexture(faceKeys,skin,eyes==='closed'?'sleep':eyes==='happy'?'squeeze':'original',undefined,mouth);expressionMaps.set(key,map);}
+        front.map=map;
+    };
     const setFacePlacement=(placement:typeof facePlacement)=>{
         for(const key of ['eyes','mouth'] as const)for(const axis of ['x','y'] as const){
             const value=placement[key][axis];facePlacement[key][axis]=Number.isFinite(value)?T.MathUtils.clamp(value,-80,80):0;
         }
+        clearExpressionMaps();
         makeTexture(faceKeys,skin,'original',awakeMap!);
         makeTexture(faceKeys,skin,'sleep',asleepMap);
         makeTexture(faceKeys,skin,'squeeze',cuteMap);
@@ -115,6 +137,7 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         const loaded=next?.enabled?await loadFaceImages(next):undefined;
         if(disposed||version!==faceVersion)return;
         faceSettings=next;faceImages=loaded;
+        clearExpressionMaps();
         makeTexture(faceKeys,skin,'original',awakeMap!);
         makeTexture(faceKeys,skin,'sleep',asleepMap);
         makeTexture(faceKeys,skin,'squeeze',cuteMap);
@@ -365,7 +388,9 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
     const roomMotion:{walk?:import('./roomWalk').RoomWalkClip}={};
     const blankAnimate=rig?createBlankMotion(rig,body,roomMotion):undefined;
     const setWalkMotion=(clip?:import('./roomWalk').RoomWalkClip)=>{roomMotion.walk=clip;};
+    let motionEyes:'open'|'closed'|'happy'='open';
     const animate=(time:number,motion:Motion,posture:Posture='standing',activity?:ActivityPose)=>{
+        motionEyes=motion==='sleep'&&(activity?.kind!=='bed-change'||(activity.bedRecline??0)>.85)?'closed':motion==='wave-cute'?'happy':'open';
         if(blankAnimate){
             blankAnimate(time,motion,posture,activity);
             const sleeping=motion==='sleep'&&(activity?.kind!=='bed-change'||(activity.bedRecline??0)>.85);
@@ -382,16 +407,16 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         // Squash -> airborne -> soft landing, with a rest between little hops.
         const jump=cute&&!sitting?Math.max(0,Math.sin(Math.min(1,Math.max(0,(beat-.18)/.75))*Math.PI))*.24:0;
         const crouch=cute&&!sitting&&beat<.18?Math.sin(beat/.18*Math.PI)*.045:0;
-        const headTilt=cute?(-.10+Math.sin(time*3)*.035)*enter:sleeping?.055:angry?Math.sin(time*15)*.022:motion==='dance'?Math.sin(time*3)*.055:Math.sin(time*1.8)*.008;
+        const headTilt=activity?.socialHead?.[2]??(cute?(-.10+Math.sin(time*3)*.035)*enter:sleeping?.055:angry?Math.sin(time*15)*.022:motion==='dance'?Math.sin(time*3)*.055:Math.sin(time*1.8)*.008);
         const inBed=posture==='lying',lying=sleeping&&!sitting&&!inBed;
         body.position.set(lying?.94:0,lying?.98+Math.sin(time*1.8)*.012:jump-crouch,0);
         if(rhythm)body.position.fromArray(rhythm.offset);
         body.rotation.set(inBed?-Math.PI/2:0,0,inBed||sitting?0:lying?Math.PI/2-.10:angry?Math.sin(time*14)*.025:motion==='dance'?Math.sin(time*3)*.045:0);
         if(inBed)body.position.set(0,Math.sin(time*1.8)*.009,0);
         body.scale.set(1,lying?1+Math.sin(time*1.8)*.012:1,1);
-        const headNod=sitting&&sleeping?.10+Math.sin(time*1.6)*.025:motion==='stream'?.025*Math.sin(time*3):motion==='eat'?.018+.018*Math.sin(time*4):0;
+        const headNod=activity?.socialHead?.[0]??(sitting&&sleeping?.10+Math.sin(time*1.6)*.025:motion==='stream'?.025*Math.sin(time*3):motion==='eat'?.018+.018*Math.sin(time*4):0);
         hairPivot.rotation.z=headTilt;
-        hairPivot.rotation.x=headNod;
+        hairPivot.rotation.x=headNod;hairPivot.rotation.y=0;
         if(motion==='bath-laundry'){hairPivot.rotation.set(Math.sin(time*2.5)*.08,Math.sin(time*1.8)*.16,Math.sin(time*2)*.08);body.rotation.z=Math.sin(time*2)*.04;}
         if(motion==='bath-shower'){hairPivot.rotation.x=.08;body.rotation.y=Math.sin(time*2)*.06;}
         if(mirror){body.rotation.y=mirror.yaw;hairPivot.rotation.z=mirror.tilt;hairPivot.rotation.x=mirror.nod;}
@@ -453,5 +478,14 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         }
     };
     animate(0,'idle');
-    return {root,resources,animate,rig,setFacePlacement,setFaceSettings,updateFace,setWalkMotion};
+    const classicPoint=(name:string)=>{const side=name.startsWith('L')?1:-1;const hand=hands.find(h=>h.side===side)?.mesh;return name.endsWith('hand')&&hand?hand.getWorldPosition(new T.Vector3()):body.localToWorld(new T.Vector3(side*.32,.55,0));};
+    const classicContact=(side:'L'|'R',point:T.Vector3,weight:number)=>{const sign=side==='L'?1:-1,local=body.worldToLocal(point.clone());for(const entry of [...hands,...actionLimbs.filter(e=>!e.foot)])if(entry.side===sign)entry.mesh.position.lerp(local,weight);};
+    return {root,motionBody:body,classicPoint,classicContact,lookToward(target:T.Vector3){
+      if(rig)return;body.updateWorldMatrix(true,false);const local=body.worldToLocal(target.clone()).sub(new T.Vector3(0,1.2,0));
+      const yaw=T.MathUtils.clamp(Math.atan2(local.x,local.z),-1.05,1.05)*.8;hairPivot.rotation.y=yaw;
+      for(const {geometry,rest,smoothNormals} of deformers){const p=geometry.getAttribute('position');for(let i=0;i<p.count;i++){const a=yaw*smooth(.62,.84,rest[i*3+1]),x=p.getX(i),z=p.getZ(i);p.setX(i,x*Math.cos(a)+z*Math.sin(a));p.setZ(i,-x*Math.sin(a)+z*Math.cos(a));}p.needsUpdate=true;smoothNormals();}
+    },resources,animate(time:number,motion:Motion,posture:Posture='standing',activity?:ActivityPose){animate(time,motion,posture,activity);const mouth=actionMouthFrame(actionExpression(activity?.bedMode==='bed-talk'?'bed-talk':motion),time).mouth;if(mouth!=='base')setExpressionFace(front.map===asleepMap?'closed':front.map===cuteMap?'happy':'open',mouth);},rig,setFacePlacement,setFaceSettings,updateFace,setWalkMotion,
+        get expressionBase(): 'open'|'closed'|'happy' {return motionEyes!=='open'?motionEyes:faceSettings?.enabled&&(faceSettings.eyeState==='closed'||faceSettings.eyeState==='happy'||faceSettings.upper==='04')?(faceSettings.eyeState==='happy'?'happy':'closed'):'open';},
+        setExpressionFace,setExpressionEyes(eyes:'open'|'closed'|'happy'){setExpressionFace(eyes);}
+    };
 }

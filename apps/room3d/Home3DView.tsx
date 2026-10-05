@@ -1,43 +1,78 @@
+import type {HomeConversationContext} from '../../utils/homeConversation';
+import HomePhone from './HomePhone';
+import {homeDisposalReason} from '../../utils/homeAssetCancellation';
+import {useBlobRefUrl} from '../../utils/blobRef';
+import {HomeSocialPanel,type HomeResidentOption} from './HomeSocialPanel';
 import React, {useEffect,useRef,useState,useMemo} from 'react';
 import {mountHomeEditor} from './editor.js';
 import type {Home3DState} from './types';
 import './editor.css';
+import './homeHud.css';
+import 'animal-island-ui/style';
+import './islandTheme.css';
 import type {HomeEditor} from './editor.js';
 import type {Parts,HairSettings} from './chibi/types';
 import {selectedHairAssets} from './chibi/types';
-import type {CharacterProfile} from '../../types';
+import type {CharacterProfile,UserProfile,APIConfig} from '../../types';
 import {CreatorRollBridge} from './chibi/CreatorRollBridge';
 import {createVisitor,decodeParts} from './chibi/visitor';
 import {loadCreatorPartsForRender} from '../../utils/creatorPartsBlob';
+import {resolveCharTimeZone} from '../../utils/timezone';
+import {useHomeSchedule} from './useHomeSchedule';
+import {HomePresenceBubbles,type HomeInitiativeRequest} from './HomePresenceBubbles';
+import HomeLifePanel from './HomeLifePanel';
+import {useHomeCompanion} from './useHomeCompanion';
+import {HomeSpeechBubble} from './HomeSpeechBubble';
 
-export default function Home3DView({value,onChange,onBack,character,parts:previewParts,hair,suspended=false}:{value?:Home3DState;onChange:(value:Home3DState)=>void;onBack:()=>void;character?:CharacterProfile;parts?:Parts;hair?:HairSettings;suspended?:boolean}){
+export default function Home3DView({value,onChange,onBack,character,user,api,conversationContext,onDefinition,onFigures,parts:previewParts,hair:inputHair,suspended=false,residents=[],onEditor}:{value?:Home3DState;onChange:(value:Home3DState)=>void;onBack:()=>void;character?:CharacterProfile;user?:UserProfile;api?:APIConfig;conversationContext?:HomeConversationContext;onDefinition?:()=>void;onFigures?:()=>void;parts?:Parts;hair?:HairSettings;suspended?:boolean;residents?:HomeResidentOption[];onEditor?:(editor:HomeEditor)=>void}){
+ const hair=inputHair??character?.chibiStudio?.home3D?.hair;
  const host=useRef<HTMLDivElement>(null),save=useRef(onChange),back=useRef(onBack),initial=useRef(value);
  const [editor,setEditor]=useState<HomeEditor>(),[parts,setParts]=useState<Parts>(),[residentError,setResidentError]=useState('');
+ const userAvatar=useBlobRefUrl(user?.avatar),characterAvatar=useBlobRefUrl(character?.avatar);
+ useEffect(()=>{editor?.setResidentPortraits([{id:character?.id??'resident',label:character?.name??'小人',avatar:characterAvatar},...residents.map(r=>({id:r.id,label:r.label,avatar:r.id==='user'?userAvatar:r.avatar}))]);},[editor,character?.id,character?.name,characterAvatar,userAvatar,residents]);
+ const [bodyOverride,setBodyOverride]=useState<'blank'|'classic'>(),[mainReady,setMainReady]=useState(false);
+ const away=useHomeSchedule(editor,character,mainReady,suspended);
+ useHomeCompanion(editor,character,user,api,mainReady,suspended);
+ const [photoActive,setPhotoActive]=useState(false),[phoneOpen,setPhoneOpen]=useState(false),[phoneBusy,setPhoneBusy]=useState(false),[homeBusy,setHomeBusy]=useState(false);
+ const [interactionTarget,setInteractionTarget]=useState<string>();
+ const openLifePanel=(name:string|null,targetId?:string)=>{setInteractionTarget(name==='interact'?targetId:undefined);setLifePanel(name);};
+ const [initiative,setInitiative]=useState<HomeInitiativeRequest>();
+ const [lifePanel,setLifePanel]=useState<string|null>(null);
  const [residentAssets,setResidentAssets]=useState<Record<string,string>>({});
- const residentHair=useMemo(()=>({...hair,layers:hair?.layers??{},extras:hair?.extras??[],assets:hair?.assets??residentAssets}),[hair,residentAssets]);
+ const residentHair=useMemo(()=>({...hair,bodyShape:bodyOverride??hair?.bodyShape,layers:hair?.layers??{},extras:hair?.extras??[],assets:hair?.assets??residentAssets}),[hair,residentAssets,bodyOverride]);
  const previousAppearance=useRef<{parts:Parts;style:string}>();
+ const roomTimeZone=resolveCharTimeZone(character),initialTimeZone=useRef(roomTimeZone);
+ useEffect(()=>{editor?.setTimeZone(roomTimeZone);},[editor,roomTimeZone]);
  const [extraItems,setExtraItems]=useState<unknown[]>(),[creatorReady,setCreatorReady]=useState(false);
- const savedState=character?.chibiStudio?.room?.state??character?.chibiStudio?.vr?.state;
+ const savedState=character?.chibiStudio?.home3D?.state??character?.chibiStudio?.room?.state??character?.chibiStudio?.vr?.state;
  useEffect(()=>{let cancelled=false;if(!savedState)return;loadCreatorPartsForRender().then(items=>{if(!cancelled)setExtraItems(items.map(p=>({...p,categoryKey:p.categoryKey})));}).catch(()=>{if(!cancelled)setResidentError('自定义素材读取失败，请退出小屋重试。');});return()=>{cancelled=true};},[savedState]);
  useEffect(()=>{let cancelled=false;if(!editor||suspended||!(previewParts||parts))return;
-  const currentParts=(previewParts||parts)!,{headSize,bodyHeight,...style}=residentHair,signature=JSON.stringify(style);
-  createVisitor(currentParts,residentHair).then(visitor=>{if(cancelled)visitor.dispose();else {const previous=previousAppearance.current;editor.setVisitor?.(visitor,{preservePose:previous?.parts===currentParts&&previous.style===signature});previousAppearance.current={parts:currentParts,style:signature};setResidentError('');}}).catch(e=>{if(!cancelled)setResidentError(String(e));});
+  setMainReady(false);const currentParts=(previewParts||parts)!,{headSize,bodyHeight,...style}=residentHair,signature=JSON.stringify(style);
+  createVisitor(currentParts,residentHair).then(visitor=>{if(cancelled)visitor.dispose();else {const previous=previousAppearance.current;editor.setVisitor?.(visitor,{preservePose:previous?.parts===currentParts&&previous.style===signature});previousAppearance.current={parts:currentParts,style:signature};setResidentError('');setMainReady(true);}}).catch(e=>{if(!cancelled)setResidentError(String(e));});
   return()=>{cancelled=true};
  },[editor,previewParts,parts,residentHair,suspended]);
  useEffect(()=>{editor?.setSuspended?.(suspended);if(suspended)editor?.setVisitor?.(null);},[editor,suspended]);
  useEffect(()=>()=>{editor?.setVisitor?.(null);},[editor]);
+ useEffect(()=>{if(!editor||!mainReady||suspended)return;const timer=setTimeout(()=>editor.greetOwner?.(),600);return()=>clearTimeout(timer);},[editor,mainReady,suspended]);
  const [error,setError]=useState('');save.current=onChange;back.current=onBack;
  useEffect(()=>{
-  let cancelled=false,editor:{dispose:()=>void}|undefined;const controller=new AbortController();
+  let cancelled=false;const controller=new AbortController();
   const assetBase=new URL(`${import.meta.env.BASE_URL}room3d/`,location.href).href;
-  mountHomeEditor(host.current!,{assetBase,initialState:initial.current,onChange:(s:Home3DState)=>save.current(s),onBack:()=>back.current(),signal:controller.signal})
-   .then(e=>{editor=e;if(cancelled)e.dispose();else setEditor(e)}).catch(e=>{if(!cancelled)setError(e.message)});
-  return()=>{cancelled=true;controller.abort();editor?.dispose()};
+  // StrictMode's setup/cleanup probe finishes before this microtask: no abandoned WebGL or requests.
+  Promise.resolve().then(()=>{if(cancelled)return;return mountHomeEditor(host.current!,{assetBase,initialState:initial.current,timeZone:initialTimeZone.current,onChange:(s:Home3DState)=>save.current(s),onBack:()=>back.current(),onMenu:openLifePanel,signal:controller.signal});})
+   .then(e=>{if(!e||cancelled)return;setEditor(e);onEditor?.(e);}).catch(e=>{if(!cancelled)setError(e.message)});
+  return()=>{cancelled=true;controller.abort(homeDisposalReason())};
  },[]);
- return <div className="relative h-full w-full" style={{paddingTop:'var(--chrome-top, 0px)',paddingBottom:'var(--safe-bottom, 0px)',background:'#e8dde7'}}>
+ return <div className="home-island relative h-full w-full" style={{paddingTop:'var(--chrome-top, 0px)',paddingBottom:'var(--safe-bottom, 0px)',background:'#fafafa'}}>
    <div ref={host} className="h-full w-full" />
-   {savedState&&<CreatorRollBridge request={creatorReady&&extraItems?1:0} savedState={savedState} extraItems={extraItems} onReady={()=>setCreatorReady(true)} onResult={result=>{setResidentAssets(selectedHairAssets(result.state));decodeParts(result).then(setParts).catch(e=>setResidentError(String(e)));}} onError={setResidentError}/>}
+   {editor&&!suspended&&<><HomeSpeechBubble editor={editor}/><HomePresenceBubbles editor={editor} character={character} enabled={mainReady&&!lifePanel&&!phoneOpen} canInvite={!!api&&!!user} onInitiative={setInitiative}/></>}
+   {away&&!editor?.getHomeScene().present&&<p className="home-away-note" role="status">{character?.name}现在不在家哦……</p>}
+   {editor&&!suspended&&<><HomeSocialPanel targetId={interactionTarget} externalOpen={lifePanel==='interact'} onClose={()=>setLifePanel(null)} editor={editor} primary={{id:character?.id??'resident',label:character?.name??'小人'}} options={residents.filter(r=>r.id!==character?.id)} body={residentHair.bodyShape??'classic'} onBody={value=>{setMainReady(false);setBodyOverride(value);}} mainReady={mainReady} hair={residentHair}/></>}
+   {editor&&<HomeLifePanel onBusyChange={setHomeBusy} active={!suspended&&!photoActive} initiative={initiative} editor={editor} character={character} user={user} api={api} conversationContext={conversationContext} panel={suspended?null:lifePanel} onPanel={openLifePanel} onDefinition={onDefinition} onFigures={onFigures}/>}
+   {editor&&character&&!suspended&&<HomePhone onPhotoChange={setPhotoActive} editor={editor} characterId={character.id} onBusyChange={setPhoneBusy} onOpenChange={setPhoneOpen}/>}
+   {editor&&!suspended&&(homeBusy||phoneBusy)&&<div className="home-life-hint" role="status">{character?.name||'角色'}正在回应…</div>}
+   {savedState&&<CreatorRollBridge request={creatorReady&&extraItems?1:0} savedState={savedState} extraItems={extraItems} onReady={()=>setCreatorReady(true)} onResult={result=>{setResidentAssets(selectedHairAssets(result.state));decodeParts(result,residentHair).then(setParts).catch(e=>setResidentError(String(e)));}} onError={setResidentError}/>}
    {(residentError||character&&!savedState)&&<p role="status" style={{position:'absolute',top:100,left:18,right:18,fontSize:12,pointerEvents:'none',color:'#665274'}}>{residentError||'先在手办柜捏好小小窝或彼方形象，小人就能住进来。'}</p>}
-   {error&&<div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#e8dde7] p-8 text-center text-sm text-purple-900"><p>{error}</p><button className="rounded-full bg-white px-5 py-3" onClick={onBack}>返回 2D 小屋</button></div>}
+   {error&&<div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#e8dde7] p-8 text-center text-sm text-purple-900"><p>{error}</p><button className="rounded-full bg-white px-5 py-3" onClick={onBack}>返回</button></div>}
  </div>;
 }

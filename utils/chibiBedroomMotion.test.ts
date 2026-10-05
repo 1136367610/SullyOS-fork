@@ -42,6 +42,8 @@ describe('Body 2 bedroom rest',()=>{
   const seat={bed:{center:[2,.15,3],halfWidth:1.8,side:-1,itemRotation:Math.PI/2}};
   const front=bedEntry(seat,{free:(x:number,z:number)=>x>12&&z>25},[10,20]);expect(front).not.toBeNull();
   expect(bedEntry(seat,{free:()=>false})).toBeNull();
+  // A left slot cannot fall back to the right edge and slide across the bed.
+  expect(bedEntry(seat,{free:(x:number,z:number)=>z<3})).toBeNull();
   const change={front:front!,seat:[2,.96,3],edge:bedEdge({...seat,position:[2,.96,3]},front!),rotation:Math.PI/2,startRotation:0,rising:false,pose:'bed'};
   expect(seatChangePose(change,0).position).toEqual(front);expect(seatChangePose(change,duration).position).toEqual(change.seat);
   expect(seatChangePose({...change,rising:true},duration).position).toEqual(front);
@@ -63,9 +65,30 @@ describe('Body 2 bedroom rest',()=>{
     if(f.inboard>0)expect(f.legLift).toBe(1);
     if(f.recline>0){expect(f.inboard).toBe(1);expect(f.position).toEqual(seat.position);}
    }
-   const seated=seatChangePose(change,1.92);
+   const seated=seatChangePose(change,2.1);
    expect(seated.position).toEqual(edge.position);expect(seated.weight).toBe(1);expect(seated.legLift).toBe(0);expect(seated.recline).toBe(0);
   }
+ });
+ it('finishes the standing approach before sitting and transfers the source root without a second slide',()=>{
+  const seat=body2BedTransform({position:[.94,1,0],rotation:0,bed:{center:[0,.15,0],headEnd:-1.62,anchorZ:0,edgeX:1.3,edgeY:.85,halfWidth:1.825,side:1,itemRotation:0}},1.5,1.1);
+  const front=bedEntry(seat,{free:()=>true})!,edge=bedEdge(seat,front);
+  const change={front,edge,seat:seat.position,sleepStart:seat.sleepStart,rotation:0,startRotation:Math.PI,pose:'bed',rising:false};
+  const body=new T.Group(),hair=new T.Group(),geometry=createBlankBody('skin'),material=new T.MeshBasicMaterial(),mesh=new T.Mesh(geometry,material);body.add(mesh,hair);
+  const rig=bindBlankBody(mesh,hair,true),animate=createBlankMotion(rig,body);
+  let previous:T.Vector3|undefined;
+  for(let t=0;t<4;t+=.01){
+   const f=seatChangePose(change,t);
+   if(f.weight>0)expect(f.edgeTravel).toBe(1);
+   if(f.weight===1&&f.inboard===0){expect(f.position[0]).toBeCloseTo(edge.position[0]);expect(f.position[2]).toBeCloseTo(edge.position[2]);}
+   if(f.weight===0)expect(Math.abs(f.position[0])).toBeGreaterThan(1.825);
+   if(f.recline>0){expect(f.clipBlend).toBe(1);expect(f.rotation).toBeCloseTo(0);expect(f.position[0]).toBeCloseTo(seat.position[0]);expect(f.position[2]).toBeCloseTo(seat.position[2]);}
+   // Exercise the actual imported-pose handoff, including its local root.
+   animate(t,'sleep','lying',{kind:'bed-change',hands:[],bedWeight:f.weight,bedRecline:f.recline,bedLegLift:f.legLift,...(f.clipBlend>0?{clip:'sleep' as const,clipTime:0,clipWeight:f.clipBlend}:{})});
+   const hip=rig.bones.hips.getWorldPosition(new T.Vector3());
+   if(t>2.7&&previous)expect(hip.distanceTo(previous)).toBeLessThan(.025);
+   previous=hip.clone();
+  }
+  geometry.dispose();material.dispose();rig.skeleton.dispose();
  });
  it('pivots at the supported pelvis without changing bone lengths and restores standing after cancellation',()=>{
   for(const bodyHeight of [.8,1,1.25]){

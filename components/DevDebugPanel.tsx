@@ -1,3 +1,4 @@
+import HomeCompanionDebug from './HomeCompanionDebug';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowsClockwise, Broom, Check, ClipboardText, DownloadSimple, Power, Trash, Wrench, X } from '@phosphor-icons/react';
 import {
@@ -413,6 +414,7 @@ const DevDebugPanel: React.FC = () => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto px-4">
+                        <HomeCompanionDebug />
                         <ToggleRow
                             title="跳过 Prompt Build"
                             detail="只发送聊天历史。"

@@ -41,7 +41,7 @@ export function connectedRooms(home,startId,catalog,throughDoors=false){
  return queue;
 }
 export function roomGroups(home,catalog){const seen=new Set(),groups=[];for(const r of home.rooms)if(!seen.has(r.id)){const rooms=connectedRooms(home,r.id,catalog);rooms.forEach(r=>seen.add(r.id));groups.push(rooms);}return groups;}
-export function wallVisible(view,edge,internal=false){return view!=='hidden'&&(internal||edge==='back'||edge==='left'||view==='dollhouse'&&edge==='right');}
+export function wallVisible(view,edge,internal=false){return view!=='hidden'&&(view==='auto'||view!=='flat'&&internal||edge==='back'||edge==='left'||view==='dollhouse'&&edge==='right');}
 export function setBoundary(home,roomId,edge,value,catalog){
  const room=home.rooms.find(r=>r.id===roomId),e=ROOM_EDGES[edge];if(!room||!e)throw Error('找不到这面墙');
  if(!['wall_high','wall_low','wall_fence','open'].includes(value.kind))throw Error('墙体类型不正确');

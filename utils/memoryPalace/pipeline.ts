@@ -1,3 +1,4 @@
+import { isChatConversationEntry } from './trace';
 import { loadRangeMessageContents } from './rangeMessagePage';
 import { loadCharacterContextMessages } from '../chatContextRange';
 /**
@@ -1190,7 +1191,7 @@ export async function injectMemoryPalace(
     }
 
     let explicitEntityAnalysis: ExplicitEntityAnalysis | undefined;
-    const interactiveRecall = trace.entryPoint === 'chat_app' || trace.entryPoint === 'collaboration';
+    const interactiveRecall = isChatConversationEntry(trace.entryPoint) || trace.entryPoint === 'collaboration';
     if (!trace.featureFlagsSnapshot.recallRouter) {
         trace.explicitEntityRecall = { status: 'disabled' };
         trace.eventBoxMetadataRecall = { status: 'disabled' };
@@ -1332,6 +1333,32 @@ export async function injectMemoryPalace(
         trace.stages.push({ name: 'finalize', durationMs: 0, outcome: 'skipped' });
         return finishRecallTrace(trace, 'skipped_palace_disabled');
     }
+    // 调用方没显式传 userName 时，兜底从全局用户档案取，保证各入口
+    // （群聊/通话/事件/学习等）召回的房间名都统一显示「{用户名}的房间」，
+    // 而不是回退成「用户房间」。
+    let resolvedUserName = userName;
+    if (!resolvedUserName) {
+        try { resolvedUserName = (await DB.getUserProfile())?.name || undefined; } catch {}
+    }
+
+    // 门牌（常驻语义层）：纯 IDB 读 + 格式化，不调 LLM。
+    // 无条件赋值（包括 ''）—— 门牌被清空/删除后，persist 过的旧注入必须被冲掉。
+    const roomPlatesStartedAt = performance.now();
+    let roomPlateOutcome: RecallTraceStage['outcome'] = 'ok';
+    try {
+        const { buildRoomPlatesInjection } = await import('./roomPlates');
+        char.roomPlatesInjection = await buildRoomPlatesInjection(char.id, resolvedUserName);
+    } catch {
+        char.roomPlatesInjection = '';
+        roomPlateOutcome = 'error';
+    }
+    trace.injection.roomPlateChars = char.roomPlatesInjection.length;
+    trace.stages.push({
+        name: 'room_plates',
+        durationMs: Math.round(performance.now() - roomPlatesStartedAt),
+        outcome: roomPlateOutcome,
+    });
+
     const embeddingConfig = getEmbeddingConfig(char.embeddingConfig);
     if (!embeddingConfig) {
         trace.stages.push({ name: 'finalize', durationMs: 0, outcome: 'skipped' });
@@ -1346,32 +1373,6 @@ export async function injectMemoryPalace(
             outcome: 'ok',
         });
         const currentMood = char.activeBuffs?.[0]?.name;
-        // 调用方没显式传 userName 时，兜底从全局用户档案取，保证各入口
-        // （群聊/通话/事件/学习等）召回的房间名都统一显示「{用户名}的房间」，
-        // 而不是回退成「用户房间」。
-        let resolvedUserName = userName;
-        if (!resolvedUserName) {
-            try { resolvedUserName = (await DB.getUserProfile())?.name || undefined; } catch {}
-        }
-
-        // 门牌（常驻语义层）：纯 IDB 读 + 格式化，不调 LLM。
-        // 无条件赋值（包括 ''）—— 门牌被清空/删除后，persist 过的旧注入必须被冲掉。
-        const roomPlatesStartedAt = performance.now();
-        let roomPlateOutcome: RecallTraceStage['outcome'] = 'ok';
-        try {
-            const { buildRoomPlatesInjection } = await import('./roomPlates');
-            char.roomPlatesInjection = await buildRoomPlatesInjection(char.id, resolvedUserName);
-        } catch {
-            char.roomPlatesInjection = '';
-            roomPlateOutcome = 'error';
-        }
-        trace.injection.roomPlateChars = char.roomPlatesInjection.length;
-        trace.stages.push({
-            name: 'room_plates',
-            durationMs: Math.round(performance.now() - roomPlatesStartedAt),
-            outcome: roomPlateOutcome,
-        });
-
         const retrieveStartedAt = performance.now();
         let retrievalTelemetry: RecallRetrievalTelemetry | undefined;
         const context = await retrieveMemories(
@@ -1422,7 +1423,7 @@ export async function injectMemoryPalace(
                 outcome: eventBox.status === 'error' ? 'error' : eventBox.status === 'miss' ? 'empty' : 'ok',
             });
         }
-        trace.injection.memoryChars = char.memoryPalaceInjection.length;
+        trace.injection.memoryChars = char.memoryPalaceInjection?.length ?? 0;
         trace.stages.push({
             name: 'retrieve',
             durationMs: Math.round(performance.now() - retrieveStartedAt),

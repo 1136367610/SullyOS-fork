@@ -8,3 +8,10 @@ export function plushPose(asset,time=0){
  const base=.27,bottom=base+bob,z=.39+depth/2;
  return {scale,position:[0,bottom,z],hands:[[-width*.46/.7,(base+height*.46+bob)/.7,(z+depth*.12)/.7],[width*.46/.7,(base+height*.46+bob)/.7,(z+depth*.12)/.7]]};
 }
+
+export function body2PlushPose(asset,time,chestHeight){
+ const pose=plushPose(asset,time),lift=chestHeight-.45-pose.position[1];
+ pose.position[1]+=lift;pose.position[2]-=.16;
+ for(const hand of pose.hands){hand[1]+=lift/.7;hand[2]-=.16/.7;}
+ return pose;
+}

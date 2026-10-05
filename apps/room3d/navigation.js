@@ -2,8 +2,10 @@ import {ROOM_HALF} from './dimensions.js';
 import {boxes} from './model.js';
 import {ROOM_EDGES} from './building.js';
 import {boundary,boundaryBoxes,ROOM_STEP,neighbor,insideFloors} from './topology.js';
-export function walkingMap(home,level,catalog,{headWidth=1.5,headBottom=.7,headTop=1.95}={}){
+export function walkingMap(home,level,catalog,{headWidth=1.5,headBottom=.7,headTop=1.95,walkClearance=false}={}){
  const cells=[],areas=[],obstacles=[];const half=Math.max(.75,headWidth/2);
+ // Hair/accessories may overlap: walking uses the core silhouette, not the full head bounds.
+ const headRadius=walkClearance ? .34 : Math.max(.58,half*.85);
  for(const room of home.rooms.filter(r=>r.level===level)){
   const start=cells.length,x=room.x*ROOM_STEP.x,z=room.z*ROOM_STEP.z;cells.push([x-ROOM_HALF.x,z-ROOM_HALF.z,x+ROOM_HALF.x,z+ROOM_HALF.z]);
   for(const [edge,e] of Object.entries(ROOM_EDGES)){const door=boundary(room,edge).door;if(!door||neighbor(home,room,edge))continue;
@@ -17,14 +19,32 @@ export function walkingMap(home,level,catalog,{headWidth=1.5,headBottom=.7,headT
   for(const i of room.items.filter(i=>!i.stored&&catalog.find(a=>a.id===i.assetId)?.building))obstacles.push(...boxes(i,catalog.find(a=>a.id===i.assetId)).map(b=>[b[0]+x,b[1],b[2]+z,b[3]+x,b[4],b[5]+z]));
  }
  const free=(x,z)=>{
-  // Reserve the head width in both directions, including while turning.
-  if(!insideFloors([x-half,z-half,x+half,z+half],cells))return false;
+  // Walking tolerates hair overhang and uses a round head rather than reserving
+  // the empty corners of a square. Stationary placement checks retain full clearance.
+  const floorHalf=walkClearance ? .28 : half;
+  if(!insideFloors([x-floorHalf,z-floorHalf,x+floorHalf,z+floorHalf],cells))return false;
   const body=[x-.28,.18,z-.28,x+.28,headBottom,z+.28],head=[x-half,headBottom,z-half,x+half,headTop,z+half];
+  if(walkClearance)return !obstacles.some(b=>{
+   const bodyHit=body[0]<b[3]&&body[3]>b[0]&&body[1]<b[4]&&body[4]>b[1]&&body[2]<b[5]&&body[5]>b[2];
+   const dx=Math.max(b[0]-x,0,x-b[3]),dz=Math.max(b[2]-z,0,z-b[5]);
+   return bodyHit||headBottom<b[4]&&headTop>b[1]&&dx*dx+dz*dz<headRadius*headRadius;
+  });
   return !obstacles.some(b=>[body,head].some(a=>a[0]<b[3]&&a[3]>b[0]&&a[1]<b[4]&&a[4]>b[1]&&a[2]<b[5]&&a[5]>b[2]));
  };
  return {free,cells,obstacles,areas};
 }
-export function findWalkPath(map,start,target){
+export function findWalkPath(map,start,target,{targetRadius=0}={}){
+ // Only a direct ground click can snap. Furniture/door contact targets remain
+ // exact, and a valid but disconnected destination must never jump a wall.
+ if(targetRadius>0&&!map.free(...target)&&map.free(...start)){
+  const candidates=[];
+  for(let radius=.15;radius<=Math.min(targetRadius,.6)+.001;radius+=.15)for(let i=0;i<16;i++){
+   const angle=i*Math.PI/8,p=[target[0]+Math.cos(angle)*radius,target[1]+Math.sin(angle)*radius];
+   if(map.free(...p))candidates.push(p);
+  }
+  for(const p of candidates.slice(0,8)){const path=findWalkPath(map,start,p);if(path)return path;}
+  return null;
+ }
  const step=.2,key=(x,z)=>x+','+z,point=([x,z])=>[x*step,z*step];
  const clear=(a,b)=>{const n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/.07));for(let i=0;i<=n;i++)if(!map.free(a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n))return false;return true;};
  if(!map.free(...start)||!map.free(...target))return null;

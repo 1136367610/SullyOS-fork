@@ -132,6 +132,7 @@ const ScheduleApp: React.FC = () => {
     // --- AI Logic ---
 
     const generateTaskReward = async (task: Task) => {
+
         const supervisor = characters.find(c => c.id === task.supervisorId);
         if (!supervisor || !apiConfig.apiKey) {
             addToast('任务已完成', 'success');
@@ -146,7 +147,8 @@ const ScheduleApp: React.FC = () => {
             // 1. Build Persona Context
             // RESTORED: Full context
             await injectMemoryPalace(supervisor, undefined, task.title);
-            const baseContext = ContextBuilder.buildCoreContext(supervisor, userProfile);
+            const characterContextInput = { char: supervisor, user: userProfile };
+
 
             const userPrompt = `
 ### 场景：任务完成 (Task Completed)
@@ -167,7 +169,7 @@ const ScheduleApp: React.FC = () => {
 
             // 2. Separate System and User roles
             const messages = [
-                { role: "system", content: baseContext },
+                { role: "system", content: '' },
                 { role: "user", content: userPrompt }
             ];
 
@@ -176,7 +178,7 @@ const ScheduleApp: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                 body: JSON.stringify({
                     model: apiConfig.model,
-                    messages: messages,
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, messages)),
                     temperature: 0.9, 
                     max_tokens: 8000 
                 })
@@ -218,6 +220,7 @@ const ScheduleApp: React.FC = () => {
     };
 
     const generateAnniversaryThought = async (anni: Anniversary) => {
+
         const char = characters.find(c => c.id === anni.charId);
         if (!char || !apiConfig.apiKey) return;
 
@@ -236,7 +239,8 @@ const ScheduleApp: React.FC = () => {
 
         // RESTORED: Full context
         await injectMemoryPalace(char, undefined, anni.title);
-        const baseContext = ContextBuilder.buildCoreContext(char, userProfile);
+        const characterContextInput = { char, user: userProfile };
+
 
         const userPrompt = `
 ### 场景：纪念日提醒
@@ -250,7 +254,7 @@ const ScheduleApp: React.FC = () => {
 - **必须使用用户常用语言**。`;
 
         const messages = [
-            { role: "system", content: baseContext },
+            { role: "system", content: '' },
             { role: "user", content: userPrompt }
         ];
 
@@ -260,7 +264,7 @@ const ScheduleApp: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                 body: JSON.stringify({
                     model: apiConfig.model,
-                    messages: messages,
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, messages)),
                     temperature: 0.8,
                     max_tokens: 8000
                 })

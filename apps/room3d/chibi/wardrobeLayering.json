@@ -82,6 +82,14 @@
     "qipao": "surface-onepiece",
     "original-hoodie": "generic-top",
     "original-socks": "separate",
-    "original-shoes": "separate"
+    "original-shoes": "separate",
+    "cat-ears": "separate",
+    "cat-tail": "separate",
+    "dog-ears": "separate",
+    "dog-tail": "separate",
+    "fox-ears": "separate",
+    "fox-tail": "separate",
+    "rabbit-ears": "separate",
+    "rabbit-tail": "separate"
   }
 }

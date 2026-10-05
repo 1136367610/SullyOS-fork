@@ -16,7 +16,7 @@ const groups={
  decor:'suite_dressing_mirror suite_floor_mirror suite_window_spa suite_window_study suite_window_kitchen suite_window_living suite_window_bedroom suite_art_moon suite_art_botanical suite_art_abstract suite_wall_shelf suite_books_plant porthole open_book left_gallery back_gallery daisy_books wooden_window gaming_notepad gaming_phone_stand bedroom_brushes bedroom_perfume bedroom_brush_cup bedroom_rabbit bedroom_jelly bedroom_turtle bedroom_stationery bedroom_pillow_plush bedroom_alarm bedroom_mirror bedroom_scent',
  plants:'suite_plant_large suite_plant_small corner_plant wall_plant plant small_plant trailing_plant monstera daisy_vase dining_vase',
  textiles:'kitchen_ref_runner kitchen_ref_mat suite_rug_grid suite_rug_border rug bath_mat bath_folded_towels',
- pets:'show_cat_tree pet_bowls',outdoor:'',special:'show_spa_pool aquarium',
+ pets:'pet_toy_ball pet_rest_mat show_cat_tree pet_bowls pet_bird pet_snake pet_slime pet_cat pet_dog pet_turtle pet_shark',outdoor:'',special:'show_spa_pool aquarium',
 };
 export const USE_BY_ID=Object.fromEntries(Object.entries(groups).flatMap(([category,ids])=>ids.split(' ').filter(Boolean).map(id=>[id,category])));
 for(const [category,ids]of Object.entries({pets:'cat_tree',seating:'sofa',appliances:'television',decor:'window wall_shelf clock bookcase_top tea_tray books',storage:'console bookcase record_cabinet',plants:'tree console_plant',textiles:'rug'}))for(const id of ids.split(' '))USE_BY_ID['living_ref_'+id]=category;
@@ -38,6 +38,7 @@ export function furnitureActions(a){
  const kind={race:'玩赛车（需配座椅）',rhythm:'玩圆环音游',computer:'玩电脑',stream:'直播'}[a.activity?.kind];if(kind)actions.push(kind);
  if(a.id==='gaming_desk')actions.push('玩电脑 / 直播（需配设备和座椅）');
  if(a.dining)actions.push('吃饭（需配餐椅）');
+ if(['show_kitchen_island','show_kitchen_bench','kitchen_ref_breakfast'].includes(a.id))actions.push('吃饭（中岛、长凳与早餐托盘组合）');
  return actions;
 }
 

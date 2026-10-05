@@ -1,3 +1,4 @@
+import { ContextBuilder } from '../../utils/context';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { NovelBook, NovelSegment, CharacterProfile, UserProfile } from '../../types';
@@ -207,6 +208,7 @@ const NovelWriter: React.FC<NovelWriterProps> = ({
     // --- Actions ---
 
     const runGeneration = async (char: CharacterProfile, userPrompt: string, contextSegments: NovelSegment[]) => {
+
         setIsTyping(true);
         setLastTokenUsage(null);
 
@@ -233,7 +235,7 @@ const NovelWriter: React.FC<NovelWriterProps> = ({
                 storyContext += `\n[${authorName}]: ${s.content}\n`;
             });
 
-            const prompt = buildPrompt(char, userProfile, activeBook, userPrompt, storyContext, genOptions, contextSegments, characters);
+            const prompt = await buildPrompt(char, userProfile, activeBook, userPrompt, storyContext, genOptions, contextSegments, characters);
             const traits = char.impression?.personality_core.observed_traits || [];
             let temperature = 0.85;
             if (traits.some(t => t.includes('电波') || t.includes('疯'))) temperature = 0.98;
@@ -242,7 +244,7 @@ const NovelWriter: React.FC<NovelWriterProps> = ({
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature, max_tokens: 8000 })
+                body: JSON.stringify({ model: apiConfig.model, messages: (await ContextBuilder.buildCharacterRequest({ char, user: userProfile }, [{ role: "user", content: prompt }])), temperature, max_tokens: 8000 })
             });
 
             if (response.ok) {

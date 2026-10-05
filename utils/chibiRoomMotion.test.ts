@@ -89,3 +89,11 @@ describe('Body 2 living-room motion',()=>{
   map.obstacles.splice(-1);map.obstacles.push([.4,2,-.1,.6,2.3,.1]);expect(map.free(0,0)).toBe(false);
  });
 });
+
+it('turns toward the seat before lowering and uses the shortest yaw arc',()=>{
+ const change={front:[0,.18,1],seat:[0,.7,0],pose:'chair',rising:false,startRotation:170*Math.PI/180,rotation:-170*Math.PI/180};
+ expect(seatChangePose(change,0).rotation).toBeCloseTo(change.startRotation);
+ const turning=seatChangePose(change,.15);expect(turning.position).toEqual(change.front);expect(turning.rotation).toBeCloseTo(Math.PI);
+ const end=seatChangePose(change,2);expect(Math.cos(end.rotation)).toBeCloseTo(Math.cos(change.rotation));expect(end.position).toEqual(change.seat);expect(end.done).toBe(true);
+ expect(seatChangePose({...change,rising:true},.15).rotation).toBe(change.rotation);
+});

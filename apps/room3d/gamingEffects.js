@@ -13,7 +13,17 @@ export function createGamingEffects(){
    });
   }}
   const beat=activity?.kind==='rhythm'?rhythmFrame(activity,time):null;
-  for(const e of entries){if(e.wheel&&activity?.kind==='race'){const angle=Math.sin(time*1.9)*.31;e.mesh.rotation.z=angle;v.copy(e.center).applyAxisAngle(axis,angle);e.mesh.position.copy(e.position).add(e.center).sub(v);}if(e.material){e.material.emissive.copy(e.material.color);e.material.emissiveIntensity=e.role?.startsWith('rhythm-key-')?(beat?.keys.includes(e.role)?.85:.025):.16+.12*(.5+.5*Math.sin(time*4));}}
+  for(const e of entries){if(e.wheel&&activity?.kind==='race'){
+   const angle=Math.sin(time*1.9)*.31;
+   if(activity.wheel){
+    const facing=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),activity.rotation),parent=e.mesh.parent;
+    parent.updateWorldMatrix(true,false);
+    const pivot=new T.Vector3(...activity.wheel.center).multiplyScalar(.7).applyQuaternion(facing).add(new T.Vector3(...activity.position));parent.worldToLocal(pivot);
+    const normal=new T.Vector3(...activity.wheel.axis).applyQuaternion(facing).applyQuaternion(parent.getWorldQuaternion(new T.Quaternion()).invert());
+    const turn=new T.Quaternion().setFromAxisAngle(normal,angle);
+    e.mesh.quaternion.setFromEuler(e.rotation).premultiply(turn);e.mesh.position.copy(e.position).sub(pivot).applyQuaternion(turn).add(pivot);
+   }else{e.mesh.rotation.z=angle;v.copy(e.center).applyAxisAngle(axis,angle);e.mesh.position.copy(e.position).add(e.center).sub(v);}
+  }if(e.material){e.material.emissive.copy(e.material.color);e.material.emissiveIntensity=e.role?.startsWith('rhythm-key-')?(beat?.keys.includes(e.role)?.85:.025):.16+.12*(.5+.5*Math.sin(time*4));}}
  }
  return {update,clear};
 }

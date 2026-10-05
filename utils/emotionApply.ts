@@ -1,4 +1,5 @@
 import { DB } from './db';
+import {parseHomeEmotion} from './homeEmotion';
 import type { CharacterProfile, CharacterBuff } from '../types';
 import { landAmbientEventFromEval } from './roomAmbient';
 import { CHAT_GEN_EVENTS } from './chatGenEvents';
@@ -18,12 +19,8 @@ const announceEmotionFailed = (charData: CharacterProfile, reason: string): void
 // 角色「最后一次内心独白(InnerState)」的轻量缓存（localStorage）。
 // innerState 是瞬时产物，这里在情绪评估落地的共用点顺手缓存一份，供别处（如查手机首页）读取，
 // 不额外动 CharacterProfile / DB schema。
-export const lastInnerStateKey = (charId: string) => `sully_last_innerstate_${charId}`;
-export function getLastInnerState(charId: string): string {
-    try {
-        return (typeof localStorage !== 'undefined' && localStorage.getItem(lastInnerStateKey(charId))) || '';
-    } catch { return ''; }
-}
+export {getLastInnerState, lastInnerStateKey} from './emotionState';
+import {lastInnerStateKey} from './emotionState';
 
 // 情绪评估结果「解析 + 落 buff」的共用实现.
 //
@@ -65,6 +62,8 @@ const sanitizeBuffs = (buffs?: CharacterBuff[]): CharacterBuff[] => {
             if (typeof buff?.emoji === 'string') out.emoji = buff.emoji;
             if (typeof buff?.color === 'string') out.color = buff.color;
             if (typeof buff?.description === 'string') out.description = buff.description;
+            const behavior=parseHomeEmotion(buff.homeBehavior);
+            if(behavior){out.homeBehavior=behavior;out.homeBehaviorAt=Date.now();}
             return out;
         })
         .filter((buff): buff is CharacterBuff => !!buff);
@@ -374,6 +373,7 @@ export async function applyEmotionEvalRaw(
 
         if (innerStateOut) {
             try { localStorage.setItem(lastInnerStateKey(charData.id), innerStateOut); } catch { /* ignore */ }
+            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('emotion-innerstate-updated', {detail: {charId: charData.id, innerState: innerStateOut}}));
         }
 
         // 小屋生活动态（可选顺风车产出，见 utils/roomAmbient.ts）：落 room_card 进私聊。

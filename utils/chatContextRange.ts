@@ -128,6 +128,8 @@ export const computeContextRangeSnapshot = (
         ? []
         : maxRangeMessages.filter(message => message.id >= effectiveStartMessageId);
 
+    // IDs define archive/breakpoint eligibility; timestamps define conversation order.
+    messages.sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
     return {
         mode,
         hwm,
@@ -147,7 +149,12 @@ export const computeContextRangeSnapshot = (
  */
 export const loadCharacterContextRange = async (
     char: CharacterProfile,
+    onTiming?: (stage: string, ms: number) => void,
 ): Promise<ContextRangeSnapshot> => {
+    let started = performance.now();
+    await DB.ensureHomeContextMessages(char.id);
+    onTiming?.("家园历史同步检查", Math.round(performance.now()-started));
+    started = performance.now();
     const hwm = getMemoryPalaceHighWaterMarkForContext(char.id);
     const mode = resolveContextRangeMode(char);
     const sourceMessages = mode === 'adaptive'
@@ -157,7 +164,11 @@ export const loadCharacterContextRange = async (
             clampManualContextLimit(char.contextLimit),
             true,
         );
-    return computeContextRangeSnapshot(sourceMessages, char, hwm);
+    onTiming?.('读取范围内原文', Math.round(performance.now()-started));
+    started = performance.now();
+    const snapshot = computeContextRangeSnapshot(sourceMessages, char, hwm);
+    onTiming?.('计算上下文边界', Math.round(performance.now()-started));
+    return snapshot;
 };
 
 export const countMessagesFrom = (messages: Message[], messageId: number): number =>

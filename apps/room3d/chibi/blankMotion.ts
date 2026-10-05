@@ -1,4 +1,6 @@
+import {createBedLeisure,isBedLeisure} from './bedLeisure';
 import {computerFrame,createComputerContact} from './computerMotion';
+import {createFurnitureContact} from './furnitureMotion';
 import {bathroomFrame,createBathroomContact} from './bathroomMotion';
 import * as T from 'three';
 import {bodyHeightY} from './bodyHeight';
@@ -22,7 +24,9 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
  const floorContact=createFloorSeatContact(rig,body);
  const surfaceContact=createMotionSurfaceContact(rig,body);
  const groom=createMirrorGrooming(rig,body);
+ const bedLeisure=createBedLeisure(rig,body);
  const computerContact=createComputerContact(rig,body);
+ const furnitureContact=createFurnitureContact(rig,body);
  const bathroomContact=createBathroomContact(rig,body);
  let walkClip:RoomWalkClip|undefined,sampleWalk:ReturnType<typeof createRoomWalkSampler>|undefined;
  const footPoint=new T.Vector3();
@@ -50,6 +54,12 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
   const breathe=Math.sin(time*1.8);
   angle('chest',-.015+breathe*.008);
   angle('head',.025+breathe*.008);
+  if(motion==='idle'&&!seated&&!lying&&!activity){
+   // Relaxed upper-body weight shifts; feet and world position stay anchored.
+   angle('spine',Math.sin(time*.63)*.018,Math.sin(time*.37)*.022,Math.sin(time*.51)*.025);
+   angle('chest',-.015+breathe*.012,Math.sin(time*.37+.8)*.018);
+   angle('head',.025+Math.sin(time*.79)*.024,Math.sin(time*.29)*.055,Math.sin(time*.43)*.018);
+  }
   for(const [side,prefix] of [[1,'L'],[-1,'R']] as const){
    rig.setHandCurl(prefix,motion==='angry'?.8:wave&&prefix==='L'?0:.12,targets);
    angle(`${prefix}_upperArm`,-.08,0,-side*1.25);
@@ -89,6 +99,11 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
   if(activity&&['computer','stream'].includes(activity.kind)&&seated){
    const f=computerFrame(time,activity.kind==='stream');angle('spine',.035*f.enter);angle('head',.055-f.greet*.04,f.look-f.greet*.06,activity.kind==='stream'?Math.sin(time*2)*.018:0);
    for(const [sign,side]of [[1,'L'],[-1,'R']]as const){angle(side+'_upperArm',-.1,-sign*.2,-sign*1.15);angle(side+'_forearm',0,-sign*.7,-sign*.08);}
+  }
+  const furniture=activity&&['race','rhythm','eat','hug'].includes(activity.kind);
+  if(furniture&&!lying){
+   angle('head',activity.kind==='eat'?.075:.025,activity.kind==='race'?Math.sin(time*1.9)*.025:0);
+   for(const [sign,side]of [[1,'L'],[-1,'R']]as const){angle(side+'_upperArm',-.15,-sign*.3,-sign*1.10);angle(side+'_forearm',0,-sign*.85,-sign*.08);}
   }
   if(activity&&['coffee','wash','cook'].includes(activity.kind)&&!lying){
    const work=!activity.carrying,cycle=work?Math.sin(time*(activity.kind==='wash'?7:3)):0;
@@ -183,6 +198,11 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
    sampleWalk!(time,targets);
    for(const side of ['L','R'] as const){rig.setHandCurl(side,.12,targets);constrainForearmTwist(rig,targets,side);}
   }
+  if(bed&&Math.abs(activity.bedStep??0)>0&&options.walk){
+   if(walkClip!==options.walk){walkClip=options.walk;sampleWalk=createRoomWalkSampler(walkClip);}
+   sampleWalk!(activity.bedStep!>0?-time:time,importedPose);
+   for(const name of ['L_thigh','L_shin','L_foot','L_toe','R_thigh','R_shin','R_foot','R_toe'])targets[name]?.slerp(importedPose[name],Math.abs(activity.bedStep!));
+  }
   const selected=activity?.clip??(bed&&(activity.bedRecline??1)>0?'sleep':['wave-alternate-1','wave-alternate-2','dress-once','yoga'].includes(motion)?motion:undefined);
   const imported=selected&&selected in samples?selected as MeshyMotion:undefined;
   if(imported){
@@ -202,11 +222,20 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
    position.lerp(offset,weight);rotation.slerp(new T.Quaternion(),weight);
    for(const side of ['L','R']as const){rig.setHandCurl(side,imported==='coffee-drink'?.4:.12,targets);constrainForearmTwist(rig,targets,side);}
   }
+  if(activity?.kind==='pet-contact'){
+   const crouch=activity.petCrouch??0;
+   if(crouch>0){
+    for(const [side,sign]of [['L',1],['R',-1]]as const){angle(side+'_thigh',-1.45*crouch,0,-sign*.09*crouch);angle(side+'_shin',2.45*crouch);angle(side+'_foot',-1*crouch);}
+    angle('spine',.25*crouch);angle('head',.12*crouch);
+   }
+   // Keep the locomotion legs; hands are solved after the walk clip and foot grounding.
+   for(const [side,sign]of [['L',1],['R',-1]]as const){angle(side+'_upperArm',-.15,-sign*.3,-sign*1.1);angle(side+'_forearm',0,-sign*.85,-sign*.08);}
+  }
   for(const [name,bone] of entries)bone.quaternion.slerp(targets[name],blend);
   const footwear=body.userData.wardrobeLift as {height:number;applied:number}|undefined;
   if(footwear){const lift=lying&&!bed?0:footwear.height*(1-seatWeight);position.y+=lift;footwear.applied=T.MathUtils.lerp(footwear.applied,lift,blend);}
   body.position.lerp(position,blend);body.quaternion.slerp(rotation,blend);
-  if(importedWalk||imported&&['dress-once','coffee-drink','wave-alternate-1','wave-alternate-2'].includes(imported)){
+  if(activity?.kind==='pet-contact'||importedWalk||bed&&Math.abs(activity.bedStep??0)>0||imported&&['dress-once','coffee-drink','wave-alternate-1','wave-alternate-2'].includes(imported)){
    // The source avatar's dimensions/root translation are not ours. Keep the
    // lower ankle on our own standing plane; preserve the source leg rotations.
    body.updateWorldMatrix(true,true);
@@ -214,7 +243,19 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
    body.position.y=position.y+bodyHeightY(.049*BLANK_SCALE,rig.bodyHeight)-lowest;
   }
   if(floorSeat&&(!imported||activity?.clipWeight===0)&&seatWeight>0&&activity?.seatHeight!==undefined)floorContact(activity.seatHeight,seatWeight,fold,support,footwear?.height??0);
-  if(imported==='sleep')surfaceContact(.049*BLANK_SCALE);
+  if(imported==='sleep'){
+   const leisureTime=activity?.bedTime??time;
+   let from:T.Quaternion[]|undefined;
+   if(isBedLeisure(activity?.bedFrom)&&leisureTime<1.2){
+    const base=entries.map(([,b])=>b.quaternion.clone());
+    bedLeisure(Math.max(1.2,activity.bedFromTime??3),activity.bedFrom);
+    from=entries.map(([,b])=>b.quaternion.clone());
+    entries.forEach(([,b],i)=>b.quaternion.copy(base[i]));body.updateWorldMatrix(true,true);
+   }
+   if(activity?.kind==='bed-rest'&&isBedLeisure(activity.bedMode))bedLeisure(leisureTime,activity.bedMode);
+   if(from){const mix=T.MathUtils.smootherstep(leisureTime,0,1.2);entries.forEach(([,b],i)=>b.quaternion.copy(from![i].slerp(b.quaternion,mix)));}
+   surfaceContact(.049*BLANK_SCALE);
+  }
   if(imported==='sit-alternate'&&activity?.seatHeight!==undefined)surfaceContact(-activity.seatHeight+.049*BLANK_SCALE);
   if(imported==='yoga'){
    body.position.y=0;body.updateWorldMatrix(true,true);body.updateMatrixWorld(true);rig.skeleton.update();rig.mesh.computeBoundingBox();
@@ -228,7 +269,12 @@ export function createBlankMotion(rig:ReturnType<typeof bindBlankBody>,body:T.Gr
   }
   if(motion==='mirror-admire'&&!seated&&!lying)groom(time);
   if(activity&&['computer','stream'].includes(activity.kind)&&seated)computerContact(time,activity);
+  if(furniture&&!lying)furnitureContact(time,activity);
+  if(activity?.kind==='pet-contact')furnitureContact(Math.max(.65,time),activity);
   if(activity?.kind.startsWith('bath-'))bathroomContact(time,activity);
+  if(seated&&!bed&&!floorSeat&&activity?.seatHeight!==undefined&&!activity.kind.startsWith('bath-')){
+   surfaceContact(bodyHeightY(.049*BLANK_SCALE,rig.bodyHeight)-activity.seatHeight);
+  }
   body.updateWorldMatrix(true,true);rig.skeleton.update();
   Object.assign(rig.mesh,{boundingBox:null,boundingSphere:null});
  };

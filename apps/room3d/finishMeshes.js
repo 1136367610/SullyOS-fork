@@ -85,5 +85,11 @@ export function createRoomFinishes(){
   }
   return root;
  }
- return {add,begin(){used.clear();},end(){for(const [key,m]of materials)if(!used.has(key)){m.dispose();materials.delete(key);}},dispose(){for(const m of materials.values())m.dispose();materials.clear();},get count(){return materials.size;}};
+ function extendedFloor(room){
+  const g=new T.PlaneGeometry(80,80),uv=g.attributes.uv;
+  for(let i=0;i<uv.count;i++)uv.setXY(i,(uv.getX(i)-.5)*80,(uv.getY(i)-.5)*80);
+  const floor=new T.Mesh(g,material('floor',room.floorStyle&&room.floorStyle!=='original'?room.floorStyle:'wood',room.floor||'#dfc7ad'));
+  floor.rotation.x=-Math.PI/2;floor.position.y=.16;floor.receiveShadow=true;floor.raycast=()=>{};floor.userData.borrowedMaterial=true;return floor;
+ }
+ return {add,extendedFloor,begin(){used.clear();},end(){for(const [key,m]of materials)if(!used.has(key)){m.dispose();materials.delete(key);}},dispose(){for(const m of materials.values())m.dispose();materials.clear();},get count(){return materials.size;}};
 }

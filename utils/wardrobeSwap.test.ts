@@ -52,3 +52,9 @@ describe('wardrobe preparation on a live body',()=>{
   expect(rig.mesh.geometry).toBe(skin);expect(root.children).toEqual(children);old.dispose();
  });
 });
+
+it('cancels wardrobe preparation before touching the currently displayed outfit',async()=>{
+ const {rig,root}=setup();const before=rig.mesh.geometry,controller=new AbortController();controller.abort();
+ await expect(prepareApprovedWardrobe(rig,{top:'sailor-long'},{},{},false,controller.signal)).rejects.toMatchObject({name:'AbortError'});
+ expect(rig.mesh.geometry).toBe(before);expect(root.children.some(o=>o.name.startsWith('wardrobe:'))).toBe(false);
+});

@@ -11,3 +11,57 @@
 .eye-group-tuning{right:24px;max-width:none;padding:8px 12px}.eye-group-tuning summary{padding:4px 0}.eye-group-tuning .face-tuning{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;margin-top:6px}.eye-group-tuning .creator-slider{margin:0;min-height:32px;gap:5px}.eye-group-tuning .creator-slider span{width:25px;font-size:10px}.eye-group-tuning .creator-slider output{width:32px;font-size:10px}.eye-group-tuning .tuning-reset{grid-column:1/-1;justify-self:start}@media(max-width:799px){.eye-group-tuning{top:43px;left:14px;right:14px;max-width:none}.eye-group-tuning .face-tuning{gap:2px 10px}}
 
 .highlight-choices .face-art{background:#827787}
+
+/* Compact setup: choices stay above explanations on phone screens. */
+.hair-preview .puppet canvas{touch-action:none;cursor:grab}
+.hair-preview .puppet canvas:active{cursor:grabbing}
+.hair-editor *{scrollbar-width:thin;scrollbar-color:#b8aaba transparent}
+.hair-editor *::-webkit-scrollbar{width:4px;height:4px}
+.hair-editor *::-webkit-scrollbar-track{background:transparent}
+.hair-editor *::-webkit-scrollbar-thumb{background:#b8aaba;border-radius:8px}
+.hair-editor *::-webkit-scrollbar-button{display:none}
+.hair-options .identity-setup h2{font-size:16px;margin:0 0 10px}
+.identity-setup .body-type-choices{margin:0;gap:8px}
+.identity-setup .body-type-choices button{min-height:64px;gap:4px}
+.hair-options .body-shared-note{margin:8px 0 12px;line-height:1.5;color:#75677a}
+.identity-actions{display:flex;gap:8px}
+.identity-actions button{flex:1;font-size:12px;min-height:40px}
+.hair-options .identity-setup .creator-primary{margin:10px 0 0;min-height:42px}
+@media(max-width:799px){
+ .hair-editor{grid-template-rows:minmax(170px,46%) minmax(0,1fr)}
+ .hair-options{padding:12px 16px 16px}
+ .creator-categories button{min-height:42px}
+ .hair-angle{left:16px;right:16px;gap:8px}
+ .hair-editor *{scrollbar-width:none}
+ .hair-editor *::-webkit-scrollbar{display:none}
+}
+.custom-part-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 18px}
+.hair-options .custom-part-grid button{min-width:0;padding:5px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.custom-part-grid img{width:100%;height:80px;object-fit:contain}
+.custom-part-grid span{font-size:11px;overflow-wrap:anywhere}
+/* Visual picker: thumbnails first, adjustments on demand. */
+.outfit-preview{display:grid;grid-template-columns:1fr 1fr;align-items:center;width:100%;aspect-ratio:1;gap:0;padding:5px}
+.wardrobe-items .garment-tile .outfit-preview img{width:100%;height:100%;max-height:70px;aspect-ratio:1;object-fit:contain}
+.hair-options .garment-layering{margin:14px 0 0;padding:0 0 0 0;background:transparent;border:0;border-top:1px solid #e5dfdf;border-radius:0}
+.hair-options .garment-adjustment,.hair-options .creator-refinement{margin:12px 0 0;padding:0;border:0;border-top:1px solid #e5dfdf}
+.hair-options details>summary{min-height:44px;display:flex;align-items:center;justify-content:space-between;list-style:none;font-size:12px;padding:10px 0}
+.hair-options details>summary:after{content:'＋';font-size:16px}
+.hair-options details[open]>summary:after{content:'−'}
+.hair-options details>summary::-webkit-details-marker{display:none}
+.hair-options .face-choice-grid,.hair-options .wardrobe-items,.hair-options .custom-part-grid{margin:10px 0 16px;gap:8px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.hair-options .face-choice-grid button,.hair-options .custom-part-grid button{border-radius:12px;position:relative;transition:transform .15s,border-color .15s}
+.hair-options .face-choice-grid button[aria-pressed=true]:after,.hair-options .custom-part-grid button[aria-pressed=true]:after{content:'✓';position:absolute;top:5px;right:5px;width:17px;height:17px;border-radius:50%;background:#79678a;color:white;font-size:11px;line-height:17px;text-align:center}
+.sully-hair-preview{position:relative;display:block;width:100%;height:80px}
+.sully-hair-preview img{position:absolute;inset:0}
+.preview-tools button{display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:50%;background:#fffdf5cc}
+.preview-caption .motion-audition{min-width:0;position:relative;margin:0}
+.motion-audition summary{display:grid;place-items:center;width:38px;height:38px;background:#fffdf5dd;border-radius:50%;padding:0;list-style:none}
+.motion-audition summary::-webkit-details-marker{display:none}
+.motion-audition[open]{padding:8px;border-radius:14px;background:#fffdf5ee;box-shadow:0 5px 18px #40324615}
+.motion-audition[open] summary{margin-left:auto;margin-bottom:5px}
+.hair-options .face-mainnav,.hair-options .face-subnav{margin-bottom:10px}
+.hair-options .garment-slots{gap:14px;margin-top:0}
+@media(max-width:799px){.hair-options .face-choice-grid,.hair-options .wardrobe-items,.hair-options .custom-part-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.hair-options .outfit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.preview-tools{top:10px;left:12px;gap:6px}}
+@media(prefers-reduced-motion:reduce){.hair-options .face-choice-grid button,.hair-options .custom-part-grid button{transition:none}}
+
+.hair-preview canvas{touch-action:none}.hair-angle{justify-content:center;pointer-events:none}.hair-preview .puppet{inset:4px 0 28px}

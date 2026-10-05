@@ -20,6 +20,33 @@ export function diningActivities(room,catalog,{headWidth=1.5}={}){
   if(!reason&&room.items.some(i=>!i.stored&&i.supportId===table.id&&boxes(i,catalog.find(a=>a.id===i.assetId)).some(b=>overlap(bowl,b))))reason='把面前的桌面腾出来放碗';
   results.push({roomId:room.id,itemId:table.id,stationId:chair.id,kind:'eat',label:'坐到餐桌边吃饭',seat,...pose,hands,meal:center,dependencies:[chair.id],reason});
  }
+ return [...results,...islandDiningActivities(room,catalog,{headWidth})];
+}
+// Existing showroom saves have no dock links. Match the reviewed island/bench
+// combination geometrically, without moving furniture or rewriting the save.
+export function islandDiningActivities(room,catalog,{headWidth=1.5}={}){
+ const results=[];
+ for(const table of room.items.filter(i=>!i.stored&&i.assetId==='show_kitchen_island')){
+  const a=catalog.find(a=>a.id===table.assetId),props=room.items.filter(i=>!i.stored&&i.supportId===table.id);
+  const breakfast=props.find(i=>i.assetId==='kitchen_ref_breakfast');
+  for(const chair of room.items.filter(i=>!i.stored&&i.assetId==='show_kitchen_bench')){
+   const c=catalog.find(a=>a.id===chair.assetId);
+   for(const slot of c.seats){
+   const seat={roomId:room.id,itemId:chair.id,seatId:slot.id,dining:true},pose=seatTransform(room,catalog,seat);
+   const t=table.rotation*Math.PI/180,dx=chair.x-table.x,dz=chair.z-table.z,x=Math.cos(t)*dx-Math.sin(t)*dz,z=Math.sin(t)*dx+Math.cos(t)*dz;
+   if(Math.abs(x)>.35||z<1.1||z>1.8||Math.cos(pose.rotation-t)>-.98)continue;
+   const seatX=Math.cos(t)*(pose.position[0]-table.x)-Math.sin(t)*(pose.position[2]-table.z);
+   const meal=gamingPoint(table,[seatX,a.support.height+.045,a.size[2]/2-.075]),cos=Math.cos(pose.rotation),sin=Math.sin(pose.rotation),mx=meal[0]-pose.position[0],mz=meal[2]-pose.position[2];
+   const center=[(cos*mx-sin*mz)/.7,(meal[1]-pose.position[1])/.7,(sin*mx+cos*mz)/.7];
+   let reason=!breakfast?'在中岛上摆好早餐杯盘托盘':'';
+   reason||=clearance(room,catalog,pose,[chair.id],headWidth);
+   if(!reason&&(center[1]<.2||center[1]>1||center[2]<.12||center[2]>1||Math.abs(center[0])>.3))reason='把餐边长凳靠近中岛，让小手够得到';
+   const bowl=[meal[0]-.12,meal[1]-.045,meal[2]-.12,meal[0]+.12,meal[1]+.12,meal[2]+.12];
+   if(!reason&&props.some(i=>boxes(i,catalog.find(a=>a.id===i.assetId)).some(b=>overlap(bowl,b))))reason='把面前的桌面腾出来放碗';
+   results.push({roomId:room.id,itemId:table.id,stationId:chair.id+':'+slot.id,kind:'eat',label:'坐到中岛'+slot.label+'吃饭',seat,...pose,hands:[[-.20,center[1],center[2]],[.20,center[1],center[2]]],meal:center,dependencies:[chair.id,...breakfast?[breakfast.id]:[]],reason});
+   }
+  }
+ }
  return results;
 }
 export function diningPreset(catalog){

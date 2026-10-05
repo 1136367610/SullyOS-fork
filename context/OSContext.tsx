@@ -1,3 +1,5 @@
+import {isHomeAssetDisposal} from '../utils/homeAssetCancellation';
+import { processHomeMemoryAfterSave } from '../utils/homeMemoryPostHook';
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import type { VRSARActivity } from '../types';
@@ -53,7 +55,7 @@ import {
 } from '../utils/chatContextRange';
 import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
 import { evaluateEmotionBackground } from '../hooks/useChatAI';
-import { CHAT_GEN_EVENTS, setChatViewSnapshot } from '../utils/chatGenEvents';
+import { CHAT_GEN_EVENTS, setChatViewSnapshot, isEmbeddedChatVisible } from '../utils/chatGenEvents';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
 import { ChatPrompts } from '../utils/chatPrompts';
 import { extractHtmlBlocks } from '../utils/htmlPrompt';
@@ -1275,6 +1277,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               }
               return response;
           } catch (err: any) {
+              const requestSignal = (sendArgs[1] as RequestInit | undefined)?.signal || (sendArgs[0] instanceof Request ? sendArgs[0].signal : undefined);
+              if (isHomeAssetDisposal(err, requestSignal, urlStr)) throw err;
               // Network Failure
               if (urlStr.includes('/chat/completions')) {
                   updateApiRequestCaptureUsage({ captureId: apiRequestCaptureId, ok: false });
@@ -1890,7 +1894,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           // Always bump timestamp so Chat reloads messages if currently open
           setLastMsgTimestamp(Date.now());
 
-          const isChattingWithThisChar = activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId;
+          const isChattingWithThisChar = (activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId) || isEmbeddedChatVisible(charId);
           if (!isChattingWithThisChar) {
               const isVisible = document.visibilityState === 'visible';
               if (isVisible) {
@@ -1949,7 +1953,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           const { charId, charName, body } = (e as CustomEvent).detail as { charId: string; charName: string; body?: string };
           setLastMsgTimestamp(Date.now());
 
-          const isChattingWithThisChar = activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId;
+          const isChattingWithThisChar = (activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId) || isEmbeddedChatVisible(charId);
           if (!isChattingWithThisChar) {
               const isVisible = document.visibilityState === 'visible';
               if (isVisible) {
@@ -2048,7 +2052,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           const { charId, charName } = ((e as CustomEvent).detail || {}) as { charId?: string; charName?: string };
           if (!charId) return;
           setLastMsgTimestamp(Date.now());
-          const isChattingWithThisChar = activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId;
+          const isChattingWithThisChar = (activeAppRef.current === AppID.Chat && activeCharIdScheduleRef.current === charId) || isEmbeddedChatVisible(charId);
           if (!isChattingWithThisChar) {
               setUnreadMessages(prev => ({ ...prev, [charId]: (prev[charId] || 0) + 1 }));
               if (document.visibilityState === 'visible') {
@@ -2316,8 +2320,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                   charId,
               );
 
-              // 上一轮缓存的意识流独白 —— 主路径用 React state，主动消息这里用 ref Map
-              const cachedInnerState = proactiveInnerStateRef.current.get(charId) || undefined;
+              // 主动私聊也使用共享内心状态，不用独立 ref 缓存覆盖它。
+              // 内心状态由 ContextBuilder 读取角色共享缓存。
 
               const payload = await buildChatRequestPayload({
                   char, userProfile: currentUserProfile!, groups: currentGroups,
@@ -2326,7 +2330,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                   contextLimit: Math.max(1, allMsgs.length),
                   recallEntryPoint: 'proactive_chat',
                   realtimeConfig: currentRealtimeConfig,
-                  innerState: cachedInnerState,
+                  innerState: undefined,
                   // 实时音乐播放状态 —— OSContext 在 MusicProvider 上层用不了 useMusic()，
                   // 走 MusicContext 暴露的模块级快照（Provider mount 后会持续写入）
                   musicSnapshot: loadMusicPlaybackSnapshot(),
@@ -3155,6 +3159,10 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         // 汇到这里，不打的话云端 fire_pack 停在上一轮聊天，角色到点拿旧世界说话。
         // markDirty 内部自带「没开 2.0 / 没挂 AI 任务就 return」的门，普通角色零成本。
         DB.saveCharacter(target).then(() => {
+          void processHomeMemoryAfterSave(before, target, memoryPalaceConfigRef.current, apiConfig, userProfile?.name || '').catch(error => {
+            console.error('[Home3D MemoryPalace] 后台处理失败', error);
+            addToast('家园记忆整理失败', 'error');
+          });
           markAmsgStateDirty({ char: target, userProfile, groups, realtimeConfig });
           // 时区和名字是另一条路：它们冻在远端任务行里，fire_pack 刷新盖不到。
           // 上游按任务行的 tzId 推进循环任务的下次触发时刻；fixed 模式的推送标题也直接

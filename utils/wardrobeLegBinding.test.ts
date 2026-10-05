@@ -13,7 +13,7 @@ type Gltf={
 };
 
 function loadGarment(name:string){
- const bytes=readFileSync(`public/room3d/wardrobe/${name}-rig.glb`),jsonLength=bytes.readUInt32LE(12);
+ const bytes=readFileSync(`public/room3d/wardrobe/${name==='school-loafers'?'sailor-girl.glb':name+'-rig.glb'}`),jsonLength=bytes.readUInt32LE(12);
  const gltf:Gltf=JSON.parse(bytes.subarray(20,20+jsonLength).toString()),bin=bytes.subarray(28+jsonLength);
  const read=(id:number)=>{
   const a=gltf.accessors[id],view=gltf.bufferViews[a.bufferView];
@@ -27,7 +27,7 @@ function loadGarment(name:string){
    return a.normalized&&a.componentType!==5126?value/(2**(size*8)-1):value;
   }));
  };
- const nodes=gltf.nodes.filter(n=>n.mesh!==undefined&&n.name?.startsWith('Lowerwear_'));
+ const nodes=gltf.nodes.filter(n=>n.mesh!==undefined&&n.name?.startsWith(name==='school-loafers'?'Sailor_shoes':'Lowerwear_'));
  expect(nodes.length,`${name}: published garment nodes`).toBeGreaterThan(0);
  return nodes.flatMap(node=>{
   const skin=gltf.skins[node.skin!],names=skin.joints.map(i=>gltf.nodes[i].name??'');
@@ -44,7 +44,7 @@ function loadGarment(name:string){
  });
 }
 
-describe.each(['straight','cargo','cropped'])('published %s trousers',name=>{
+describe.each(['straight','cargo','cropped','school-loafers'])('published %s leg binding',name=>{
  it('keeps every complete triangle below the knees owned by a single leg',()=>{
   let checked=0;const mixed:number[]=[];
   for(const p of loadGarment(name))for(let t=0;t<p.indices.length;t+=3){

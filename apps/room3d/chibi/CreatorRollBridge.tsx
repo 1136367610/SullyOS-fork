@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {readRollCache,writeRollCache,rollCacheKey} from './rollCache';
 export interface RollResult { layers:Record<string,string>; image:string; state?:unknown }
-export function CreatorRollBridge({ request, savedState, extraItems, editing=false, captureOnly=false, onReady, onResult, onError }: { request:number; savedState?:unknown; extraItems?:unknown[]; editing?:boolean; captureOnly?:boolean; onReady:()=>void; onResult:(r:RollResult)=>void; onError:(message:string)=>void }) {
+type BridgeProps={ request:number; savedState?:unknown; extraItems?:unknown[]; editing?:boolean; captureOnly?:boolean; onReady:()=>void; onResult:(r:RollResult)=>void; onError:(message:string)=>void };
+function RawCreatorRollBridge({ request, savedState, extraItems, editing=false, captureOnly=false, onReady, onResult, onError }: BridgeProps) {
     const frame=useRef<HTMLIFrameElement>(null),callbacks=useRef({onReady,onResult,onError});callbacks.current={onReady,onResult,onError};
     const [html,setHtml]=useState('');
     const active=useRef(0);
@@ -82,4 +84,14 @@ export function CreatorRollBridge({ request, savedState, extraItems, editing=fal
         frame.current?.contentWindow?.postMessage({type:'experiment-roll',id:request,savedState,extraItems,captureOnly},location.origin);
     },[request,savedState,extraItems,captureOnly]);
     return html?<iframe ref={frame} title="小人捏人器" aria-hidden={!editing} tabIndex={editing?0:-1} srcDoc={html} style={editing?{position:'fixed',inset:'60px 0 0',width:'100%',height:'calc(100dvh - 60px)',border:0,zIndex:30,background:'#fff8f0'}:{position:'fixed',left:-10000,top:0,width:472,height:472,border:0,pointerEvents:'none'}}/>:null;
+}
+
+export function CreatorRollBridge(props:React.ComponentProps<typeof RawCreatorRollBridge>){
+ const key=props.editing||props.captureOnly?null:rollCacheKey(props.savedState,props.extraItems);
+ const cached=useMemo(()=>readRollCache(key),[key]);
+ const callbacks=useRef(props);callbacks.current=props;
+ useEffect(()=>{if(cached)callbacks.current.onReady();},[cached]);
+ useEffect(()=>{if(cached&&props.request)callbacks.current.onResult(cached);},[cached,props.request]);
+ if(cached)return null;
+ return <RawCreatorRollBridge {...props} onResult={result=>{if(key)writeRollCache(key,result);props.onResult(result);}}/>;
 }

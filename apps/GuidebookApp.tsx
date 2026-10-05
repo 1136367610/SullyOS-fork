@@ -1,3 +1,4 @@
+import { ContextBuilder, type ContextMessage } from '../utils/context';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -34,13 +35,13 @@ import TokenImg from '../components/os/TokenImg';
 const genId = () => Math.random().toString(36).slice(2, 10);
 
 // --- Helper: API Call ---
-async function callAPI(apiConfig: { baseUrl: string; apiKey: string; model: string }, prompt: string): Promise<string> {
+async function callAPI(apiConfig: { baseUrl: string; apiKey: string; model: string }, messages: ContextMessage[]): Promise<string> {
     const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
         body: JSON.stringify({
             model: apiConfig.model,
-            messages: [{ role: 'user', content: prompt }],
+            messages,
             temperature: 0.9,
             max_tokens: 4000,
             stream: false,
@@ -678,6 +679,7 @@ const GuidebookApp: React.FC = () => {
 
     // --- Start Game ---
     const handleStartGame = async () => {
+
         if (!selectedCharId) { addToast('请先选择角色', 'error'); return; }
 
         trackEvent('开始一局攻略');
@@ -707,7 +709,7 @@ const GuidebookApp: React.FC = () => {
         try {
             await injectMemoryPalace(char, undefined, scenarioHint || undefined);
             const prompt = buildOpeningPrompt(char, userProfile, initialAffinity, scenarioHint, 'manual', recentMsgs, char.guidebookInsights);
-            const raw = await callAPI(apiConfig, prompt);
+            const raw = await callAPI(apiConfig, (await ContextBuilder.buildCharacterRequest({ char, user: userProfile }, [{ role: 'user', content: prompt }])));
             let data = extractJson(raw);
 
             // Flexible segment extraction: try multiple paths
@@ -770,6 +772,7 @@ const GuidebookApp: React.FC = () => {
 
     // --- AI Assist ---
     const handleAIAssist = async () => {
+
         if (!session || !selectedChar) return;
         trackEvent('让 AI 帮写本回合选项');
         setIsLoading(true);
@@ -777,12 +780,11 @@ const GuidebookApp: React.FC = () => {
         const wc = extractWorldContext(session.openingSequence);
         try {
             await injectMemoryPalace(selectedChar, undefined, session.scenarioHint || undefined);
-            const prompt = buildOptionAssistPrompt(
-                selectedChar, userProfile, session.currentAffinity,
+            const prompt = buildOptionAssistPrompt(selectedChar, userProfile, session.currentAffinity,
                 session.currentRound + 1, session.rounds, session.scenarioHint || '',
                 cachedRecentMsgs, wc, nextDirectionHint || undefined
             );
-            const raw = await callAPI(apiConfig, prompt);
+            const raw = await callAPI(apiConfig, (await ContextBuilder.buildCharacterRequest({ char: selectedChar, user: userProfile }, [{ role: 'user', content: prompt }])));
             const data = extractJson(raw);
             // Flexible: try data.options, or any array field with 3+ items that have text
             let opts: any[] | null = null;
@@ -865,6 +867,7 @@ const GuidebookApp: React.FC = () => {
     };
 
     const handleSubmitRound = async () => {
+
         if (!session || !selectedChar) return;
         if (optionTexts.some(t => !t.trim())) { addToast('请填写所有选项', 'error'); return; }
         setIsLoading(true);
@@ -875,12 +878,11 @@ const GuidebookApp: React.FC = () => {
 
         try {
             await injectMemoryPalace(selectedChar, undefined, roundScenario || session.scenarioHint || undefined);
-            const prompt = buildRoundPrompt(
-                selectedChar, userProfile, session.currentAffinity,
+            const prompt = buildRoundPrompt(selectedChar, userProfile, session.currentAffinity,
                 roundNum, session.maxRounds, options, session.rounds, session.scenarioHint || '',
                 cachedRecentMsgs, wc, nextDirectionHint || undefined, roundScenario || undefined
             );
-            const raw = await callAPI(apiConfig, prompt);
+            const raw = await callAPI(apiConfig, (await ContextBuilder.buildCharacterRequest({ char: selectedChar, user: userProfile }, [{ role: 'user', content: prompt }])));
             const data = extractJson(raw);
             const choice = data?.choice;
             // Accept number, string number, or letter A/B/C
@@ -946,6 +948,7 @@ const GuidebookApp: React.FC = () => {
 
     // --- End Game ---
     const handleEndGame = async () => {
+
         if (!session || !selectedChar) return;
         trackEvent('结束本局出结算卡');
         setIsLoading(true);
@@ -954,12 +957,11 @@ const GuidebookApp: React.FC = () => {
 
         try {
             await injectMemoryPalace(selectedChar, undefined, session.scenarioHint || undefined);
-            const prompt = buildEndCardPrompt(
-                selectedChar, userProfile,
+            const prompt = buildEndCardPrompt(selectedChar, userProfile,
                 session.initialAffinity, session.currentAffinity, session.rounds,
                 cachedRecentMsgs
             );
-            const raw = await callAPI(apiConfig, prompt);
+            const raw = await callAPI(apiConfig, (await ContextBuilder.buildCharacterRequest({ char: selectedChar, user: userProfile }, [{ role: 'user', content: prompt }])));
             const data = extractJson(raw);
 
             if (data) {

@@ -1,3 +1,4 @@
+import {BED_LEISURE} from './chibi/bedLeisure';
 import {bathroomActivities,isBathAction} from './bathroom.js';
 import {roomBeds,roomSeats,seatTransform} from './seating.js';
 import {roomPlants} from './watering.js';
@@ -6,12 +7,13 @@ import {kitchenActions} from './kitchenActivities.js';
 import {mirrorActivities,isMirrorAction} from './mirror.js';
 
 // Describe real, existing actions. No name-based guesses and no saved UI state.
-export function furnitureInteractions(room,catalog,itemId,{activities=[],seat=null,held=null,active=null,fridgeOpen=false,clearance,body2=false}={}){
+export function furnitureInteractions(room,catalog,itemId,{activities=[],seat=null,held=null,active=null,fridgeOpen=false,clearance,body2=false,transitioning=false}={}){
  const item=room.items.find(i=>i.id===itemId&&!i.stored),a=catalog.find(a=>a.id===item?.assetId);if(!a)return [];
  const result=kitchenActions(room,catalog,itemId),add=(action,label,extra={},reason='')=>result.push({action,label,id:itemId,...extra,reason});
  for(const b of roomBeds(room,catalog).filter(b=>b.itemId===itemId)){
   const label=a.beds.find(s=>s.id===b.seatId)?.label||'';
   add('chibi-bed',a.beds.length===1?'躺下':/左|右/.test(label)?'睡'+label.replace('床位','').replace('侧','边'):label+'躺下',{seat:b.seatId});
+  if(body2&&!transitioning&&seat?.bed&&seat.itemId===b.itemId&&seat.seatId===b.seatId)for(const [mode,title]of BED_LEISURE)add('chibi-bed',title+(a.beds.length>1?' · '+label:''),{seat:b.seatId,mode});
  }
  for(const s of roomSeats(room,catalog).filter(s=>s.itemId===itemId))add('chibi-sit',a.seats.length===1?'坐下':(a.seats.find(v=>v.id===s.seatId)?.label||'这里')+'坐下',{seat:s.seatId});
  if(body2)for(const s of roomSeats(room,catalog).filter(s=>s.itemId===itemId&&seatTransform(room,catalog,s,true)?.pose==='floor'))add('chibi-sit','04 盘腿坐',{seat:s.seatId,alternate:'true'});
@@ -32,7 +34,7 @@ export function furnitureInteractions(room,catalog,itemId,{activities=[],seat=nu
 
 // A semicircle over the furniture; constrain the whole wheel, not each button.
 export function interactionArcLayout({x,y,width,height,count,modelWidth=440}){
- const n=Math.min(3,count),w=Math.min(width-24,Math.max(176,Math.min(420,modelWidth*1.08))),h=Math.min(height<500?160:270,Math.max(140,w*.64)),side=x+w/2>width?'left':'right';
+ const n=Math.min(4,count),w=Math.min(width-24,Math.max(176,Math.min(420,modelWidth*1.08))),h=Math.min(height<500?160:270,Math.max(140,w*.64)),side=x+w/2>width?'left':'right';
  const left=Math.max(12,Math.min(width-w-12,x-w/2));
  const top=Math.max(height<500?70:135,Math.min(height-h-96,y-h*.77));
  const points=Array.from({length:n},(_,i)=>{const angle=(n===1?-90:-142+i/(n-1)*104)*Math.PI/180;return {x:w/2+Math.cos(angle)*w*.40,y:h*.77+Math.sin(angle)*h*.56};});

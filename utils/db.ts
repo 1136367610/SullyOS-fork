@@ -1,4 +1,5 @@
 import { toMountedWorldbook } from './worldbook';
+import { persistCharacterWithHomeMessages } from './homeMessageBridge';
 
 
 
@@ -29,7 +30,9 @@ const DB_NAME = 'AetherOS_Data';
 // v69：见面·剧情条目与糯米机原生预设。正文继续复用 messages 表，避免再造会话存储。
 // v70：剧场面具箱（原创人物面具）；角色面具仍只存 characterId，不复制神经链接资料。
 // v71：角色小红书伪主页；发帖归属与可删除的自由活动日志分离。
-const DB_VERSION = 71;
+// v72: home projection reads only home-source rows, never scans private-chat history.
+// v73: direct home-turn lookups for incremental journal writes.
+const DB_VERSION = 73;
 
 const STORE_CHARACTERS = 'characters';
 const STORE_CHAR_GROUPS = 'character_groups'; // 角色分组定义（角色通过 groupId 指向；与群聊 groups 无关）
@@ -256,6 +259,15 @@ export const openDB = (): Promise<IDBDatabase> => {
               msgStore.createIndex('charId_type', ['charId', 'type'], { unique: false });
           }
       } catch (e) { console.log('charId_type index migration skipped', e); }
+
+      const messageStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORE_MESSAGES);
+      if (!messageStore.indexNames.contains('charId_source')) {
+          messageStore.createIndex('charId_source', ['charId', 'metadata.source'], { unique: false });
+      }
+
+      if (!messageStore.indexNames.contains('charId_homeTurn')) {
+          messageStore.createIndex('charId_homeTurn', ['charId', 'metadata.homeTurnId'], { unique: false });
+      }
 
       createStore(STORE_EMOJIS, { keyPath: 'name' });
       createStore(STORE_EMOJI_CATEGORIES, { keyPath: 'id' });
@@ -548,14 +560,17 @@ export const DB = {
 
   saveCharacter: async (character: CharacterProfile): Promise<void> => {
     const db = await openDB();
-    // 等事务真正提交再 resolve —— 否则调用方 await 后立刻重读 DB 会拿到旧值 (情绪 buff 落库竞态根因).
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_CHARACTERS, 'readwrite');
-      transaction.objectStore(STORE_CHARACTERS).put(character);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error || new Error('saveCharacter aborted'));
+    return persistCharacterWithHomeMessages(db, character, clearStaleMemoryMirror);
+  },
+
+  ensureHomeContextMessages: async (charId: string): Promise<void> => {
+    const db = await openDB();
+    const migrated = await new Promise<boolean>((resolve, reject) => {
+      const request = db.transaction(STORE_CHARACTERS, 'readonly').objectStore(STORE_CHARACTERS).get(charId);
+      request.onsuccess = () => resolve(!request.result || request.result.homeContextBridgeVersion === 2);
+      request.onerror = () => reject(request.error);
     });
+    if (!migrated) await persistCharacterWithHomeMessages(db, charId, clearStaleMemoryMirror);
   },
 
   deleteCharacter: async (id: string): Promise<void> => {
@@ -1796,8 +1811,22 @@ export const DB = {
 
   saveUserProfile: async (profile: UserProfile): Promise<void> => {
       const db = await openDB();
-      const transaction = db.transaction(STORE_USER, 'readwrite');
-      transaction.objectStore(STORE_USER).put({ ...profile, id: 'me' });
+      return new Promise((resolve,reject)=>{
+          const transaction=db.transaction(STORE_USER,'readwrite'),store=transaction.objectStore(STORE_USER),request=store.get('me');
+          request.onsuccess=()=>store.put({...profile,wardrobeOutfits:request.result?.wardrobeOutfits??profile.wardrobeOutfits,id:'me'});
+          transaction.oncomplete=()=>resolve();transaction.onerror=transaction.onabort=()=>reject(transaction.error);
+      });
+  },
+
+  /** Wardrobe is edited independently of profile forms; merge within one transaction. */
+  updateWardrobeOutfits: async (update:(items:NonNullable<UserProfile['wardrobeOutfits']>)=>NonNullable<UserProfile['wardrobeOutfits']>):Promise<NonNullable<UserProfile['wardrobeOutfits']>> => {
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+          const tx=db.transaction(STORE_USER,'readwrite'),store=tx.objectStore(STORE_USER),request=store.get('me');
+          let items:NonNullable<UserProfile['wardrobeOutfits']>=[],failure:unknown;
+          request.onsuccess=()=>{try{const profile=request.result??{id:'me',name:'我',avatar:'',bio:''};items=update(profile.wardrobeOutfits??[]);store.put({...profile,wardrobeOutfits:items});}catch(e){failure=e;tx.abort();}};
+          tx.oncomplete=()=>resolve(items);tx.onerror=tx.onabort=()=>reject(failure??tx.error);
+      });
   },
 
   getUserProfile: async (): Promise<UserProfile | null> => {
@@ -3342,7 +3371,8 @@ export const DB = {
       const userProfile = userProfiles.length > 0 ? {
           name: userProfiles[0].name,
           avatar: userProfiles[0].avatar,
-          bio: userProfiles[0].bio
+          bio: userProfiles[0].bio,
+          wardrobeOutfits: userProfiles[0].wardrobeOutfits,
       } : undefined;
 
       const mainState = bankData.find((d: any) => d.id === 'main_state');

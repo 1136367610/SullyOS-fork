@@ -148,3 +148,6 @@ await import('./repair-dresser.mjs');
 await import('./kitchen-finish-parts.mjs');
 await import('./kitchenware-assets.mjs');
 await import('./kitchen-reference-assets.mjs');
+
+// Preserve the reviewed two-person dining bench after regeneration.
+await import('./widen-dining-bench.mjs');

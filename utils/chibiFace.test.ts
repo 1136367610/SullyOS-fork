@@ -83,3 +83,9 @@ describe('Authored face asset contract',()=>{
   for(const side of measureFaceLandmarks(w,h,p)){expect(side.anchor).toBe(30);expect(side.edge.every(y=>y===35)).toBe(true);}
  });
 });
+
+it('persists Sully artwork and clears it when a normal eye preset is selected',()=>{
+ const sully=cleanFace({...defaultFace,eyeArtwork:'sully'});
+ expect(sully.eyeArtwork).toBe('sully');
+ expect(applyEyePreset(sully,'02').eyeArtwork).toBeUndefined();
+});

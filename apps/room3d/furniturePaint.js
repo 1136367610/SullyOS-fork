@@ -9,3 +9,22 @@ export function furniturePaintMaterials(asset,names){
  const primary=fallback.find(n=>available.has(n));return primary?[primary]:names.length?[names[0]]:[];
 }
 export const validFurnitureColor=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
+// Presets are resolved to the same per-instance fields used by custom colors,
+// copying, undo and saved layouts. No shared template materials are changed.
+export function applyFurnitureColorPreset(item,asset,id){
+ const preset=asset.colorPresets?.find(p=>p.id===id);if(!preset)return false;
+ const allowed=new Set((asset.colorParts||[]).map(p=>p.material)),entries=Object.entries(preset.colors);
+ if(!entries.length||entries.some(([name,color])=>!allowed.has(name)||!validFurnitureColor(color)))return false;
+ item.color=null;item.materialColors=Object.fromEntries(entries);return true;
+}
+export function setFurniturePrimaryColor(item,asset,color){
+ if(color!==null&&!validFurnitureColor(color))return false;
+ item.color=color;
+ // A previously applied palette may override the primary material, too.
+ for(const name of asset.paintMaterials||[])if(item.materialColors)delete item.materialColors[name];
+ return true;
+}
+export function resetFurnitureColors(item){item.color=null;delete item.materialColors;}
+export function furniturePartColor(item,asset,part){
+ return item.materialColors?.[part.material]||((asset.paintMaterials||[]).includes(part.material)&&item.color)||part.color;
+}

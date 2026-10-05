@@ -41,6 +41,8 @@
     "@rei-standard/blob-store": "0.1.0-next.2",
     "@zip.js/zip.js": "^2.8.43",
     "ag-psd": "^31.0.2",
+    "animal-island-ui": "2.1.0",
+    "classnames": "^2.5.1",
     "jszip": "^3.10.1",
     "pdfjs-dist": "3.11.174",
     "pg": "^8.20.0",

@@ -321,6 +321,8 @@ injection是注入角色系统提示词的叙事型情绪指令，必须使用**
 
 ⚠️ 禁止写成简单一句话概括的格式（如"你现在处于XX状态，强度: ●●○"就结束），必须展开每一层情绪。
 
+每个 buff 额外附带 homeBehavior：{"energy":0,"approach":0,"interaction":0}。这是角色本人在小屋的短暂非语言行为倾向，三个数均为 -1 到 1，0 表示无影响。energy：疲倦到有活力；approach：想独处到想靠近用户；interaction：少互动到愿意互动。根据完整语义判断，不按正负情绪机械映射；例如委屈但想靠近可以是 energy=-0.4、approach=0.5、interaction=-0.5。不确定就全部为0，不改变原有buff含义、不强制微笑、不输出动作。
+
 输出格式示例：
 {
   "changed": true,
@@ -448,6 +450,7 @@ export async function evaluateEmotionBackground(
 }
 
 interface UseChatAIProps {
+    homePhoneContext?: () => string;
     char: CharacterProfile | undefined;
     userProfile: UserProfile;
     apiConfig: any;
@@ -493,6 +496,7 @@ export const useChatAI = ({
     mcdMiniAppRef,
     luckinMiniAppRef,
     luckinChatRef,
+    homePhoneContext,
 }: UseChatAIProps) => {
     
     // 音乐上下文 — 用于聊天时注入"user 正在听什么 + 当前歌词窗口"
@@ -572,11 +576,11 @@ export const useChatAI = ({
     // 重建 listener (切角色), 避免 music 每秒 tick 一次都 remove+addEventListener.
     const emotionEvalDepsRef = useRef({
         userProfile, groups, emojis, categories, realtimeConfig, apiConfig,
-        translationConfig, music, mcdMiniAppRef, luckinMiniAppRef, luckinChatRef, evolvedNarrative,
+        translationConfig, music, mcdMiniAppRef, luckinMiniAppRef, luckinChatRef, homePhoneContext, evolvedNarrative,
     });
     emotionEvalDepsRef.current = {
         userProfile, groups, emojis, categories, realtimeConfig, apiConfig,
-        translationConfig, music, mcdMiniAppRef, luckinMiniAppRef, luckinChatRef, evolvedNarrative,
+        translationConfig, music, mcdMiniAppRef, luckinMiniAppRef, luckinChatRef, homePhoneContext, evolvedNarrative,
     };
 
     useEffect(() => {
@@ -619,6 +623,7 @@ export const useChatAI = ({
                 const luckinMiniOpen = !!luckinMiniSnap?.open;
                 const payload = await buildChatRequestPayload({
                     char: evalChar,
+                    homePhoneContext:deps.homePhoneContext?.(),
                     userProfile: deps.userProfile,
                     groups: deps.groups,
                     emojis: deps.emojis,
@@ -627,7 +632,7 @@ export const useChatAI = ({
                     contextLimit: Math.max(1, contextMsgs.length),
                     recallEntryPoint: 'emotion_eval',
                     realtimeConfig: deps.realtimeConfig,
-                    innerState: deps.evolvedNarrative || undefined,
+                    innerState: undefined,
                     musicSnapshot: {
                         current: deps.music.current,
                         playing: deps.music.playing,
@@ -972,12 +977,13 @@ export const useChatAI = ({
 
             const payload = await stageT('payload', buildChatRequestPayload({
                 char: requestCharacter, userProfile, groups, emojis, categories,
+                homePhoneContext:homePhoneContext?.(),
                 historyMsgs: contextMsgs,
                 recentMsgsHint: currentMsgs,
                 contextLimit: limit,
                 contextHighWaterMark: contextRange?.hwm,
                 realtimeConfig,
-                innerState: skipEmotionInjection ? undefined : (evolvedNarrative || undefined),
+                innerState: skipEmotionInjection ? '' : undefined,
                 userListeningContext: (() => {
                     if (music.current && music.playing && music.lyric.length > 0) {
                         const idx = music.activeLyricIdx;

@@ -34,7 +34,7 @@
     "prefix": "Sailor_top",
     "hem": 1.82,
     "opening": 0.32,
-    "revision": "6d3d724f746c"
+    "revision": "a6974e7bd7ad"
   },
   {
     "id": "sailor-skirt",
@@ -44,7 +44,7 @@
     "prefix": "Sailor_skirt",
     "hem": 1.82,
     "opening": 0.32,
-    "revision": "6d3d724f746c"
+    "revision": "a6974e7bd7ad"
   },
   {
     "id": "school-socks",
@@ -54,7 +54,7 @@
     "prefix": "Sailor_socks",
     "hem": 1.82,
     "opening": 0.96,
-    "revision": "6d3d724f746c"
+    "revision": "a6974e7bd7ad"
   },
   {
     "id": "school-loafers",
@@ -64,7 +64,7 @@
     "prefix": "Sailor_shoes",
     "hem": 1.82,
     "opening": 0.32,
-    "revision": "6d3d724f746c"
+    "revision": "a6974e7bd7ad"
   },
   {
     "id": "lower-long-skirt",
@@ -519,5 +519,69 @@
     "opening": 0.38665254237288144,
     "triangles": 226,
     "revision": "72bc0a45e627"
+  },
+  {
+    "id": "cat-ears",
+    "label": "猫耳",
+    "slot": "ears",
+    "asset": "meshy-ears.glb",
+    "prefix": "Animal_cat-ears_",
+    "revision": "127a6cce1130"
+  },
+  {
+    "id": "cat-tail",
+    "label": "猫尾",
+    "slot": "tail",
+    "asset": "animal-accessories.glb",
+    "prefix": "Animal_cat-tail_",
+    "revision": "40ad9307e580"
+  },
+  {
+    "id": "dog-ears",
+    "label": "狗耳",
+    "slot": "ears",
+    "asset": "meshy-ears.glb",
+    "prefix": "Animal_dog-ears_",
+    "revision": "127a6cce1130"
+  },
+  {
+    "id": "dog-tail",
+    "label": "狗尾",
+    "slot": "tail",
+    "asset": "animal-accessories.glb",
+    "prefix": "Animal_dog-tail_",
+    "revision": "40ad9307e580"
+  },
+  {
+    "id": "fox-ears",
+    "label": "狐狸耳",
+    "slot": "ears",
+    "asset": "meshy-ears.glb",
+    "prefix": "Animal_fox-ears_",
+    "revision": "127a6cce1130"
+  },
+  {
+    "id": "fox-tail",
+    "label": "狐狸尾",
+    "slot": "tail",
+    "asset": "animal-accessories.glb",
+    "prefix": "Animal_fox-tail_",
+    "revision": "40ad9307e580"
+  },
+  {
+    "id": "rabbit-ears",
+    "label": "兔耳",
+    "slot": "ears",
+    "asset": "meshy-ears.glb",
+    "prefix": "Animal_rabbit-ears_",
+    "revision": "127a6cce1130"
+  },
+  {
+    "id": "rabbit-tail",
+    "label": "兔尾",
+    "slot": "tail",
+    "asset": "animal-accessories.glb",
+    "prefix": "Animal_rabbit-tail_",
+    "revision": "40ad9307e580"
   }
 ]

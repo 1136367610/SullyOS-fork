@@ -579,6 +579,7 @@ const Character: React.FC = () => {
    *                        没提供则退回到当前 selectedPromptId
    */
   const handleForceArchiveDate = async (dateStr: string, overridePromptId?: string): Promise<void> => {
+
       if (!apiConfig.apiKey || !formData) { addToast('请先配置 API Key', 'error'); return; }
       const targetId = formData.id;
       try {
@@ -599,8 +600,8 @@ const Character: React.FC = () => {
           // 模板优先级：override（弹窗现场选）→ 当前 state → 默认 preset
           const effectivePromptId = overridePromptId || selectedPromptId;
           const templateObj = archivePrompts.find(p => p.id === effectivePromptId) || DEFAULT_ARCHIVE_PROMPTS[0];
-          const baseContext = ContextBuilder.buildCoreContext(formData, userProfile);
-          let prompt = baseContext + '\n\n' + templateObj.content;
+          const characterContextInput = { char: formData, user: userProfile };
+          let prompt = '' + '\n\n' + templateObj.content;
           const sarMemoryBoundary = buildSARMemoryBoundaryInstruction(rawLog);
           if (sarMemoryBoundary) prompt = `${sarMemoryBoundary}\n\n${prompt}`;
           prompt = prompt.replace(/\$\{dateStr\}/g, dateStr);
@@ -611,7 +612,7 @@ const Character: React.FC = () => {
           const data = await safeFetchJson(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 8000, stream: false }),
+              body: JSON.stringify({ model: apiConfig.model, messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'user', content: prompt }])), temperature: 0.5, max_tokens: 8000, stream: false }),
           }, 0);
           let summary = extractContent(data).replace(/^["']|["']$/g, '');
           if (!summary) throw new Error('空响应');
@@ -738,6 +739,7 @@ const Character: React.FC = () => {
   };
   
   const handleBatchSummarize = async () => {
+
         if (!apiConfig.apiKey || !formData) return;
         
         const targetId = formData.id; // LOCK ID
@@ -768,7 +770,7 @@ const Character: React.FC = () => {
             const newMemories: MemoryFragment[] = [];
 
             await injectMemoryPalace(formData);
-            const baseContext = ContextBuilder.buildCoreContext(formData, userProfile);
+            const characterContextInput = { char: formData, user: userProfile };
 
             for (let i = 0; i < dates.length; i++) {
                 const date = dates[i];
@@ -782,7 +784,7 @@ const Character: React.FC = () => {
 
                 // Use selected template (same as ChatApp) with variable substitution
                 const templateObj = archivePrompts.find(p => p.id === selectedPromptId) || DEFAULT_ARCHIVE_PROMPTS[0];
-                let prompt = baseContext + '\n\n' + templateObj.content;
+                let prompt = '' + '\n\n' + templateObj.content;
                 const sarMemoryBoundary = buildSARMemoryBoundaryInstruction(rawLog);
                 if (sarMemoryBoundary) prompt = `${sarMemoryBoundary}\n\n${prompt}`;
                 prompt = prompt.replace(/\$\{dateStr\}/g, date);
@@ -797,7 +799,7 @@ const Character: React.FC = () => {
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                         body: JSON.stringify({
                             model: apiConfig.model,
-                            messages: [{ role: "user", content: prompt }],
+                            messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }])),
                             max_tokens: 8000,
                             temperature: 0.5
                         })
@@ -860,6 +862,7 @@ const Character: React.FC = () => {
     };
 
   const handleGenerateImpression = async (type: 'initial' | 'update') => {
+
       if (!formData || !apiConfig.apiKey) {
           addToast('请先配置 API Key', 'error');
           return;
@@ -874,12 +877,12 @@ const Character: React.FC = () => {
 
           // 构建完整角色上下文（包含人设、世界观、用户档案、精炼记忆等宏观信息）
           await injectMemoryPalace(formData);
-          const fullContext = ContextBuilder.buildCoreContext(formData, userProfile);
+          const characterContextInput = { char: formData, user: userProfile };
 
           let messagesToAnalyze = "";
 
           // 第一层：完整上下文 —— 宏观人格分析的基石
-          messagesToAnalyze += `\n【完整角色上下文 (Full Context - 宏观分析的基石)】:\n${fullContext}\n`;
+          messagesToAnalyze += `\n【完整角色上下文 (Full Context - 宏观分析的基石)】:\n\n`;
 
           // 第二层：最近聊天 —— 仅用于检测近期变化
           // 记忆部分已包含在 buildCoreContext 中（精炼月度总结 + 点亮月份的详细记忆），
@@ -983,7 +986,7 @@ ${isInitialGeneration ? `
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
               body: JSON.stringify({
                   model: apiConfig.model,
-                  messages: [{ role: "user", content: prompt }],
+                  messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }])),
                   max_tokens: 8000,
                   temperature: 0.5,
                   // 与「设置 → API → 流式输出」保持一致，不在印象功能里强制覆盖用户选择。

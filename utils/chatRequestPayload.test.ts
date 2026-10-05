@@ -37,6 +37,18 @@ const baseInput = (): BuildChatPayloadInput => ({
 const joinMessages = (messages: Array<{ content: any }>): string =>
     messages.map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
 
+it.each([false,true])('adds home phone background only to this request (worker=%s) and retains normal chat history', async timelyByWorker => {
+    const input={...baseInput(),timelyByWorker};
+    const background='【家园手机聊天】你们在客厅里用手机聊天。';
+    const phone=await buildChatRequestPayload({...input,homePhoneContext:background});
+    expect(joinMessages(phone.fullMessages)).toContain(background);
+    expect(phone.systemPrompt).toContain(background);
+    expect(phone.cleanedApiMessages.some(m=>m.role==='user'&&String(m.content).includes('在吗'))).toBe(true);
+    const normal=await buildChatRequestPayload(input);
+    expect(joinMessages(normal.fullMessages)).not.toContain(background);
+    expect(input.char).not.toHaveProperty('homePhoneContext');
+});
+
 it('keeps this request history when the archive waterline advances during async prompt construction', async () => {
     const input = baseInput();
     input.char = { ...input.char, autoArchiveEnabled: true, contextRangeMode: 'adaptive' };
@@ -51,9 +63,11 @@ it('keeps this request history when the archive waterline advances during async 
     try {
         const payload = await buildChatRequestPayload(input);
         expect(payload.cleanedApiMessages.some(m => m.role === 'user' && String(m.content).includes('在吗'))).toBe(true);
+        expect(localStorage.getItem(key)).toBe('99999');
         // 新请求仍须遵守推进后的水位，不能把快照变成永久绕过。
         const next = await buildChatRequestPayload(input);
         expect(next.cleanedApiMessages).toEqual([]);
+        expect(localStorage.getItem(key)).toBe('99999');
     } finally { localStorage.removeItem(key); }
 });
 
@@ -333,4 +347,29 @@ it('ChatApp user modules explicitly identify the pending messages without changi
     expect(request?.content).toContain(JSON.stringify(input.historyMsgs.map(({ id, content }) => ({ id, content }))));
     const other = await buildChatRequestPayload(input);
     expect(joinMessages(other.fullMessages)).not.toContain('USER_SURFACE 的聊天专用格式');
+});
+
+it('聊天深度世界书由消息层插入，公共上下文兜底不会再重复一份', async () => {
+    const input = baseInput();
+    input.char.mountedWorldbooks = [{ id: 'depth-test', title: '深度测试', content: 'UNIQUE_DEPTH_BOOK', constant: true, position: 4, depth: 0, role: 0 }];
+    const payload = await buildChatRequestPayload(input);
+    expect(joinMessages(payload.fullMessages).split('UNIQUE_DEPTH_BOOK')).toHaveLength(2);
+    expect(payload.fullMessages[0].content).not.toContain('UNIQUE_DEPTH_BOOK');
+});
+
+it('单串提示词消费者也从同一管线拿到深度世界书', async () => {
+    const input = baseInput();
+    input.char.mountedWorldbooks = [{ id: 'text-depth', title: '单串深度', content: 'TEXT_ONLY_DEPTH_BOOK', constant: true, position: 4 }];
+    const result = await ChatPrompts.buildSystemPrompt(input.char, input.userProfile, [], [], [], input.historyMsgs);
+    expect(result.split('TEXT_ONLY_DEPTH_BOOK')).toHaveLength(2);
+});
+
+it('文本入口误传 history 时仍保留深度世界书，不丢弃移交后的消息', async () => {
+    const input = baseInput();
+    input.char.mountedWorldbooks = [{ id: 'text-depth', title: '单串深度', content: 'TEXT_ONLY_DEPTH_BOOK', constant: true, position: 4 }];
+    const result = await ChatPrompts.buildSystemPrompt(
+        input.char, input.userProfile, [], [], [], input.historyMsgs,
+        undefined, undefined, undefined, undefined, undefined, { history: [] },
+    );
+    expect(result.split('TEXT_ONLY_DEPTH_BOOK')).toHaveLength(2);
 });

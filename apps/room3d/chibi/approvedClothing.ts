@@ -4,7 +4,7 @@ import {approvedGarments,cleanApprovedWardrobe,type ApprovedWardrobe} from './ap
 import type {bindBlankBody} from './blankRig';
 import {createClothingMask} from './clothingMask';
 import {fitForGarment,deformGarment,garmentTransform,manualCoverage,type WardrobeFits} from './garmentFit';
-import {cleanWardrobeColors,createGarmentColorController,type WardrobeColors} from './wardrobeColors';
+import {resolveWardrobeColors,cleanWardrobeColors,createGarmentColorController,type WardrobeColors} from './wardrobeColors';
 import {layeringForGarment,usesPosedInnerFit} from './wardrobeLayering';
 import type {LayeringReport} from './garmentLayering';
 import {bodyHeightY,bodyBaseY,bodyHeightSlope} from './bodyHeight';
@@ -13,7 +13,9 @@ const assets=new Map<string,Promise<T.Group>>();
 function load(asset:string){let task=assets.get(asset);if(!task){task=new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}room3d/wardrobe/${asset}`).then(g=>{g.scene.traverse(o=>{if(o instanceof T.Mesh)for(const m of Array.isArray(o.material)?o.material:[o.material])m.userData.wardrobeMaterialIndex=g.parser.associations.get(m)?.materials;});g.scene.updateMatrixWorld(true);return g.scene;}).catch(e=>{assets.delete(asset);throw e;});assets.set(asset,task);}return task;}
 type Rig=ReturnType<typeof bindBlankBody>;
 /** Attach authored primitives by bone name; retain UVs, materials and authored weights. */
-export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fits:WardrobeFits={},colors:WardrobeColors={},layering=false){
+export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fits:WardrobeFits={},colors:WardrobeColors={},layering=true,signal?:AbortSignal){
+ const checkpoint=async()=>{if(signal?.aborted)throw new DOMException('换装已取消','AbortError');if(signal)await new Promise<void>(resolve=>setTimeout(resolve,0));if(signal?.aborted)throw new DOMException('换装已取消','AbortError');};
+ await checkpoint();
  const wardrobe=cleanApprovedWardrobe(value),defs=Object.values(wardrobe).map(id=>approvedGarments.find(g=>g.id===id)!),loaded=await Promise.all(defs.map(d=>load(`${d.asset}?v=${d.revision??'1'}`)));
  const fitById=new Map(defs.map(d=>[d.id,fitForGarment(d.id,fits[d.id],wardrobe.bottom??wardrobe.onepiece)]));
  const meshes:T.SkinnedMesh[]=[],resources:Array<{dispose():void}>=[],original=rig.baseGeometry;
@@ -21,6 +23,7 @@ export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fit
  const targetIds=new Map(rig.skeleton.bones.map((b,i)=>[b.name,i]));
  const targetRest=rig.skeleton.boneInverses.map(m=>new T.Vector3().setFromMatrixPosition(m.clone().invert()));
  try{for(let k=0;k<defs.length;k++){
+  await checkpoint();
   const d=defs[k];let found=0;
   loaded[k].traverse(o=>{if(!(o instanceof T.SkinnedMesh)||!o.name.startsWith(d.prefix))return;found++;
    const g=o.geometry.clone(),p=g.attributes.position,n=g.attributes.normal,si=g.attributes.skinIndex,sw=g.attributes.skinWeight;
@@ -37,7 +40,12 @@ export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fit
     q.fromBufferAttribute(p,i).applyMatrix4(o.bindMatrix);const ySlope=bodyHeightSlope(q.y,rig.bodyHeight);q.y=bodyHeightY(q.y,rig.bodyHeight);
     delta.set(0,0,0);
     for(let j=0;j<4;j++){const old=si.getComponent(i,j),id=remap[old]??0,w=sw.getComponent(i,j),src=sourceRest[old];if(w&&src){delta.x+=(targetRest[id].x-src.x)*w;delta.y+=(targetRest[id].y-bodyHeightY(src.y,rig.bodyHeight))*w;delta.z+=(targetRest[id].z-src.z)*w;}si.setComponent(i,j,id);}
-    q.add(delta);p.setXYZ(i,q.x,q.y,q.z);
+    q.add(delta);
+    if(d.slot==='ears'){
+     const pivot=targetRest[targetIds.get('head')!],scale=(rig.baseGeometry.userData.headSize??1.04)/1.04;
+     q.sub(pivot).multiplyScalar(scale).add(pivot);
+    }
+    p.setXYZ(i,q.x,q.y,q.z);
     if(n){normal.fromBufferAttribute(n,i).applyMatrix3(normalMatrix);normal.y/=ySlope;normal.normalize();n.setXYZ(i,normal.x,normal.y,normal.z);}
    }
    const materials=(Array.isArray(o.material)?o.material:[o.material]).map(m=>{const copy=m.clone();copy.side=T.DoubleSide;if(copy instanceof T.MeshStandardMaterial)colorControllers.push({id:d.id,update:createGarmentColorController(copy,d.id,m.userData.wardrobeMaterialIndex)});resources.push(copy);return copy;});
@@ -45,6 +53,7 @@ export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fit
    mesh.bind(rig.skeleton,rig.mesh.bindMatrix);meshes.push(mesh);resources.push(g);
   });if(!found)throw Error(`服装资源缺少部件：${d.label}`);
  }
+ await checkpoint();
  const originalBounds=new Map<string,T.Box3>();
  for(const mesh of meshes){mesh.geometry.computeBoundingBox();const id=mesh.userData.garmentId;const box=originalBounds.get(id)??new T.Box3();box.union(mesh.geometry.boundingBox!);originalBounds.set(id,box);}
  // Paired hand sleeves share materials across both arms. Scale each sleeve
@@ -162,6 +171,7 @@ export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fit
  // A skinned edge cannot be split by averaging rest positions and weights:
  // its new midpoint does not stay on the original posed edge. Preserve whole
  // boundary faces for legs as well as shoulders, keeping skin under openings.
+ await checkpoint();
  const masked=createClothingMask(layeredBody??original,covered,-Infinity);resources.push(masked);
  let motionFit:import('./garmentMotionFit').GarmentMotionFit|undefined;
  if(layering&&wardrobe.outer){
@@ -173,8 +183,9 @@ export async function prepareApprovedWardrobe(rig:Rig,value:ApprovedWardrobe,fit
  // explicit so walking cannot erase it and seated removal restores only what
  // is still applied, rather than subtracting the original standing lift.
  const support={height:lift,applied:lift};
- let disposed=false,attached=false;const result={meshes,layeringReport,updatePose(){if(attached&&!disposed)motionFit?.update();},attach(){if(disposed||attached)return;attached=true;meshes.forEach(m=>parent.add(m));rig.mesh.geometry=masked;parent.userData.wardrobeLift=support;parent.position.y+=lift;},updateColors(value:WardrobeColors={}){if(disposed)return;const clean=cleanWardrobeColors(value);colorControllers.forEach(c=>c.update(clean[c.id]));},dispose(){if(disposed)return;disposed=true;if(rig.mesh.geometry===masked)rig.mesh.geometry=original;if(parent.userData.wardrobeLift===support){parent.position.y-=support.applied;delete parent.userData.wardrobeLift;}meshes.forEach(m=>m.removeFromParent());resources.forEach(r=>r.dispose());}};
+ let disposed=false,attached=false;const result={meshes,layeringReport,updatePose(){if(attached&&!disposed)motionFit?.update();},attach(){if(disposed||attached)return;attached=true;meshes.forEach(m=>parent.add(m));rig.mesh.geometry=masked;parent.userData.wardrobeLift=support;parent.position.y+=lift;},updateColors(value:WardrobeColors={}){if(disposed)return;const clean=resolveWardrobeColors(wardrobe,value);colorControllers.forEach(c=>c.update(clean[c.id]));},dispose(){if(disposed)return;disposed=true;if(rig.mesh.geometry===masked)rig.mesh.geometry=original;if(parent.userData.wardrobeLift===support){parent.position.y-=support.applied;delete parent.userData.wardrobeLift;}meshes.forEach(m=>m.removeFromParent());resources.forEach(r=>r.dispose());}};
 
+ await checkpoint();
  result.updateColors(colors);
  return result;
  }catch(e){meshes.forEach(m=>m.removeFromParent());resources.forEach(r=>r.dispose());throw e;}

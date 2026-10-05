@@ -6,12 +6,12 @@
  *
  * 与聊天侧注入面的差异（刻意为之，不是漏配）：
  *   - 注入：ContextBuilder.buildCoreContext 全量（人设 / 世界书 / 印象 / 记忆 /
- *     记忆宫殿召回 / 情绪 buff）+ 当前虚拟时间。
+ *     记忆宫殿召回 / 已开启的日程）+ 当前虚拟时间；情绪上下文不在此入口启用。
  *   - 不注入：聊天 App 行为规范（IM 气泡 / 表情包 / 语音 / 引用 / 转账 / 小红书 /
  *     日记等工具块）——这些是线上聊天专属指令，面对面场景里输出会破坏 VN 格式。
  *   - 不注入：实时天气 / 新闻、群聊背景、Notion / 飞书日记标题——见面是高沉浸短会话，
  *     这些背景块收益低，还会稀释 VN 格式指令的权重。
- *   - 日程 / 音乐氛围目前也不进见面场景；以后要加请在这里统一加，别在组件里散拼。
+ *   - 日程由 ContextBuilder 统一读取，所有入口遵守角色总开关；音乐氛围仍为私聊额外内容。
  *
  * 历史构建统一复用 ChatPrompts.buildMessageHistory：html_card / score_card /
  * chat_forward / emoji 等都会被压成短摘要，不会把原始 HTML / JSON / URL 塞进
@@ -558,20 +558,6 @@ const getTimeGapHint = (lastMsgTimestamp: number | undefined, tz?: string): stri
 };
 
 /**
- * 把 buildMessageHistory 的结构化输出压平成纯文本（peek 的 [最近记录] 块用）。
- * 图片消息的 image_url 部分丢弃，只保留文字占位（peek 不需要看图）。
- */
-const flattenHistoryToText = (apiMessages: ApiMessage[]): string =>
-    apiMessages.map(m => {
-        const text = typeof m.content === 'string'
-            ? m.content
-            : Array.isArray(m.content)
-                ? m.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text).join(' ')
-                : '';
-        return `${m.role}: ${text}`;
-    }).join('\n');
-
-/**
  * VN 模式系统提示（send 与 reroll 共用同一份，避免两处手抄漂移）。
  * reroll 的差异只体现在末尾 user 消息的 System Note 里，不在这里分叉。
  * 风格 / 人称 / 自定义补充按 char.dateStyleConfig 动态拼装。
@@ -640,13 +626,14 @@ export const DatePrompts = {
      * 历史以纯文本块塞进 user 消息（保持"你不在和用户对话"的框定），
      * 但文本本身来自 buildMessageHistory，卡片/媒体已压成短摘要。
      */
-    buildPeekPayload: (input: {
+    buildPeekPayload: async (input: {
         char: CharacterProfile;
         userProfile: UserProfile;
         allMsgs: Message[];
         emojis: Emoji[];
         useVisionDescriptions?: boolean;
-    }): { messages: ApiMessage[] } => {
+    }): Promise<{ messages: ApiMessage[] }> => {
+
         const { char, userProfile, allMsgs, emojis } = input;
         const charTz = resolveCharTimeZone(char);
         const dateTimeOn = isDateTimeAwarenessOn(char);
@@ -664,12 +651,17 @@ export const DatePrompts = {
             undefined,
             { useVisionDescriptions: input.useVisionDescriptions === true },
         );
-        const recentMsgs = flattenHistoryToText(apiMessages);
 
         // 线下时间感知关掉 → 抑制 buildCoreContext 的时间注入，让见面真正脱离现实时间线（纯架空）
         // conversational 不给：peek 是「用户还没走过去」的第三人称镜头，时间块末尾那句
         // 语境框定说的是「对方还在跟你说话」，跟这里的框定正好相反（见下面的 peekInstructions）。
-        const baseContext = ContextBuilder.buildCoreContext(char, userProfile, false, undefined, undefined, { skipTimeAwareness: !isDateTimeAwarenessOn(char) });
+        const context = (await ContextBuilder.buildCharacterContext({
+            char, user: userProfile,
+            history: apiMessages.map(message => ({ ...message, content: typeof message.content === 'string'
+                ? message.content : message.content.filter((part: any) => part?.type === 'text').map((part: any) => part.text).join(' ') })),
+            includeDetailedMemories: false,
+            timeOptions: { skipTimeAwareness: !isDateTimeAwarenessOn(char) },
+        }));
 
         // 文风预设也作用于开场感知；人称（pov）刻意不作用——peek 的设计就是
         // 第三人称旁观镜头（用户还没"走过去"），人称指令只影响 session 内叙述
@@ -698,8 +690,8 @@ ${extraBlock ? `\n${extraBlock}` : ''}${isObserveOn(char) ? `\n${buildObserveBlo
 
         return {
             messages: [
-                { role: 'system', content: baseContext },
-                { role: 'user', content: `[最近记录 (Previous Context)]:${recentMsgs}${contextSeparator}${peekInstructions}\n\n(Start sensing...)` },
+                ...context.messages,
+                { role: 'user', content: `[最近记录 (Previous Context)] 见以上消息历史。${contextSeparator}${peekInstructions}\n\n(Start sensing...)` },
             ],
         };
     },
@@ -718,6 +710,7 @@ ${extraBlock ? `\n${extraBlock}` : ''}${isObserveOn(char) ? `\n${buildObserveBlo
         variant: 'send' | 'reroll';
         useVisionDescriptions?: boolean;
     }): Promise<{ messages: ApiMessage[] }> => {
+
         const { char, userProfile, allMsgs, emojis, userText, variant } = input;
 
         const historyMsgs = buildDateHistory(
@@ -728,9 +721,15 @@ ${extraBlock ? `\n${extraBlock}` : ''}${isObserveOn(char) ? `\n${buildObserveBlo
             input.useVisionDescriptions === true,
         );
 
+        const conversation = [...historyMsgs, { role: 'user', content: userText }];
+
         // 向量召回挂到 char.memoryPalaceInjection，buildCoreContext 会读取
         await injectMemoryPalace(char, allMsgs, undefined, userProfile?.name);
-        const systemPrompt = ContextBuilder.buildCoreContext(char, userProfile, true, undefined, undefined, { skipTimeAwareness: !isDateTimeAwarenessOn(char), conversational: true })
+        const context = (await ContextBuilder.buildCharacterContext({
+            char, user: userProfile, history: conversation,
+            timeOptions: { skipTimeAwareness: !isDateTimeAwarenessOn(char), conversational: true },
+        }));
+        const systemPrompt = context.coreContext
             + buildVNModeBlock(char, userProfile?.name || '')
             + ContextBuilder.buildSARModuleContext(char, userProfile, 'date');
 
@@ -740,11 +739,15 @@ ${extraBlock ? `\n${extraBlock}` : ''}${isObserveOn(char) ? `\n${buildObserveBlo
             ? `(System Note: 严格遵守 VN 格式。每一行都要以 [emotion] 开头，根据内容逐行切换情绪标签，不要整段只用同一个。叙述行写具体的感官细节和停顿，不要罗列动作。${focusLine})`
             : `(System Note: Reroll. 换一个切入角度重写，不要复用上一版的展开思路。依然严格遵守 VN 格式：每一行以 [emotion] 开头并逐行切换情绪，叙述行写具体的感官细节和停顿，不要罗列动作。${focusLine})`;
 
+        const messagesWithWorldbooks = context.history;
+        // depth=0 会在末条用户消息之后插入世界书，不能给数组最后一项追加 VN 指令。
+        const pendingMessage = conversation[conversation.length - 1];
         return {
             messages: [
                 { role: 'system', content: systemPrompt },
-                ...historyMsgs,
-                { role: 'user', content: `${userText}\n\n${note}` },
+                ...messagesWithWorldbooks.map(message => message === pendingMessage
+                    ? { ...message, content: `${userText}\n\n${note}` }
+                    : message),
             ],
         };
     },

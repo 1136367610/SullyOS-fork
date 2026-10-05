@@ -1,5 +1,6 @@
 <!doctype html>
 <html>
+<head><meta charset="UTF-8"><title>服装实物缩略图</title></head>
 <body style="margin:0">
 <script type="module">
 import * as T from 'three';
@@ -7,7 +8,7 @@ import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import approvedPose from '../../apps/room3d/chibi/approvedStandingPose.json';
 
 const renderer = new T.WebGLRenderer({antialias:true, alpha:true, preserveDrawingBuffer:true});
-renderer.setSize(320, 320);
+renderer.setSize(512, 512);
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = T.SRGBColorSpace;
 renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -44,7 +45,7 @@ function disposeCurrent() {
 
 window.renderGarment = async def => {
   disposeCurrent();
-  const gltf = await new GLTFLoader().loadAsync('/room3d/wardrobe/' + def.asset);
+  const gltf = await new GLTFLoader().loadAsync('/room3d/wardrobe/' + def.asset + '?v=' + (def.revision ?? '1'));
   current = gltf.scene;
   scene.add(current);
 
@@ -80,17 +81,29 @@ window.renderGarment = async def => {
     bounds.union(new T.Box3().setFromObject(o));
   });
   const center = bounds.getCenter(new T.Vector3()), size = bounds.getSize(new T.Vector3());
-  const span = Math.max(size.x, size.y, size.z) * .60;
+  const animal=def.slot==='ears'||def.slot==='tail';
+  // Consistent breathing room, soft neutral light and a near-front ear view.
+  scene.children.find(o=>o.isHemisphereLight).intensity=animal?3.2:2.5;
+  light.intensity=animal?1.6:3;
+  fill.intensity=animal?1.4:1;
+  const span = Math.max(size.x, size.y, size.z) * (animal?.70:.60);
   if (!pieces || !Number.isFinite(span) || span <= 0) throw Error(`${def.id}: empty or invalid garment bounds`);
   camera.left = camera.bottom = -span;
   camera.right = camera.top = span;
-  camera.position.copy(center).add(new T.Vector3(.12, .09, 3));
+  camera.position.copy(center).add(animal?new T.Vector3(def.slot==='ears'?.30:1.1,.18,3):new T.Vector3(.12,.09,3));
   camera.lookAt(center);
   camera.updateProjectionMatrix();
   renderer.render(scene, camera);
   window.thumbnailReport = {id:def.id, pieces, size:size.toArray()};
   return renderer.domElement.toDataURL('image/png');
 };
+</script>
+<div id="thumbnail-tools" style="font:14px sans-serif;padding:12px"><select aria-label="拍摄服装"></select><button>生成缩略图</button><a hidden>下载缩略图</a><output></output></div>
+<script type="module">
+import catalog from '../../apps/room3d/chibi/approvedWardrobe.json';
+const panel=document.querySelector('#thumbnail-tools'),select=panel.querySelector('select'),link=panel.querySelector('a'),output=panel.querySelector('output');
+for(const def of catalog){const option=document.createElement('option');option.value=def.id;option.textContent=def.label;select.append(option);}
+panel.querySelector('button').onclick=async()=>{try{link.hidden=true;const def=catalog.find(d=>d.id===select.value);link.href=await window.renderGarment(def);link.download=def.id+'.png';link.hidden=false;output.textContent=JSON.stringify(window.thumbnailReport);}catch(e){output.textContent=String(e);}};
 </script>
 </body>
 </html>

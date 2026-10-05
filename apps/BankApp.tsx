@@ -507,6 +507,7 @@ const BankApp: React.FC = () => {
 
     // --- Guestbook Logic (Gossip & Drama) ---
     const handleRefreshGuestbook = async () => {
+
         const COST = 40;
         if (stateRef.current.shop.actionPoints < COST) {
             addToast(`AP 不足 (需 ${COST})。去省钱吧！`, 'error');
@@ -526,14 +527,15 @@ const BankApp: React.FC = () => {
 
             // 2. Build Context
             await injectMemoryPalace(randomChar);
-            const charContext = ContextBuilder.buildCoreContext(randomChar, userProfile, true);
+            const characterContextInput = { char: randomChar, user: userProfile, includeDetailedMemories: true };
+
             const recentMsgs = await loadCharacterContextMessages(randomChar);
             const chatSnippet = recentMsgs.slice(-10).map(m => m.content.substring(0, 50)).join(' | ');
 
             const previousGuestbook = (current.shop.guestbook || []).slice(0, 10).map(g => `${g.authorName}: ${g.content}`).join('\n');
 
             // 3. Prompt
-            const prompt = `${charContext}
+            const prompt = `
 ### Scenario: Visiting User's Savings App Café Guestbook
 ${userProfile.name} has a savings/budgeting app (记账App). Inside the app there's a virtual café mini-game, similar to how Alipay has "蚂蚁庄园" or how friends visit each other's farms in QQ Farm.
 You are visiting this virtual café as a friend/player.
@@ -562,7 +564,7 @@ ${previousGuestbook}
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-                body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }] })
+                body: JSON.stringify({ model: apiConfig.model, messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'user', content: prompt }])) })
             });
 
             if (response.ok) {

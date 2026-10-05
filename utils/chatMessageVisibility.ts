@@ -5,6 +5,7 @@ export const isVisibleChatMessage = (message: Message, hideSystemLogs = false): 
     !message.groupId
     && message.metadata?.source !== 'date'
     && message.metadata?.source !== 'call'
+    && message.metadata?.source !== 'home'
     && message.metadata?.source !== 'story_theater_memory'
     && !message.metadata?.proactiveHint
     && !(hideSystemLogs && message.role === 'system' && message.type !== 'score_card')

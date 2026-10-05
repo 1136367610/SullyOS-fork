@@ -1,4 +1,8 @@
 const paths={
+ back:'<path d="M25 16H7m9-9-9 9 9 9"/>',
+ map:'<path d="m3 6 8-3 10 4 8-3v23l-8 3-10-4-8 3zm8-3v23M21 7v23"/>',
+ view:'<rect x="5" y="3" width="22" height="26" rx="4"/><path d="m8 24 6-8 5 5 3-4 3 7"/><circle cx="13" cy="10" r="2"/>',
+ pencil:'<path d="m5 22-1 7 7-1L28 11l-6-6L5 22zm14-14 6 6M5 22l6 6"/>',
  mirror:'<ellipse cx="16" cy="12" rx="9" ry="10"/><path d="M16 22v6m-7 1h14M11 8l4-3m-4 9 8-8"/>',
  bed:'<path d="M4 18V7m24 11V7M4 14h24v11H4zm0 11v3m24-3v3M7 14V9h8v5m2 0V9h8v5"/>',
  seat:'<path d="M8 17V6q8-4 16 0v11M5 13v9h22v-9M8 22v6m16-6v6M8 17h16"/>',

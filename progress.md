@@ -1,5 +1,60 @@
 Original prompt: 先继续优化都市人生 simsapp：去掉 pics 里的丑像素家具/房屋贴图，改成自己画的像素图；并把“吃瓜”从单纯调用 API 引导 char 行动，升级为随机触发“角色剧情”或“主线剧情”，主线剧情要有明显标题和附件栏，附件可包含图片、道具、证据、同人文等。
 
+2026-10-02 — Static photo pose picker
+- User rejects Hug Me for photo use, wants individual static poses; explicitly asks connect source libraries to existing picker. Downloaded MakeHuman CC0 poses03 (36 standing) + poses01 (18 sitting):54 actual BVHs, native thumbnails/meta, hashed ZIPs and source-page snapshots in ignored output/social-motion-intake/poses. BOOTH Rieru13/GODPOSE6 five-pose free endpoints attempted, both redirect sign-in; not downloaded/countable, shown in pending list. No purchases.
+- Added art/chibi/download-photo-poses.mjs (hash-verified restore + zip path containment) and catalog-photo-poses.mjs (offline source-license/track/finite validation; source frame0; Z-up conversion, MakeHuman onlyroot translation convention; source finger tips retained; 54 single-pose point caches). Native .thumb copied without edits, native BVH unchanged. Source anatomy preview only, not Chibi/body2 retarget; photo bodies/props in thumbnails not imported. Credits: art/chibi/motion-sources/PHOTO-POSE-CREDITS.md.
+- Existing room3d-motion-library now has ?view=poses, separate pose/motion tabs,36/18 category filters, two-column thumbnail grid, per-card checkboxes, freeze-only viewer, front/side/back +prev/next, mobile card-to-viewer scroll. Shared existing favorites/export keeps39 approved motions; pose selection refreshes persistently.235 motion previews +54 poses =289 overall; no pose auto-approved. Mobile status explicitly states source skeleton, not final avatar.
+- Validation: restore run verifies both hashes; catalog54 passed. .tmp/photo-pose-qa.mjs loadsall54, finite/frozen poses, all54 thumbnails, sitting/search/multi-select/reload/remove/export41 with39approved, pose/motion switch and views; no console/page errors,390px nooverflow. Fixed gallery compressed grid rows found by screenshot. Fixed test locator uncheck retry after its card vanishes by using exact checkbox click. .tmp/hug-library-qa.mjs regressionpassed, oldBVH/VRMA/Hug controls and39 unchanged. Vite build passed (existingchunkwarning). Skillclient final step/side/front screenshots and6 representative poses +desktop/mobile reviewed; expanded front/side/back camera depth margin after spotting clipped deep sitting pose. Screenshot .tmp/photo-pose-framing verifies corrected bounds. Production photo mode/multi-resident/real-body adaptation remains separate and not claimed complete. No commit/push/version bump.
+
+2026-10-02 — Load AIRYAA Hug Me; defer paid candidates
+- User asks load Hug Me first and stop considering paid for now. ZIP and original VMDs retained locally. Added paired 28.533s MMD reference preview to motion library, query motion=hug-me-airyaa and candidate load button; 235 total (234 source +1 reference), approved39 unchanged. Paid RBStudio/Reallusion candidates deferred/hidden, historical research retained.
+- VMD has no Tda rig. Downloaded pinned Three r169 sample Miku PMD + source licenses to ignored couple-research/MMD-reference. art/chibi/preview-airyaa-hug.mjs hash-checks PMD and2VMDs, evaluates VMD Bézier position/rotation + CCD leg IK, inserts missing root/groove/upperBody2/IK-parent reference controls; writes ignored 30fps world-point cache. This is approximate reference anatomy, not original Tda, and not character retarget. Grip/spread/thumb0 and hair/face controls not represented; unhandled active tracks recorded. No source geometry/textures/physics/audio used or redistributed. Local readmes preserved; model not MIT.
+- Preserve shared source coordinates, cut jumps/offstage root keys and full long-track endpoint; shorter actor holds final frame. Default12.933s paired shot; focus-current and full-capture fit. No automatic contact corrections or fabricated hug loop.
+- .tmp/hug-library-qa.mjs passed pair/duration/finite poses at cuts/end, deterministic seek, half speed/play/pause/loop, immutable39approval/export, BVH/VRMA switching, candidate load and390px layout; no browser errors. Vite isolatedbuild passed existingchunkwarning. Skillclient .tmp/hug-me-skill run and screenshot inspected; pose0/14.2/26.2 plusmobile inspected. Remaining original Tda/grip fidelity and Chibi/body2 contact retargeting are explicitly not complete. No commit/push/versionbump.
+
+2026-10-02 — User approves exported39; couple-motion research/download
+- User provides C:/Users/tiaotiao/Downloads/sully-motion-selection.json and says these are good, find more couple actions. Validated all39 against catalog IDs and paths; includes prior3 plus36 new. Persisted art/chibi/motion-sources/social-approved-selection.json with export SHA256; all entries approved regardless of old false flags in export. Catalog rebuild reapplies approvals; filter/export now reflect39. Does not imply retargeted character acceptance.
+- Found8 source groups in couple-candidates.json, shown in existing motion-library page with jump link. AIRYAA Hug Me ZIP actually downloaded from author video's MediaFire link (4,967,905 bytes, SHA256 cb628172c92c9a0dd7d1e755d4b98f94df6b73f06641d79dcf4297695b7d21a3); 2 main VMD tracks28.2/28.53s plus extra reaction25.7s parsed/finite checked. Readme requires author credit/video link, prohibits redistribution, permits fitting motion to model. Local ignored storage only; no VMD playback/retarget claimed. Original ZIP preserved, only3VMD +readme extracted, no files executed.
+- New concrete complete paired paid candidates RBStudio Romantic1 (FBX;2/3 onlyUE confirmed) and Reallusion Motions for Lovers (iClone8 export pipeline). MoCap Central free sample explicitly lists paired proposalSuccess A/B; store claim still needed, not downloaded. Three new BOOTH free packs (A-sh4514593/SOShop4658134/hez4964592) actual downloads redirect login; LittleKiss author's Patreon403; CxtBoyoDA403. UC-3D only captures one person's MVN so cannot serve full paired hug. No purchases/auth bypass/userdata submissions.
+- Validation: .tmp/couple-library-qa.mjs checks39approved, handholding search, disabled removal,39exportflags,8candidates,localZIP and390px nooverflow, no browsererrors. Fixed test harness relative request URL (not app defect), rerun passed. Independent Vitebuild passed (chunk warning). Skill .tmp/couple-selection-skill shot/state inspected; desktop/mobile candidate screenshots inspected. Source count remains234 playable, not adding raw VMD as playable.
+- Remaining: user considers new candidates; source01/02/03 and all39 approved still need actual character retargeting; HugMe may be a comedic story and is not yet verified as calm looping hug. Keep rejected proceduralhug removed. Productionmultiresident integration not done. No commit/push/versionbump.
+
+2026-10-02 — Full-body emote download and local audition library
+- Latest user clarification: “表情” means full-body emotes/motions, not facial expressions. User went to rest and authorized autonomous completion. Download accessible files locally before selection; do not use redistribution uncertainty to block private audition. No purchases or login/CAPTCHA bypass.
+- Downloaded 180 VRMA (Hanami 166, VoxAvatar 13, pixiv official test 1), 106 CMU BVHs (53 paired takes, subjects 18–23), 4 ReForge Unity body .anim, with source/license records. 313 files / 96,659,974 bytes in ignored output/social-motion-intake. Prior face-only intake separately kept, not counted and no longer expanded. All 180 VRMA hashes differ; many are variants or transition phases, not 180 distinct actions.
+- Seven actual BOOTH free downloads return login HTML: pH + Scrap headpat, Andall 1/2/3, full Sachi + rerofumi. Hug Emote needs CAPTCHA. Recorded exact endpoints/status locally; no bogus ZIPs. CUA bootstrap failed with kernel assets/path-not-found; no browser cookies or auth bypass. Public download scripts used approved network escalation successfully.
+- Added frozen source manifest, art/chibi/download-social-intake.mjs (hash checked, resumable) and catalog-social-intake.mjs (offline GLTF/BVH/keyframe validation and catalog). Re-ran restore: all313 hash-valid existing, zero failures. Rebuilt catalog: 286 animation files valid, zero invalid. CMU source license copied with local files.
+- New test/fixtures/room3d-motion-library.html/.ts/.css: 234 playable entries including existing approved boxing; original humanoid bones, original root motion, one common pair display transform; no character retarget. Filters, search, playback/speed/pause/seek/loop/fit, localStorage favorites and export. Approved01/02/03 immutable source choices. Linked from original source review. README.txt and pending list in intake directory; browser open queued via Codex panel tool.
+- Validation: .tmp/motion-library-qa.mjs loaded all234 and sampled10/50/90%, finite bones/expected actors; playback, endpoint, loop, search13Vox, favorites after reload, export, empty results,3approved, rapid load race,390px no overflow; no console/page errors. Isolated Vite build passed (large chunk warning). .tmp/game-client.mjs ran with existing source-review actions; shot/state in .tmp/motion-library-skill. Visually reviewed desktop, mobile, cheer, highfive and skill screenshots.
+- Remaining outside this download/selection delivery: retarget already-selected01/02/03 to both body types; obtain actual hug/headpat/face-touch clips; production multi-resident integration. Do not revive rejected procedural hug. No commit/push, no version bump, no user save edits.
+
+2026-10-02 — User accepts original clips 01/02/03; VRM search
+- User explicitly approves source-review 01 single shoulder, 02 both shoulders, 03 solo boxing. Treat these as selected sources; no need to re-ask selection. Retargeting to both body types remains pending.
+- Researched VRM/VRMA/VRChat primary sources: Sachi CC0 and rerofumi CC0 already used by this project; rerofumi includes single-person encouragement but no confirmed paired contact. Hanami/Overte remain useful general-motion sources. YUI head_pat is an idle-based receiving reaction, not giving a headpat. Rexclaw documents paired playback/offsets, not proof of bundled reusable hug tracks.
+- New targeted candidates: free Andall Pairs Animation 1/2/3 Unitypackages (modification allowed, redistribution including modifications prohibited); VRCMods THEDAO77 Hug Emote (paired tracks and redistribution unverified); RamsterZ Couples Anim Pack (86 clips, raw FBX, US$21.99 on author site, explicit paired hugs on Fab). Author EULA additionally prohibits AI-specific projects and standalone asset redistribution, so do not purchase/import assuming ordinary game licence is sufficient; same caution for prior RamsterZ combat candidate.
+- Updated SOCIAL-CREDITS.md and room3d.md with acceptance, concrete links and precise gaps. No new files downloaded, purchases, external messages, animation edits or tests needed for this research-only change. Remaining priority: adapt accepted CMU sources; obtain genuinely usable paired hug/headpat/face-touch sources. Current approved-source preview remains unchanged.
+
+2026-10-02 — Withdraw rejected contact drafts; actual source review
+- Latest user request: stop tangled/off-axis hugging; find existing assets and add boxing, face touch and shoulder pat. The previously reported hug fix below was rejected by the user. Removed procedural hug/headpat branches and buttons; retained greet, CMU handshake and talk. No new retargeted interaction is claimed complete.
+- Downloaded pinned CMU/cgspeed BVHs: paired 22_07/23_07 single-hand shoulder comfort, 22_05/23_05 both-hands shoulder comfort, solo 13_17 boxing. Original files, SHA256/URLs/version manifest and source licence stored in public/room3d/motions/social-source/. No source edits; preview only skips calibration frame and applies one common scale/translation to all actors. Shoulder support is not automatically repeated patting, and solo boxing is not paired combat.
+- Added room3d-social-sources.html with geometric original-skeleton playback, pause/restart/half speed/scrub/OrbitControls, preserving paired root motion and placement. Existing social page links to it. Fixed mobile grid intrinsic canvas overflow caught by browser QA.
+- Source research in SOCIAL-CREDITS.md and preview sidebar: Reallusion Meeting lists Handshake & Hug; WondAR greeting/hug is 9 sec but paired A/B not confirmed; pH MotionWorks headpat offers height variants but forbids redistribution; RamsterZ has authored paired counters/block/parry/slip (not acquired, not mocap). No suitable face-touch file confirmed. MocapOnline cuddle article is a request/concept, not an available pack; MoCapCentral catalogue not confirmed for these requested actions. External product descriptions checked, videos/files not visually approved. No paid purchases or restricted assets imported.
+- Validation: 3 social tests pass; isolated Vite build of both fixtures passes (existing large-chunk warning). Browser .tmp/source-review-qa.mjs checks all 3 sources, playback/pause/restart/end/scrub/speed, rapid switching, mobile width, existing handshake and links, no page/console errors. Reviewed shoulder/shoulders/boxing/mobile and retained-handshake screenshots. Skill client .tmp/source-review-final-skill run and reviewed. Initial mobile failure fixed; pnpm vitest shim missing so used pnpm exec node with installed Vitest entry, and actions JSON moved to a file to avoid Windows quoting failure.
+- Remaining: user source review; obtain suitable distributable paired hug/headpat/face-touch/combat files; retarget reviewed sources to same-height body2 then height variants and classic. Do not revive the rejected procedural hug. Production Home3D multiple residents, collision/approach and user appearance remain unimplemented. No commit/push or user save changes.
+
+2026-10-02 — Hug handedness and arm-route correction (superseded by user rejection)
+- User rejected the hug as tangled. Found responder hands used initiator's world lateral signs despite facing 180 degrees away; back-of-hand normals were inverted too. Corrected per-participant handedness and palm orientation. Replaced hug-only unconstrained CCD with two-bone solve and outward elbow poles; retain bend when target is unreachable rather than locking straight. Other interactions keep their solver.
+- Asymmetric near-back/far-upper-arm targets, smaller embrace offset, outward chest lean and head turn. Open arms before closing distance; separate before lowering arms, including cancel. This remains a contact study, not a newly sourced/approved motion. Extreme-height hugs still need authored posture variants; capped reach does not prove exact contact with every garment.
+- Four social tests pass, including same/extreme heights, two world headings, elbow-side invariants and release/cancel separation; prior furniture six tests passed before the final hug-only bend cap. Browser captured default/extreme/swapped/classic from both sides and checked stop/no errors. Inspected .tmp/hug-fixed-*.png; isolated production build passed. No commit/push.
+
+2026-10-02 — Multi-resident social audition (not production integration)
+- User: home includes user and additional characters; one body type per scene; greet/headpat/handshake/hug/talk, preserve body-2 height differences and prefer existing clips. Optional scope question was unanswered; proceeded with the stated independent audition default. A second pending question asks whether headpat/hug should wait for suitable existing assets (paid candidates acceptable) or may be hand adapted. Do not interpret silence as asset approval.
+- Added room3d-social fixture with three residents, selectable pair, role swap, uniform body mode, per-resident body-2 height, pause/seek/replay/stop and deterministic browser hooks. Added ID-based paired runtime, visitors.finishPose for clothing after paired solves. Production editor/Home3DView still single resident; no user appearance/database writes added.
+- CMU 18_01/19_01 acquired from pinned cgspeed mirror, retargeted at 30 Hz using added T-pose calibration. Hash-checked importer, source/terms copy and SOCIAL-CREDITS.md record included. Greet reuses selected Meshy; conversation reuses selected CC0 Mesh2Motion. No paid/restricted asset imported. Headpat/hug are labelled procedural CONTACT STUDIES, NOT selected source animations or visually approved work. Headpat head collision/hand visibility and hug height variants still require work; do not report all five finished.
+- Numeric QA caught unreachable handshake for .8/1.25 heights when using shorter shoulder; fixed shared target from BOTH shoulders. Classic spacing cannot scale by torso height because head remains large. 9 tests (social + prior furniture motion) passed; checks include extreme heights, roles, thumb-up contacts, fixed bone lengths, observer state, busy reservation, natural finish/cancel/reset and mixed-body rejection.
+- Browser lifecycle checked selected source actions at extreme heights, role swap, third participant, stop/finish, all five classic buttons and mobile/no horizontal overflow; no page errors. Inspected screenshots including side/reverse views, .tmp/social-extreme-*, social-classic-*, social-mobile.png, skill loop output. Fixture production build passed with existing large bundle warning. Full project tsc has existing errors (including vite proxy configuration); no errors matching new social files or visitor in output .tmp/social-tsc.txt. No commit/push.
+- Remaining: select/obtain suitable headpat/hug sources or user permission to hand author them; replace contact studies and visually validate equal/tall/short pairs and different hairstyles. Then implement real home multi-resident appearance ownership, placement/obstacle navigation and interaction UI. One concurrent pair is an audition limitation; future multiple pairs require per-session ownership.
+
 2026-09-29 — Bed entry contact correction
 - User identified sitting in midair before lying down. Confirmed the old simultaneous floor-to-sleep root interpolation bent the legs outside the bed. Added approved-walk approach with a reachable bedside endpoint, followed by separate turn, edge contact, dangling legs, lift, inboard transfer and recline phases (4.8s; reverse for rise).
 - Visual QA caught a second error: catalog half-width includes the draped blanket; its outer edge is not a sitting surface. Measured shipped GLB by raycast and calibrated show_bed edge x=±1.30, y=.85. Excluded rounded foot-end entry. Root height compensates the pelvis pivot throughout contact; no skeleton rescale or new motion assets.
@@ -1685,3 +1740,461 @@ TODO — Qixi rewrite
 - Added bathroomMotion.ts reusing Three CCDIKSolver: palms near head for gentle shampoo, tub rim contact, washer button press then wait. Existing effects only run during work for body 2, washer shakes after 3.3 s and restores on exit. Legacy body unchanged; no new external motion assets, Meshy 10 approach credits unchanged.
 - 15 bathroom/motion/layout tests passed; comparison build passed (210 modules). .tmp/bathroom-final-qa.mjs completed all four real interactions, camera continuity, exit and unchanged saved state with no page errors. .tmp/bathroom-cancel-qa.mjs passed interrupt during entry and work. Inspected final-bath-soak/shower/toilet; washer additional wall-hidden view inspected and its flow passed too. Skill client .tmp/bathroom-skill.
 - Limits: reviewed furniture anchors and staged transitions, not swept cloth/furniture collision; no undressing or washer-door/loose-clothes model added. Keep current furniture sizes. No commit/push.
+
+2026-10-01 — Body 2 remaining furniture actions
+- User asked to find and implement the remaining body-2 furniture animations beyond the furnished showrooms. Audited activity kinds and found race, rhythm, eat and hug lacked body-2 branches. Added real two-arm CCD IK contacts, wheel-synchronized steering, height-adjusted rhythm squat/hops, spoon-to-face motion with the actual wrist driving the prop, and chest-relative plush holding. No skeleton stretching or new downloaded motion assets.
+- Race and dining reuse the reachable chair approach/entry; activity revalidation now preserves stationId. Entering build mode clears device activities and meal effects. Existing classic behavior and saved furniture data retained.
+- Registered selected Meshy sleep for the four older bed assets, including correctly rotated bunk slots. Single/double beds reuse staged entry; railed/high beds retain direct entry, no ladder motion. Checked actual GLB mattress points and visual sleep screenshots; moved loft head toward the foot to clear the raised pillow.
+- Added ordinary seated foot-floor correction without changing the approved flower-pouf pose. Comparison fixture adds race/rhythm/dining/plush/beds/seats; bed/seat dropdown supports asset review without user saves.
+- 47 tests across 8 focused files passed; comparison production build passed with existing large-chunk warning. Browser four-action lifecycle, left/right rhythm, both dining seats, natural finish, stop, actor change, edit cancellation, layout preservation, reduced motion and mobile width passed without page errors. Reviewed screenshots in .tmp/*-active.png, rhythm-beat-*.png, *-sleep.png, *-final.png. Skill client is .tmp/game-client.mjs (only runtime import/Edge and readiness timeout adapted), output .tmp/furniture-skill.
+- Remaining distinct animation work: ladder climb, low-door duck, full pickup/arcade approach, yoga down/up clips, multi-resident occupancy and universal clothing collision. Static furniture has no newly invented interactions. Coverage and scope in docs/room3d-body2-actions.md. No commit/push. Preview service 127.0.0.1:5173.
+
+2026-10-01 — User corrections: standing maimai and racing grip
+- User rejected squat/hops: removed body-2 hip/leg travel, added independent half-beat-staggered palm tapping at 0.30 s per hand, shared button lights, actual reach selection and stable stand position. Legacy jumping retained.
+- Measured actual racing GLB rim: previous authored targets were inside/in front of the wheel. Added palm/grip offsets and a shared tilted wheel pivot. User then spotted reversed hands in the screenshot; corrected outward finger wrap with thumbs up and added an explicit thumb-above-pinky assertion.
+- Regression checks cover palm contacts and stable feet at three heights, fast different-height notes, actual GLB rim contact in four headings, bone lengths, release, and wheel transform reset. No new motion assets, no version bump, no commit/push.
+- Final verification: 49 focused tests and comparison production build passed. Actual browser covered corrected racing grip from both sides, left/right standing rhythm, natural finish, stop, actor switch, edit cancellation, unchanged saves, mobile width and static hips/hands under reduced motion; no page errors. Skill client output .tmp/gaming-correction-skill; corrected grip views .tmp/race-grip-front.png and .tmp/race-grip-side.png.
+
+2026-10-02 — Selected home motion implementation
+- Frozen second user export: 39 dynamic clips (18 pairs/21 solo), 14 static photo poses retained separately. Generated lazy selected motion bundles with common paired capture coordinates, source hashes and full notices. Removed 482 unselected intake files (~97.6 MB), pruned source picker and made restore scripts selection-only.
+- Added selectedSocial runtime, both-body source playback, contact and floor/head guards, seven agreed categories, cancellation/failed-load/trajectory guards, transient phone/can props. Production Home3DView now has an invite/participant/action panel; uniform body selection, user/character roster and independent visitor heights; editor owns lifecycle and cancels on edit/room/furniture transitions. No layout schema migration.
+- Existing selected furniture actions preserved. Static photo retargeting, autonomous social AI and general garment collision are outside this implementation.
+- Validation: 13 focused tests pass; isolated production builds of the social, Home3DView and source-library fixtures pass (existing chunk-size warning). All 39 source IDs load on both bodies; all 39 sampled at 80%/125% heights in both role orders without nonfinite transforms or bone-length changes. Production tests cover both body types, invitations, solo ownership, stop/edit cancellation, unchanged layout save and mobile overflow. All 53 retained source previews still load; visual sheets and contact/height/mobile screenshots inspected. Whole-repo tsc still reports existing JS declaration/config errors; no clean full-project typecheck claimed.
+
+2026-10-02 — Character illustration / flat home view
+- Apply a one-pass two-tone shader to both visitor bodies, hair and wardrobe; keep the face shading gentler, retain alpha/UV/skinning. No outline geometry added.
+- Add default flat orthographic composition and an explicit flat/free toggle independent of quality. Disable rotate/pan/wheel/pinch and automatic character/rhythm closeups in flat mode; retain button zoom/reset and point interactions.
+- Extend the isolated home fixture with ?room=bedroom&body=blank for a furnished composition without loading or overwriting real home saves. Browser and image validation in progress.
+- Visual QA: inspected original/illustrated closeups for both bodies; face and fabric highlights are now controlled, painted hair/eyes preserved. Inspected desktop and portrait furnished room screenshots.
+- Regression: 30 tests passed (flat camera bounds/material preservation, topology, social, furniture motions). Production browser checks pass for flat/free gestures, zoom/reset, closeup lock, editing lock, point walking, furniture picking on both bodies, room switching/overview, reload preference, both-body social playback and cancellation; no console/page errors after guarding pre-load ResizeObserver.
+- A crossing fixture confirms classic residents switch rooms without moving the flat camera; normal physical clearance remains enforced (the tall body cannot pass that fixture's low door). No collision bypass added.
+- First flat-view iteration remains real-time 3D. Foreground furniture fading, a dedicated phone composition and further scene-wide paint treatment remain possible art iterations, not part of this implementation. No general photo/2D sprite baking was added.
+
+2026-10-02 — Rename locked view / easier walking
+- User clarifies this is not true 2D: UI now says 视角锁定 / 自由视角. Retained the existing internal flat preference for compatibility. Enable mouse-wheel and two-finger zoom while keeping rotation and pan locked; +/- and reset remain available.
+- Walking alone uses an 85% round head clearance rather than a full square and requires feet/torso rather than hair to remain over the floor. Body collision, solid walls and full clearance for social standing checks remain intact.
+- Direct ground clicks can land within 0.6 units of an obstructed target using a reachable nearby point. Furniture/door targets remain exact; no snapping a blocked start or a valid destination across a wall.
+- 27 targeted tests pass; real-browser zoom and movement checks in progress.
+- Browser validation completed: wheel in/out, phone pinch zoom, +/-/reset, fixed camera orientation, ordinary walking, editing and return to free view all pass with no page/console errors. Inspected desktop and zoomed mobile screenshots; 3-fixture production build passes (existing chunk-size warning).
+
+2026-10-02 — Bedside entry transition
+- User reports sitting first, sliding onto the bed and then rotating to the source starting pose. Aligned entry Z with the selected sleep clip's initial pelvis (scaled to the actual rig), separated standing turn/backstep from sitting, and transferred pelvis support while knees bend.
+- Added source-first-pose blending before playback and compensated its local root in the parent transition to avoid the second translation at the seam. Reused approved walk for backward approach / forward departure; preserved bone lengths and the selected sleep clip.
+- Restrict entry to the selected bed side and nearby longitudinal points; no fallback to the opposite edge followed by a slide across the mattress. Existing high-bed immediate placement retained.
+- Inspected bedroom frames at approach, seated, turn-in and recline; browser entry/exit completes without errors. 16 focused bedroom/seating tests pass; final build and client replay below.
+- Final validation: 16 bedroom/seating tests pass, including source-root handoff continuity and rejection of opposite-side fallback. Furnished bedroom full entry / source playback / stand-up replay passes with no browser errors; latest frame screenshots and game-client capture inspected. Preview production build passes (existing chunk-size warning).
+
+2026-10-02 — Room daylight art pass and phone render budget
+- User asks for Shinkai-inspired room lighting and mobile performance. Retained planar character treatment and locked-view zoom. Added cool sky/blue-violet ambient, warm sunlight, restrained furniture reflection (roughness .82 / max 3.5%), and a daylight range above cel bands so window illumination remains visible. Existing window panes now render a procedural blue/peach sky and soft clouds with no extra geometry/textures/postprocessing.
+- Eco now retains one 512² cached, occluded window projection; touch/phone stays at one source in every quality. Desktop Clear permits two. Overview disables projections. PCF replaces VSM blur passes. With windows, frontal fill no longer casts a contradictory second shadow; windowless desktop balanced/clear retains cached key shadow. Actor-only motion doesn't invalidate per-light shadows; furniture edits, doors/fridge, and held-plush removal/return do. Held plush follows avatar no-cast treatment.
+- Eco/touch/phone/overview skip the full-scene furniture outline mask/composite; desktop balanced/clear honors saved preference. Quality UI explains suspension without overwriting preference. Outline object list cached on rebuild; skip empty social-resident pathfinding. Phone Clear is capped at 30 fps even with coarse-pointer detection absent.
+- Browser measured same furnished bedroom before/after at .75 pixel ratio: 345 -> 174 stable-frame draw calls; submitted triangles 220037 -> 110018. Added one cached window shadow, so first render/geometry updates cost more than these steady-frame values. This is Edge SwiftShader + mobile emulation, NOT physical phone fps proof.
+- Validation: 20 unit tests (lighting budgets, daylight geometry, furniture interactions, fixed view, walking clearance) passed. Selected 252-module Vite fixture build passed, existing >500KB chunk warnings remain. Final lighting matrix: bedroom all three qualities desktop/390px touch, classic living, blank study/kitchen, windowless classic phone; no page/console errors, eco idle sleeps, no mobile overflow. Screenshots reviewed. Existing window QA adapted locally for runtime/port/free-view and new eco expectation: source movement/height/store/undo/redo/wall views/quality cycling/reload/resource reuse passed. Locked-camera mouse/pinch/zoom/walk/free-view QA and required skill client passed.
+- Artifacts: .tmp/lighting-baseline.json, .tmp/lighting-qa.json, .tmp/light-*.png, .tmp/flat-first; window occlusion screenshots/report in ignored output/window-daylight. No asset downloads, version bump, commit or push. Real low-end phone GPU/frame-time testing remains hardware-dependent.
+- Additional final browser check: actual room door opens during walking and triggers a shadow refresh; fridge opening regenerates shadows only while moving, then returns to stable draw cost. Both passed with no console/page errors; .tmp/lighting-transitions.mjs and .tmp/light-fridge-open.png. Final selected-fixture build passed after all lighting changes.
+
+2026-10-02 — Brighter interiors with morning/day/sunset/night
+- User rejects dull interiors, requests time-dependent light. Raised cel-shadow floor .48 -> .74 and neutral interior/sky fill, preserved bright material colours. Added four art-directed profiles (05–08 morning / 08–16 day / 16–19 sunset / 19–05 night), plus default automatic mode and per-device manual selection in renamed 光影 panel. Night uses readable warm interior + weak cool window light and procedural stars/moon, not an overall black exposure.
+- New roomLighting.js shares GPU uniform objects across furniture/sky shaders. Profiles change existing lights, sky/background, and mild illustration character tint without rebuilding geometry or compiling new programs. Fixed sky moon aspect ratio. Two character types and extra residents receive the same room tint; standalone social previews remain neutral.
+- Owner timezone resolved in Home3DView via existing timezone.ts helpers, changes propagate live. Automatic mode polls once per minute only while visible/unsuspended, redraws only at a new band, resyncs immediately on visibility/resume, clears timer on dispose; manual mode stops polling. Times are art bands, not geographic sun simulation.
+- 26 focused tests passed. Browser .tmp/time-light-qa.mjs verifies desktop/phone four-way UI cycling, persistence, restore auto, suspension, no overflow, unchanged layout/position; steady 174 draw calls and same [1035 geometries,12 textures,25 programs,151 materials] across all profiles. .tmp/time-light-clock-qa.mjs uses Playwright clock to verify real automatic boundary wake, no same-band redraw, owner timezone switch, fixed manual mode, resume and dispose cleanup; no errors. Required game client .tmp/run-time-light-client.mjs produces clean .tmp/time-light-skill output; inspected all desktop phases and phone panel. Selected 254-module fixture build passed (existing large-chunk warnings). First intermediate client saw missing setTimeZone while editor patch had not applied; resolved before final clean browser runs.
+- Final screenshots .tmp/time-light-{morning,day,sunset,night}-{desktop,phone}.png; report .tmp/time-light-qa.json. No new render passes, version bump, asset download, commit or push. Real phone frame-time verification remains hardware-dependent.
+- Final spot-check: night moon aspect visually reviewed; original/retro style and eco/balanced rebuilds preserve selected night profile, no page/console errors (.tmp/time-light-final.mjs).
+
+
+2026-10-02 — Morning / golden-hour sunlight and character lighting correction
+- Studied the free COZY GOLDEN HOUR ROOM 3D Blender/Cycles listing/preview (https://www.fab.com/listings/7e66a803-9dd3-47d0-b8a5-b303ea65ed56), official ReShade and Blender light docs. No .blend download/import, paid asset or reference-image texture. Implemented procedural real-time equivalents rather than claiming offline-render fidelity.
+- Normalized pane bounds now infer real wall apertures, including offset; curtains/frames/props still cast while panes do not. Morning/sunset reuse directional key as window-aligned sun, disable pooled spots; phone/eco sun shadows 512² and cached. Day/night retain pooled spot window projection. Effective sun contrast off without exterior window/overview.
+- Added procedural layered clouds/sunset rims/distant silhouette and optional roomFinishPass: one framebuffer copy plus a nine-tap fullscreen draw, correct sRGB decode/output, no second geometry pass. Initial SRGB framebuffer-copy prototype was black; fixed to raw framebuffer texture with explicit decoding before final validation. Per-device toggle and resize/dispose cleanup included.
+- User caught characters missing from lighting: old illustration shader discarded real light and disabled shadow receiving. Now both body types and all home residents bind shared room uniforms, receive static room occlusion, use actual diffuse light energy/direction while retaining painted features, clothes, face brightness floor and no specular. Independent previews retain fixed illustration light. Character casting remains disabled to preserve cached phone shadows.
+- 31 unit tests pass. WebGL pixel test (.tmp/character-light-gpu.mjs) moves an occluder and confirms the real character shader swaps lit [117,46,37] / shaded [47,23,35] pixels. Tests also preserve material maps/alpha and shared uniforms without per-phase material rebuild.
+- .tmp/sun-final-qa.mjs: desktop both bodies + phone blank, repeated four-phase UI cycles, finish +/- one draw, preference reload, unchanged layout/position, resize/disposed old texture and no overflow/errors. Blank steady 175 draws, classic 181; warm blank [1037 geometries,15 textures,40 programs,151 cached furniture materials], stable after repeated cycles. Initial assertion mistakenly applied blank <180 count to classic; corrected budget and reran successfully. First phase/lighting-type switches allocate shader/map variants; this supersedes the prior no-compilation-for-all-phases statement.
+- .tmp/window-daylight-qa.mjs passed window height/move/store/history/quality/resource checks; .tmp/lighting-transitions.mjs passed door/fridge invalidation and return to cached shadows. .tmp/time-light-clock-qa.mjs passed auto boundary/owner timezone/manual/idle/pause/dispose. Required skill client rerun clean; inspected its screenshot, both morning/sunset rooms, phone, night and clear close-up. Selected fixture build passes (256 modules), existing large chunk warnings only.
+- Final images .tmp/sun-final-*, .tmp/sun-character-close.png; resources/report .tmp/sun-final-qa.json. Hardware phone FPS remains unmeasured. No version bump, commit or push. Native ReShade and physically traced GI are not installed or claimed.
+
+2026-10-02 — RoomApp 3D visit entry / pixel home moves to Memory Palace
+- RoomApp third tab is now 拜访（测试版）3D. Character card opens Home3DView directly, binding the selected owner's home3D, saved chibi appearance, user/other resident options and the existing updateCharacter save path. Back returns to the same visit list; no 2D initialization or generation request. Removed the former in-room temporary 3D button; renderer/error return labels are now neutral 返回. Existing 小小窝 / 世界家园 retained.
+- PixelHomeView is lazy-loaded by MemoryPalaceApp as a second character page beside 记忆房间. Map has the shared page switch and a labeled back button; child editor/dive returns retain existing behavior. Enabled even if memory extraction is off, using the same charId and unchanged pixel layouts/assets/theme/character records. No save migration, cloning or deletion.
+- Updated typed roomLaunch tab to home3D (no remaining pixelHome caller), docs and existing analytics enum documentation; no new telemetry. Extended real-OSProvider fixture home3d.html with ?app=memory.
+- Browser .tmp/room-entry-qa.mjs uses isolated test IndexedDB: 390px UI direct visit, actual palette change persisted via OSContext/DB, owner A/B isolation, reload restore, social visitor inclusion, renderer unmount/back, memory page/pixel page/back, old pixel layout deep equality, disabled-palace pixel access, no horizontal overflow and no unexpected LLM requests. No page errors. Existing Sully remote avatar CDN denied by sandbox network (recorded separately in report), not an entry/runtime error.
+- Fixed an initial placement of the new page switch into a memory-link search block before successful QA; actual screenshots now show the switch next to the seven-room overview and above pixel map. Interim QA selector mismatches (palette panel, label, roomId key) corrected and complete flow rerun successfully.
+- Inspected .tmp/room-entry-list.png, .tmp/room-entry-home.png, .tmp/memory-entry-detail.png, .tmp/memory-entry-pixel.png; required game client .tmp/room-entry-skill replayed actual RoomApp visit tab. Integration fixture production build: 5100 modules, successful with existing mixed-import/large chunk warnings and fixture classic-script warning. git diff --check passes. No version bump or commit/push for this entry reorganization.
+
+2026-10-02 — Connect existing facial states and natural blinking to home residents
+- Existing FbxBody already had original/sleep/happy face atlases and opt-in split-face blinking. Home visitors without explicit hair.face had no blink, and eco idle scheduling never woke for it. Kept original identities/materials and bound the existing atlases to an independent resident expression clock.
+- New residentExpression.ts supplies stable per-instance offsets (3.6–5.3s, 160ms closed). Visitor exposes expression updates; FbxBody reports authored/motion eye state, preserving sleep/cute states. Shared render entry applies face after captured/social pose solving so animate(0) cannot freeze the expression clock. No new textures/canvas uploads or shadow invalidations.
+- HomeSocialPanel adds per-active-resident 自然·跟随动作 / 开心闭眼 / 闭眼 and 自然眨眼, held only for the visit. Editor remembers settings across body replacement, applies to primary/social/comparison residents and wakes only at eye state edges; hides/pauses/dispose clear the timer, reduced motion/edit/overview disable automatic blinking.
+- 13 focused tests pass (blink timing/separation/fixed states, material preservation, social motion). .tmp/face-qa.mjs verifies both bodies naturally blink in eco with only 2 additional frames, open/closed/happy visuals, guest control independent of owner, stable geometry/program/texture counts on repeated choices, pause/dispose. .tmp/face-lifecycle-qa.mjs passes mobile body switch, reduced motion, explicit happy override, suspend/resume and no overflow. No console/page errors.
+- Inspected all face states plus mobile controls and the required game-client screenshot; selected-fixture build passes (existing chunk warnings). Runtime quality/light-clock QA that previously expected absolutely no idle draws must disable blinking for that assertion; automatic natural blinking intentionally wakes twice per cycle. Artifacts .tmp/face-*.png / face-qa.json / face-build.log. No version bump, commit or push.
+
+2026-10-02 — Floor tap feedback and rug navigation
+- Root cause: walkingMap already excludes rugs, but visit-mode item picking consumed rug taps as furniture interactions with no actions. Visit-mode rugs now route their actual raycast surface point to walkTo; edit picking and overlaid furniture actions/collisions remain intact. An open furniture menu closes and the same floor tap starts walking.
+- Added reusable walkFeedback.js floor marker: green/white ring on the resolved navigation endpoint; red ring + X for rejected taps. Stays while walking, fades 0.65s after arrival; blocked state expires after 1s. Geometry raised above actual rug surface, min 28 CSS px width at room zoom. No textures/shadows/new render pass; cancellation/disposal clears, reduced motion disables pulse/fade, eco returns to idle after feedback. Existing ground targetRadius remains .6.
+- Browser .tmp/walk-feedback-qa.mjs passes blank and classic: rug click -> visible marker -> actual arrival at endpoint -> expiry; rug selection in edit; bed action above rug; tap out of action menu -> walk; retarget; blocked X; no idle frames after expiry and no console/page errors. Inspected rug/floor/blocked screenshots. .tmp/walk-mobile-qa.mjs passes 390x844 touch + reduced motion, cancellation/edit, arrival, drag and native touchCancel, disposal and no overflow. Initial synthetic pointer test generated OrbitControls capture errors because the injected pointer was not active; replaced with real CDP touchStart/touchCancel and reran clean.
+- 8 walking/flat-view tests pass, including rug walkability while solid furniture still blocks. Required .tmp/run-walk-client.mjs uses real floor click; inspected .tmp/walk-skill/shot-0.png and state shows matching walking target. Selected fixture production build passes with existing chunk warnings; git diff --check passes. No version bump, commit or push.
+
+2026-10-02 — Cozy night lamp glow
+- User requested a little glow for warmer nighttime lighting. Added lampGlow.js: detects actual warm-emissive lamp parts, derives their centers/diameters from geometry, follows their world transforms, and batches up to 16 depth-tested analytic halos into one Points draw. No textures, realtime lights, shadow maps or continuous animation. Outline mask omits Points. Night + existing 柔光调色 only; overview/off hides, rebuild refreshes, dispose releases. Night finish glow .07 -> .12 with mild .45 highlight warmth; all other phase settings unchanged.
+- .tmp/lamp-qa.mjs passes desktop and 390px touch: 4 actual bedroom emitters (initial test assumed 3; dresser also has a warm emitter), night-only visibility, finish toggle costs exactly 2 draws including pre-existing finish pass (halo adds just 1), repeated phase/resource stability, untouched layouts, eco idle no extra frames, overview, resize/no overflow and disposal. No console/page errors. Inspected desktop on/off, phone and required skill-client screenshots.
+- .tmp/lamp-placement-qa.mjs verifies floor-lamp move, store and undo, with halos following/removing/restoring correctly. Initial assertion assumed source index stays stable after moveInHome; corrected lookup by lamp height since furniture ordering changes on moves. No application error.
+- 19 existing lighting/timezone/character rendering tests passed; selected fixture build passes (existing chunk warnings). Required .tmp/run-time-light-client.mjs rerun and screenshot inspected. Artifacts .tmp/lamp-*.png, lamp-qa.json, lamp-build.log. Real phone GPU timing remains unmeasured. No version bump, commit or push.
+
+
+## 2026-10-03 家园共同生活闭环
+- 用户要求：九项路线一口气接通，简化首次入住与游戏界面，修衣橱卡顿，六房 6/45/123 堆叠、初始配色和导航。
+- 已接：双方手办与渐进入住、日程位置和本地家具行为、统一 records、共享上下文、家园聊天、可编辑/删除/重生成日常、生活/布置分开的界面。
+- 性能：取消过期换装、昂贵服装修正限频、手办柜打开暂停后台房屋。
+- 参考 Nintendo Pocket Camp Complete、EA Sims 的生活/装修分工；不使用外部游戏素材。
+- 浏览器：390×844 隔离 home-life 预览，实际上床/书房直播/外出、记录编辑同步上下文、聊天与菜单通过；模拟 API，不消费用户额度。
+- 测试：50 项整组通过；新增迟到动作不抢手动操作的回归。Vite 构建通过；全仓 tsc 有既存错误，不宣称全绿。
+- 交付与明确边界：docs/room3d-life.md。不要覆盖既有房屋布局，不将离线计划虚构为经历。
+- 最后补验：迟到模型动作不抢手动操作、同房间日程换时段可结束旧自主动作；累计 52 项专项测试通过。新增家园文件无 tsc 诊断，剩余为全仓其他既存错误。
+
+## 2026-10-03 预览与默认行为纠正
+- 用户确认：默认自由视角，锁定为可选；新房屋必须使用六间样板房，只有第六间空房。
+- editor 无用户镜头偏好时改为 free，生活界面恢复单独的视角切换按钮；正式家园无初始布局的兜底也走 createStarterHome。显式已保存的镜头偏好仍保留。
+- 原 home3d 预览显示的是旧单间存档；新开 home-starter 独立预览，已选鼠尾草绿，验证六房地图、家具齐全、自由视角及卧室切换，未覆盖用户存档。
+- 白屏：观察时页面已恢复且无运行错误；集成预览补静态加载提示和 Suspense，RoomApp/MemoryPalace 改按需加载，避免等待模块期间纯白。没有把未复现的白屏宣称为已确认崩溃。
+- starterHome/room3dFlatView 4 项测试通过，浏览器实际可见样板房。
+
+- 当前入口纠正：用户仍在 home3d.html 的旧默认存档，不再用另开预览代替处理。为未装修的单间默认房提供“换成六间样板房”，保存 starterBackup 可恢复；在用户当前 tab 实际执行并确认六房地图、成套家具、自由视角与保存状态。新建默认与旧存档升级分别处理。
+
+- 布局纠正：3/2/1 为对称居中的金字塔，不是靠右楼梯。homeDisplayX 统一小地图与总览，各楼层按中心对齐；保留物理导航格和家具位置。生活界面强制当前单房间，自由/锁定均适用。7 项地图/样板/相机测试通过；当前 home-starter 页实际验证单客厅、金字塔小地图和总览。
+
+- 用户要求默认清晰：未设置画质时使用 clear，非法档位也回退 clear；保留有效的手动档位偏好。
+
+- 默认客厅接错模板已定位：starterHome 曾硬编码 compact:true，绕过 livingReference。改为完整样板，新增回归检查 living_ref_sofa/window；旧简化客厅在当前页面提供可恢复替换，保留其他房间及记录。4 项完整客厅与初始房屋测试通过。
+
+- 2026-10-03：把家园人物社交面板改为锚定人物的弧形图标菜单，分类分页，边缘避让，键盘返回；成员/体型/表情保留二级入口。修复互动轨迹与走路范围不一致导致合法站位所有动作被拒绝。当前 home3d 实机已验证招手执行及日常记录。菜单/布局/动作测试 14 项通过；随后补测导航与最终构建。
+- 最终验收：19 项相关测试通过，Vite 构建通过；当前 home3d 页点人物打开菜单、二级成员设置、空房和客厅招手均实机验证，日常可见开始招手。截图 output/home-life/social-wheel.png，预览保留在客厅菜单。
+
+- 2026-10-03：按用户纠正固定 user 发起所有人物菜单动作，角色点击成为接收对象；增加用户及来访者命中，用户自己只显示单人动作，移除主动／回应方选择，缺少用户不回退 char。角色／用户分流、调用顺序、未就绪及布局共 19 项测试通过，构建通过。视觉参考动森工具环、模拟人生互动层级，改圆形图标底座、点线轨道、短标签、按压反馈和合并工具栏。当前 home3d 已验证 user 招手记录。
+
+- 后续修订：菜单锚点改为真实头部，环半径缩为 96px，每页四项，中央移除关闭按钮。按用户要求小屋 CSS、初始引导与视窗背景改为中性黑白灰，实际场景/色板颜色保留。补充拾取前骨骼包围球刷新，避免当前姿势与射线命中错位。
+- 最终验证：19 项交互/身份/布局/动作测试通过，构建通过；390px 预览中点用户头部已显示「自己的互动／我要做什么」，恢复原预览尺寸。角色招手记录为 User；中性灰白面板及头部环已截图验收。
+- 2026-10-03：按用户提供的 UI 参考调整家园 HUD：返回/总览加图标，地图标题可进入总览，当前房间使用深色实心状态，右侧视角/布置双入口，统一半透明面板与图文底栏。互动菜单去掉厚底座与点线环，提示独立成条；保留中性色、头部锚点及 user 发起逻辑。15 项相关测试通过。
+
+- 视觉纠正：用户强调参考的是 UI 风格，不是灰色调。去除互动黑色径向蒙层、灰色舞台底及灰面板叠加；改透白面板、柔和低透明投影、深色文字，爱心保留少量语义粉色。画面打开互动后不再整体压暗。
+
+2026-10-03 — Animal Island UI requested by user: installed 2.1.0 and classnames, integrated real menu cards/title/switch and radial footer buttons, scoped cream paper/brown text/teal selection theme to Home3DView. Visually verified menu and head-anchored interactions in current home3d fixture. Fixed old span rule washing out library text. Related 20 tests and Vite production build validated. Screenshots: output/home-life/island-menu.jpg, island-wheel.jpg.
+
+2026-10-03 — Default floor/furniture control now uses user avatar; explicit character/user control in resident menu. Added seated-only startle with fixed seat and upper-body blending, pagination by the radial choices, collapsible home map. Browser verified pink user sitting on sofa, seated startle while black-haired character stays put; menu/layout regression tests cover hidden standing reaction and nearby pagination.
+
+2026-10-03 — Paired motions now approach using actual room paths, distance-based duration, synchronized start, and walking animation. Completion/cancellation no longer restores the starting transforms or triggers idle respawn. Added approach, unreachable path, detour, and retained-position regressions (14 related tests passed). Mobile home preview exercised paired low-five in the empty room.
+
+2026-10-03 — Fixed shared user orientation reversal after quaternion copies (XYZ Euler pitch/roll remnants); all editor yaw assignments now reset full orientation with YXZ. Paired social release ends facing partner. 19 related tests passed.
+
+## 2026-10-03 home experience review
+Implemented entrance camera approach + happy wave, compact wall-mode control/map, star for independent owner room, self summon, double-tap focus/lock with panning, single hierarchical back, chronological explicit actor/target records, expanded reachable interaction-area search, procedural paired hug, removal of expansion/build/test restore entries, editable room names using existing ID-based schedule prompt, and furniture search/drawer/top bar cleanup.
+Validation: 41 targeted tests pass. Browser QA observed greeting, double-tap lock (rotate=false, pan=true), room switch with owner absent, summon with star and presence record, hug approach/hold/release, and mobile furniture search. Build succeeded. Full repository tsc reports extensive errors outside this change (including references to beauty-library worktree); found and corrected optional controlResident invocation in touched wheel. Dedicated test/fixtures/home-review.html uses in-memory sample residents; production preview remains home3d.html. Hug contact for arbitrary custom hair/clothing and extreme heights is not exhaustively verified.
+
+## Wave correction and compact camera controls
+Entrance now samples the approved 招手 clip (vrma-8bd33d84e90c0243), rather than wave-cute. Old 可爱挥手/冷静挥手 removed from the ordinary editor motion list; retained only as implementations for explicit comparison. Added /test/fixtures/home-waves.html with 招手, 挥手回应, two old procedural waves, and numbered 08/09 for user identification; replay and half-second freeze controls. Main HUD hides the entire right camera/decorate stack; a lightweight 视角 control next to room name opens combined camera/wall choices. Browser verified approved animation posing and camera menu; production build passed. Main preview and wave comparison left available to user.
+
+## Portrait interior framing trial
+Formal portrait home now uses a 5.8-unit vertical orthographic frame and a low front angle, framing the visible resident above the dock instead of fitting the whole room width. Overview/decoration retain full-house framing. Added 室内近景 / 看全屋 choices inside the existing camera popover, preserving wide framing across resizes. Browser verified loaded living room, full-room comparison, near reset, map collapse; no console errors. Production build passed (68s). Screenshot: output/home-life/portrait-living.jpg. This trial centers one resident; automatic paired-action camera framing is not added in this change.
+
+## Interior visual extension trial
+Added a noninteractive scene-only floor and back/left wall extension (window/door wall rectangle left untouched); interior mode hides low shell base meshes and caps zoom-out at .85. Extensions are outside content/nav/room fitting and dispose their own geometry/materials. Overview, explicit wide view, dollhouse wall mode and decoration restore normal model edges and zoom range. Verified mobile zoom-out limit, full toy-house overview, return to interior, no browser errors; production build passed (25.27s). Screenshot output/home-life/interior-extended.jpg. Extended floor currently uses room base color rather than repeating the authored floor pattern.
+
+## Automatic walls and compact navigation
+Cutaway now constructs all four walls and hides camera-facing edges with an 0.08 angular hysteresis band; follows wall-mounted decorations, doors and visual extension panels. Pure automaticWalls helper plus topology regressions: 20 tests passed. Edit rebuilds static wall visibility; overview/dollhouse retain fixed presentation. HUD is now one compact cream navigation strip, no title card or persistent floor/saved subtitle; compact map and no-wrap camera menu. Browser loaded successfully with no error logs and screenshot output/home-life/automatic-walls-header.jpg. User appears to be actively trying modes/interactions; avoided resetting their final view. Visibility currently switches with hysteresis, not opacity fading.
+
+## Continuous interior floor
+Replaced flat-color backdrop with extendedFloor from the existing finishes material factory. Interior floor now uses one continuous plane with physical UV coordinates, same floor style/color/shader, hiding the shell and original finish floor to avoid seams and z-fighting. Overview/edit restore original floors. Backdrop borrows cached finish material without disposing it. Legacy original floor uses procedural wood in interior mode. Browser verified wood planks continue beneath dock after zooming out, no errors; build passed (29.24s). Screenshot output/home-life/continuous-floor.jpg.
+
+## Near eye-level camera
+Lowered the portrait interior/greeting pitch from about 16 degrees to 4.3 degrees; adjusted target height to 1.45 to retain feet above dock. Orthographic camera offset now (0,4.5,60), preserving the framing while keeping foreground floor in front of the near clip plane at this shallow angle. Browser verified full body, continuous floor to bottom, no console errors.
+
+## Requested camera defaults
+Formal home initializes free + automatic walls + whole-room; added 恢复默认 inside camera menu. Automatic front edge is always hidden, including mounted objects/extensions; other edges retain angle hysteresis. Double-tap focus and default focusResident no longer switch to locked mode. Greeting restores whole-room framing after completion unless canvas input interrupts it. 21 wall/topology tests passed; build passed 27.88s. Preview service had stopped; restarted Vite on 127.0.0.1:5183 (session 24886), HTTP 200 verified. Browser's old error-page data URL prevented further automation; open_in_codex queued the healthy preview. Final new browser interactions not verified this turn.
+
+## Camera changes preserve resident actions
+Formal camera mode/default/wall switches no longer rebuild content or call placeVisitor; wall visibility now updates for all wall modes. Backdrop builds all wall extensions once so hidden/auto switches need no reconstruction. Removed stopWalking from focusResident and greeting cancellation from pointerdown; camera commands only cancel camera arrival/automatic return, not the greeting action. Browser home-review verified home-hug at t=3.5 retained exact positions and session across lock, hidden walls, restore-default; subsequent advance completed the action. Production build passed. Overview still follows its existing separate rebuild path; this change targets the camera/wall popup and focus/gestures.
+
+## Resident portrait camera rail
+Added right-side room resident portraits with Animal Island theme tokens, selected accent ring and transient name. Main/user/guest profile avatars flow through Home3DView + HomeResidentOption; unavailable images fall back to initials or provided emoji. Rail maps current rendered actor IDs correctly when user/owner bodies swap for furniture, and hides during edit/overview. Click centers visible resident bounds with a camera tween, retaining zoom/orientation and all actions/control selection. Camera arrival now keeps render loop awake even without resident animations. Old tab 12 is an error-page data URL; browser policy explicitly blocks accessing it, so no bypass attempted and visual QA remains unverified this turn. First production build passed; final build log output/home-life/resident-rail-build-final.txt.
+
+## Radial interaction back navigation
+Added an always-visible back button beside near-ring pagination, using the existing Animal Island paper pill. Back returns to previous page, then category list, then closes the wheel at root; Escape follows the same path. Removed the distant duplicate category-back footer control. Navigation only changes menu state and never calls action stop. All 9 homeSocialWheel tests passed; production build passed in 47.18s (existing chunk/eval warnings). Browser visual verification not performed this turn.
+
+## Personal wardrobe and animal accessories (2026-10-03)
+Implemented MyWardrobe under existing 3D wardrobe: save/wear/rename/delete and versioned JSON export/import (clothing only; colors, fits, layering included). UserProfile wardrobeOutfits uses transactional updates and survives stale profile saves; full backup includes library. Legacy initial hoodie retained when adding accessories. Added six original skinned cat/dog/fox ears/tails, independent slots, regional colors and fit controls, reference manifest/reproducible generator/current skeleton; added head-size adaptation and preview headroom. All six actual GLB thumbnails rendered and inspected; corrected dog inner-ear overlap, floating ear roots and unindexed extruded ears. 32 relevant tests passed (22 fit/catalog/color + 10 library/UI); six-asset wardrobe:check passed 4 poses each, no data failures. Final production build passed 23.29s. Browser verified fox ears+tail wearing and QA in-memory outfit save; screenshot output/home-life/my-wardrobe-preview.png. Browser download event capture timed out; share serialization roundtrip verified in tests, not end-to-end download/file chooser. Test fixture hot dispose fixed after QA console warning. Returned preview to normal storage route, QA library never wrote user records. Tail follows hips without secondary physics; large hair/clothing can need manual fitting.
+
+## Animal accessories visual redo (2026-10-03)
+Replaced rejected flat oversized ear geometry with closed curved pinnae, recessed inner ears, rear shells and smaller hair-embedded roots. Rebuilt cat/dog/fox tail profiles and fox fur clumps with continuous material-seam normals. Stable asset IDs, current skeleton, independent colors and fitting retained. Regenerated six actual GLB thumbnails; browser checked worn fox front/back and ear silhouettes. Six accessory combinations x four poses passed with zero data failures (5 tests); production build passed. Preview screenshot: output/home-life/accessories-redo-preview.png. Visual direction remains pending user acceptance; no secondary tail physics added.
+
+## Ear roots blended into scalp
+User clarified exposed bottom corners must merge into head. Added smooth root taper, inward fold and rearward recession to cat/fox ears and dog attachment; no change to tails. Regenerated three ear thumbnails. Checked fox front/oblique wearing, asset acceptance passed. Screenshot output/home-life/ear-roots-preview.png.
+
+## Ear-root revision reverted at user request
+Reverted only the last scalp taper/inward-fold modification. Regenerated original redo geometry and three ear thumbnails; restored 695424-byte asset. Previous ear-root entry is superseded. Other accessory and wardrobe work retained.
+
+## Fox ear contour from user paint-over
+Preserved fox ear tips and inner conchae; extended only outer lower fur down along side hair to remove horizontal flared corners. Both ears mirrored. Cat/dog/tails unchanged. Regenerated GLB/catalog revision and fox thumbnail. Fox accessory acceptance passed; front and oblique browser inspection. Screenshot output/home-life/fox-ear-contour.png.
+
+## Fox ears inward placement
+Removed the rejected downward fur extension entirely. Restored original ear geometry and moved fox centers from +/-0.57 to +/-0.43 only. Regenerated asset and fox thumbnail; front wearing preview inspected. Supersedes previous contour paint-over implementation. Screenshot output/home-life/fox-ears-inset.png.
+
+## Longer fox ears and dyeable rabbit accessories
+Fox ears height .59 -> .77 and center .43 -> .36. Added rabbit ears and rounded tail with independent ear fur/inner color regions and single tail fur region. Eight accessory thumbnails regenerated at 512px with neutral soft lighting and margins. Rabbit body preview framing expanded to avoid clipped tips. Browser verified actual rabbit tail/inner-ear dye, restored default colors; all 8 accessory combinations x 4 poses passed and production build passed. No changes saved to user avatar.
+
+2026-10-03 — Home pet autonomy implementation
+- Unified six-species whole-mesh pet runtime, local needs/utility/traits/relationships, independent persistence, adoption/conversion, bowls, colors and panel. Tests 12 passed. Browser/production verification in progress.
+- Added pure-color toy/mat assets, persistent pet schema, dynamic occupancy checks, station reservations/invalidation, relationship cooldown and rest-mat preference. Production Home3DView preview: /test/fixtures/home-pets.html. 32 related tests passed before four additional behavioral tests; latest 16 pet/asset tests passed. Vite production build passed with existing circular chunk/PDF eval notices. Browser screenshots reviewed desktop and mobile; fixed palette expansion and keyboard focus. Final production UI checks ongoing.
+- Final verification: 36 related tests passed; browser QA passed including positive UI adoption, real pet mesh picking, calling a pet to the user, and room-switch persistence in production Home3DView. Reviewed full production and 390px mobile screenshots. No outstanding blocker. First version intentionally stays within assigned room; no offline progression, no LLM pet calls. Preview uses isolated data; production entry is My Home → Pets or the pet button.
+- Final visual fix: pets now invalidate the static shadow cache only when their rendered pose changes, removing stale floor shadows; production help hint hides while pet panel is open. Re-ran full browser QA and 16 pet/asset tests successfully; desktop/mobile screenshots inspected. Preview open requested in Codex sidebar.
+
+## User-authored built-in outfits
+Imported six supplied sully-outfit JSON documents into builtinOutfits.json, preserving all clothing fits, color regions and layering flags. Added six built-in presets and removed old cardigan/school preset entries. New presets apply full outfit state via existing applyOutfit and compare full parameters for selected state. Personal closet and individual garments retained. Nine wardrobe/library tests passed, including exact fit/color preservation from six supplied documents; production build passed. Browser verified six entries and wearing maid outfit 2.
+
+2026-10-03 — Add supplied Blue Cuddle Shark and round turtle head
+- Source shark: 4265 triangles, 3 images; geometry-only source 7.glb. Shark 3753 triangles with five editable pure-color roles and eight palettes. Turtle revised round head and eye/mouth positions; 3829 triangles. Common rest squash reduced to 3%. Asset revisions preserve existing pet IDs/colors while refreshing geometry. Capacity/preview/persistence updated together to seven. Browser validation in progress.
+- Completed shark/turtle update: 16 unit tests passed; all 56 palettes and live seven-pet UI/browser QA passed, including save/reload and capacity. Source/front/side/back/bottom, full gallery and shared-room screenshots visually checked. Shark moved to a clear preview spawn away from the user. Updated asset ZIP with seven GLBs; opened revised home preview.
+
+2026-10-03 — Independent game-like pet panel
+- Replaced plain pet settings list with Island-styled portrait roster and care/look/journal detail tabs. Actual model/color portraits, bond tiers, needs, five care buttons, runtime progress, real completion gains, supplies and living journal. Kept shared whole-body motion, strengthened play hops, no LLM calls or invented currency.
+- Completion payload now belongs to the exact runtime action, so cancellation cannot be misreported as a later successful interaction. Pausing freezes progress and preview motion; reduced-motion preference respected.
+- 22 unit tests passed (pets, pet life, home panel). Existing full browser QA passed; new panel QA passed portraits, refill, play/journal, cancellation, pause/rest and 390px layout. Skill client ran on production Home3DView; state output and desktop/mobile screenshots reviewed. Preview ready.
+
+## Embodied home conversation and live context
+Added current furniture names and character action targets, model social execution with model attribution, randomized selected talking clips while waiting/speaking without replacing occupied actions. Lifecycle stop on failure/unmount/manual revision; no gestures on regeneration. Chat lists action records. Moved home experiences to volatile chat state while call/date core retain them; home generation includes passed records even without saved home3D. Browser local simulator verified actual sit action + speech records present in chatLive and callDateCore. Real provider not called; user's reported formal-entry omission not reproduced/root-caused. Relevant tests and production build checked in output/home-life/conversation-* logs.
+
+2026-10-03 — Physical petting and chest carry
+- User request: actual crouching to pet, and carrying pets against the chest while walking.
+- Added coordinated approach/stroke/lift/hold/lower controller, 48-bone crouch with grounded feet and hand IK, surface-derived head contact, sideways chest cradle, locomotion with held arms, safe floor placement and compact scene controls. Same pet model is reused. Current-room carrying; interruption restores floor state and preserves new actor actions. No offline held state or artificial affection reward for holding.
+- 33 related tests passed; final cleanup rechecked 16 contact/life tests. Contact browser QA passed actual mesh/hand targets, crouch, hold, walking, pause, drop and mobile layout. Existing panel QA and full life QA passed, including colors, reload and capacity. Vite production build passed (existing circular chunk/PDF eval notices).
+- Skill client also exercised shark pickup. Its extra virtual clock produced a blank WebGL capture; adapted it to use the fixture-owned deterministic clock and rechecking the capture. Close-up crouch/cradle plus mobile screenshots from standard browser QA have been reviewed.
+- Final skill capture fixed by retaining the fixture clock and enabling the tested software WebGL flags. Screenshot now clearly shows the user holding the shark; state confirms held phase and both hand targets, with no console/page errors. All requested work complete; refreshed preview opened.
+
+2026-10-03: 对照 DateApp 将家园经历接入 messages/source=home；房屋与消息投射同事务保存，支持增删改、幂等、旧日志迁移，私聊/见面/通话复用统一范围。移除 core/volatile 重复经历注入，保留定义。69 项第一轮测试通过，包括真实私聊载荷断言；未调用用户真实 API。
+
+本轮最终验证：9 个测试文件、79 项通过；Vite 生产构建通过。覆盖并发重复保存与自适应记忆水位。仍未替用户调用真实模型。
+
+2026-10-03: 按用户约定改为家园一整轮计一条统一消息（连续 U 行为、提问、C 回答及实际动作）。旧逐事件投射迁移为回合，稳定 turnId/replyTo。家园请求复用 DateApp 的共享范围、识图与 ChatPrompts 历史格式化，移除独立经历摘要/20条家园/24条私聊三套裁剪，支持重生成范围隔离。首轮 52 项通过。
+
+本轮最终验证：9 文件、68 项测试通过，Vite 构建通过。全仓 tsc 长时间无输出，已停止，未取得类型检查结论。未调用真实用户 API。
+
+### 2026-10-03 本地陪伴与交谈气泡
+- 新增低频陪伴决策、关系门牌缓存解读、同房间寻路靠近/跟随、附近坐下、互动后转向/微笑回应。服从手动、家具、日程和模型动作状态。
+- 真实对话头顶气泡与 Unicode 分页；行为沿用 home turns，未新增独立经历上下文。
+- CUA 在 home-review 验证 390×844 气泡不挡脸；靠近由 3.70 到 1.75 世界单位，终点写入 source=local 记录。
+- 限制：用户占用家具动作槽时不抢槽；本轮跟随只限同房间，不跨房传送。模型门牌解读通过 mock 验证，未消耗真实用户 API 测试。
+- 最终验证：41 项相关测试通过；Vite 正式构建通过（37.92s）；CUA 无控制台 error，实测靠近、寻路入座、拥抱结束后的回应及竖屏气泡。证据：output/home-life/home-companion-mobile.png、home-companion-tests.txt、home-companion-build.txt。
+
+### 2026-10-03 情绪 buff 行为参数
+- 三个内部参数：精力、靠近意愿、互动意愿；同一次情绪评估顺带生成，新 buff 无额外请求。
+- 旧 buff 语义解释缓存；禁用/清空/解析失败回归基线；按原情绪更新事件刷新，过日程与情绪总闸。
+- 行为影响半小时缓和，原文不被改写。48 项相关单测通过（含新参数落库、文本缓存、混合情绪、衰减与开关）。
+- 补充 emotion-updated 事件和禁用清理验证：合计 50 项测试通过；正式 Vite 构建通过。未调用真实 API，未修改用户 buff 数据。
+
+### 2026-10-04 实际站桩/密集家具通行修复
+- 实际正式页面诊断确认家具槽交换时旧查找判定 userVisible=false；普通 UI 按钮还会续期90秒冷却。
+- 分离双方身份与独立陪伴行走，菜单不锁动作；用户指令6秒让行；新互动绕过普通冷却，失败路径只冷却3秒。
+- 核心行走头半径0.34，保留墙体/实心家具阻挡；新增0.8宽通道与全宽墙回归测试。
+- CUA 家具场景：用户睡觉后 actor=user、companion.ready=true；角色独立寻路从2.90走到0.95距离，source=local 到达记录正确。未调用真实聊天API。
+- 补充：普通坐姿允许轻量表情回应，仍禁止睡眠/主动操控时抢动作；实际 UI 指令重新确定 user/char 操作者，避免闲置槽恢复后操作错人。25 项本轮回归通过，截图 output/home-life/home-companion-fix.png。
+
+2026-10-04 — 用户要求修站桩并保留坐姿交谈。增加 idle/wander 决策与独立空闲动画；聊天绑定真实 char，保存 parkedPose，按坐姿上半身叠加；修正 parked char 的 posture 查询。24 项回归通过，Vite 构建通过。CUA 实测沙发坐姿交谈、交谈结束仍坐着、坐着环顾；截图 output/home-life/seated-conversation.png。正式用户页未主动刷新；源码更新可能触发 Vite HMR。日程家具槽并行未扩展。
+
+2026-10-04 — 在扳手顶部增加家园自主行为诊断。仅内存、门禁可用时采集，显示当前限制、姿势、距离、冷却、次数和最近八次尝试；实际失败/降级从 editor 返回。13 项既有陪伴测试和新增2项诊断测试通过。CUA 在正式页面打开面板，读到 Noir 坐姿、坐下与环顾启动记录、冷却倒计时；无控制台 error。截图 output/home-life/companion-debug-panel.png。
+
+2026-10-04 — 用户明确自主活动应是手机/踱步/家具，不接受环顾循环。移除自动 idle/look 候选和环顾经历，接真实手机 clip+prop（坐姿保留），60秒后平滑起身，修 wander 被执行白名单拦截的问题。家具按真实候选选取，浇水改先寻路，有限时结束。CUA 实测坐着看手机、自主起身、踱步完成记录；截图 output/home-life/autonomous-phone.png。23项测试通过。
+
+2026-10-04 — 修复右侧用户 blobref 头像：Home3DView 使用现有 useBlobRefUrl 解析双方头像，未解析标识不再显示为文字。入场镜头竖横屏统一完整对准人物，角色朝向取最终镜头位置；低俯视角重新计算缩放留白，镜头过渡后开始招呼；坐姿招呼复用上半身遮罩。正式页两张头像 loaded=true，390×844 实测头部 x=194.6/390 且角色正面挥手，截图 output/home-life/portrait-fixed.png 和 greeting-centered.png。3项 blobRef hook契约测试通过，生产构建通过。
+`n2026-10-04 — 家园聊天在每轮 ContextBuilder 前调用共用 injectMemoryPalace，使用范围内历史与当前回合；请求副本清空旧注入避免残留。启用宫殿但未配置向量时补读门牌。新增5项回归覆盖最终提示词、门牌删除、禁用、重生成范围和取消；连同现有回合与家园测试共16项通过，Vite生产构建通过。未调用真实聊天API。
+
+2026-10-04 — 对照3D家园/ChatApp/DateApp上下文：新增九种范围场景的家园实际payload对照；自适应超过200条及断点与手动范围一致。补家园关键词世界书与交谈时间标识。确认3D家园此前未接落库后整理，在OSContext保存成功后挂homeMemoryPostHook：新回合检查共享阈值，新模型回复累计共用消化计数，去重与串行并读最新宫殿开关。实测29条跳过、30条(20+10)进入真实处理边界；无外部API调用。35项回归与Vite构建通过。私聊专属召回增强和额外实时数据差异已记录文档。
+
+2026-10-04 — 增加二号床上睁眼交谈、左手托手机右手点屏、侧躺；复用上床流程与正式床菜单。正在逐帧验收。
+
+2026-10-04 — 二号三种床上动作完成。29 项相关测试通过，追加侧躺切换连续性测试通过；家园集成构建通过。浏览器验证三姿势、起身、真实聊天放下手机/结束恢复，最终无控制台错误；截图 output/bed-leisure/bed-*.png 与 final/shot-0.png。床上动作复用家具菜单，不写用户存档。验收中排除了 editor 同名头像签名重复声明导致的编译阻塞，保留原有签名缓存行为。
+
+2026-10-04 — 用户要求不降画质优化手机开销并按姿势筛选动作。缓存居民摆位障碍图与自动墙面方向，减少社交 inspect 分配、头像骨架全树更新和气泡重复setState。增加统一姿势条件与自己起身入口；三种坐姿照顾动作锚定被选中座位，发起者先寻路，拉起完成接座位起身。49项回归通过；Edge 390×844 DPR2 隔离客厅实测安慰/揉肩后仍坐姿，拉起后standing，无pageerror，截图output/home-life/posture-seated.png。技能client已运行并审图，非真机FPS验收。
+
+2026-10-04 — 修每次进入3D出现catalog/kit AbortError：确认正式入口StrictMode setup-cleanup重放，微任务延迟实际mount跳过已取消的探测；卸载以具名AbortError通知编辑器。全局fetch仅跳过具名home素材正常卸载，不吞真正失败。45项测试通过，含实际Home3DView StrictMode只mount一次/退出abort一次及真正加载失败仍展示。未刷新用户页面。
+
+2026-10-04 — 修复居民瞬移：地面点击在操控切换前保护坐/躺/起身过渡，walkTo不再清掉座位重生；社交与初次摆位后保留居民坐标，不以每帧碰撞检查重置位置。行走使用宽松身体占位，遇动态居民停止行进者，已重叠可向外分离。27项测试通过；Edge隔离客厅实测双方坐下后连续点地面位置不变、显式起身有效、拥抱结束前后坐标一致、用户走路时旁观角色坐标不变，无pageerror。截图与报告 output/home-life/teleport-*.png / teleport-browser.json。未手动刷新用户正式页。
+
+2026-10-04 — 修正蹲下安慰 cmu-22_03 双方反演：原素材 actor0 是坐姿接受者，actor1 才是下蹲安慰者；运行时只交换该动作轨道，不交换语义身份、不修改共享缓存。新增实际采样轨道分配回归；18项测试通过。浏览器坐姿安慰/揉肩后仍坐、拉起后站立，无pageerror，截图 output/home-life/comfort-corrected.png。
+
+2026-10-04 — 修复圆头乐福鞋分腿粘连：左右鞋各2个内侧点误绑对侧腿骨。按连通鞋归属更正，正式/制作源同步，资产revision更新；16项回归通过。浏览器修复前后截图 output/loafer-fix/{split,step,ankle}.png。未改变鞋外形或用户版型。
+
+
+2026-10-04 — Pet scene action wheel
+- User wanted opening the cute panel to be one action; ordinary pet interactions should use the existing circular scene menu. Mesh clicks now open the shared action orbit, with panel/pet/carry/feed on page one and play/call/rest on page two. Panel and circle use one interaction entry; busy validation and live carry/drop labels retained. Panel opening closes the orbit.
+- Extended arc point capacity to four and reserved a legible minimum size for small pet models. Menu tracks moving pet projection. Existing furniture pagination remains three.
+- Restarted stopped local Vite preview on 5174. 22 relevant tests passed; wheel browser QA passed mesh picking, panel action, direct play, blocked physical-action feedback, mobile bounds and Escape. Desktop and mobile screenshots inspected with buttons fully visible after entrance animation. Full-home skill capture pending below.
+- Full Home3DView skill capture completed: visible four-action pet orbit, model interaction state and no console/page errors. Preview ready.
+
+2026-10-04 — Pet wheel reference styling: reused resident social wheel layout/petals, island cream/brown colors, separate labels and a compact back/page/next pill. Pet panel remains one action. Desktop/mobile browser QA and full Home3DView skill capture passed and screenshots inspected; direct actions still dispatch through existing pet interaction API.
+
+2026-10-04 — 宠物接入家园日常与共用上下文：底栏日常旁新增宠物并撤下正式悬浮入口，沿用统一爪印。PetLife实际事件经petHomeRecord进journal/原家园回合投影；照顾取消不记完成，抱稳/落地各记一次，补食盆也进记录。ContextBuilder在家园定义旁从当前宠物存档注入姓名与物种，无独立近期宠物历史。31项回归通过，包含实际DB到私聊payload、改名隔离、抱持时序；390px浏览器验证底栏入口、喂食完成进入日常，无pageerror，报告output/home-life/pet-browser.json、截图pet-journal.png。
+
+2026-10-04 — 家园角色表现与主动交谈
+- 默认站姿增加轻微头部、胸肩呼吸摆动，脚底不位移；本地互动回应播放点头/挥手，在动画实际启动时记入日常，坐姿保留。
+- 新增 HomePresenceBubbles：空闲时周期出现想象气泡，优先当前情绪 emoji。四个 OpenMoji SVG 随项目提供，授权与来源见 public/room3d/thoughts/ATTRIBUTION.txt。
+- 当前房间累计 3 个本地角色动作、距离上轮/进入至少 90 秒，出现可点击金边邀请；180 秒冷却。未点击不请求 LLM。点击产生 presence/initiative 记录，沿用 HomeLifePanel、共享 ContextBuilder/记忆管线，不伪造用户台词。
+- LLM 提示强调可执行动作白名单；无切换动作时实际播放轻量回应。模型话语、动作和触发前本地经历归同一回合；之后的本地行为开启下一回合。
+- 说话分页软限 54 字，完整句可至 108 字，超长句再按分句/Unicode 上限分割；旧气泡 1.8 秒上浮淡出，新气泡保留完整尾句。空闲视图不重复更新 React state。
+- 42 项测试通过，生产构建通过。独立 390×844 浏览器验证 OpenMoji 思考气泡、金边邀请点击前 0/点击后 1 次请求、回复及实际点头共用 turnId；未刷新用户正式页面。测试页 test/fixtures/home-presence.html，模型请求为本地 mock。
+
+2026-10-04 — Explicit furniture control ownership
+- Read-only live DOM diagnostic confirmed manual character-control was active (`controlled:true`); model/local action paths do not assign that control flag. Existing silent sticky mode made subsequent furniture clicks appear to target the wrong resident.
+- Added persistent named character-control badge with a direct “切回自己” action; expanded wheel label to “操控 <名字>”. Centralized explicit control switching and exposed controlledResidentId in inspect. Switching back preserves the character’s seat and defers swapping until the user actually acts.
+- 16 social wheel/role tests passed. 390px browser regression verified default user, explicit character seating, badge return to self, subsequent furniture seating uses user, seated floor clicks stay put, bystander never teleports; no page errors. output/home-life/control-browser.json.
+
+2026-10-04 — Conversation partner gaze
+- Conversations and local nod/wave responses now gently turn standing characters toward the actual user head position; seated/lying roots stay anchored and only bounded head gaze changes. Body2 resolves target in the head parent's coordinates; classic head mesh/hair have matching limited yaw.
+- Solo social greetings receive a partner-facing stage orientation; paired/contact motions retain captured headings and contact geometry.
+- 14 baseline focused tests passed; additional single-versus-paired facing regression added. Mobile browser verifies standing heading dot > .99, no root translation, seated root/yaw unchanged and no page errors. Screenshots facing-standing.png/facing-seated.png inspected. No LLM calls or context changes.
+
+2026-10-04 — Persistent invitation and independent resident actions
+- Gold invitation now latches once offered, remains pending through busy/activity/panel state, and returns when its owner is visible again. Moved closer to head; separate cross dismisses with cooldown without calling the model; listen still explicitly consumes invitation. Presence tests cover busy, disabled panel, absence/reappearance and close.
+- User-only furniture, floor movement and pet interaction no longer increment the character interruption revision. Actor-slot swaps rebind ongoing companion travel/gesture roots, preserve parked character motion/activity and no longer cancel phone/wander on restoration. Parked furniture animation and its normal local duration are retained.
+- Mobile browser verified character phone continues while user sits; persistent invitation survives phone start and cross makes zero LLM calls. Screenshots inspected. Full kitchen/watering prop concurrency is not covered by this regression; these still share scene-level effects and need separate multi-resident activity runtime work.
+
+2026-10-04 — User resident natural idle
+- Non-active visible residents now tick the same visitor idle animation as the main character. The loop also keeps rendering when only the user is visible in a room; respects existing frame caps, quality motion setting, suspended/edit/overview and reduced-motion preferences.
+- Excludes the parked character (its independent activity loop owns it) and social sessions; the actively controlled user's seating/walking/furniture animation remains on its existing path.
+- 12 relevant motion/role tests passed. Mobile control regression checks seated user stays seated under floor clicks, paired completion retains positions and bystanders do not teleport. Skill capture in output/home-life/user-idle-skill.
+
+2026-10-04 — Reciprocal local interaction gaze
+- Local character nod/wave responses now also orient the idle user toward the character. Seated/lying user roots stay fixed and use bounded head gaze; walking, posture transitions, active furniture/held-object/pet actions retain their own animation ownership.
+- Solo social interactions orient the listening resident toward the speaker; self-category actions and all paired contact clips are excluded. No model invocation is involved.
+- Added residentHeadings to existing editor inspector. Nine facing/social-role tests passed; real mobile fixture local-response test verifies both residents face one another (dot > .99) with positions unchanged, no page errors or LLM call. Screenshot local-reciprocal.png.
+
+2026-10-04 — Seated shoulder rub and mixed-posture hugs
+- Shoulder rub approaches from behind the seated recipient and preserves their heading/seat anchor. Standing actor uses the same heading; blocked rear approach reports lack of space rather than placing the actor in front. Rear spacing clears the seat footprint.
+- home-hug supports standing/seated in either actor order, rejects two seated or lying actors. Keeps the seated root/legs anchored, approaches with the standing actor, uses upper-body hug with a slight standing lean, and retains seated posture afterward.
+- 24 social/posture/intimacy tests passed, including reversed seated actor and rotated headings. Browser QA verified seated recipient remains fixed during/after hugging and shoulder rub; rear-blocked showroom rejects correctly, isolated clear seat succeeds with matching rear heading. No page errors. Screenshots in output/home-life/seated-*.png; game skill capture inspected in seated-social-skill. Reverse seated-user coverage is automated runtime tests, not a separate browser scenario.
+
+2026-10-04 — User speech gestures and explicit chat cancellation reasons
+- Sending a new user utterance starts a bounded local speaking gesture (3–12 seconds) on the user visitor, with reciprocal conversation gaze. Keeps root positions, preserves seated lower body and skips lying/transition/busy furniture/contact animations. Regeneration/retry does not replay the original user gesture. Disposal clears the session.
+- HomeLifePanel remains mounted while the 3D surface is suspended, hiding only its sheet. Pending requests no longer abort solely because the surface is temporarily hidden. True unmount, explicit stop, edited history and timeout now supply named cancellation reasons; UI shows that reason.
+- Original 5.6-second AbortError cannot be conclusively attributed retrospectively: old cancellation sites omitted reasons. It was not the explicit 120-second panel timeout. User confirmed context/token volume is expected; no context-range or prompt truncation changes made.
+- 15 panel/facing tests passed including hide/reopen pending request and named manual stop. Browser QA confirmed loaded user speech, reciprocal facing, unchanged positions and session expiry; user-speech.png inspected. Adapted skill capture rerun.
+
+2026-10-04 — Nearby gaze, opt-in direct speech, thoughts, event rows and emotion updates
+- Added idle nearby reciprocal gaze (3.2 scene units), preserving roots and action ownership. Direct speech setting persists on home state and keeps the existing initiative/cooldown guard; automatic prompt and journal distinguish it from clicking an invitation.
+- Expanded thoughts to twelve everyday emoji and rotation through enabled buffs, 6 seconds per 16-second cycle. Event records use quiet timeline rows; spoken messages retain bubbles. Removed routine footsteps at emission and from historical context/initiative eligibility; meaningful approaches remain.
+- Successful home replies share private-chat emotion evaluator/persistence and API/gates; failure, cancellation and regeneration skip. Current buffs shown in chat panel.
+- 27 focused tests passed, followed by 5 initiative/presence tests after excluding old walking records. Isolated browser verified saved setting, transparent event rows, one automatic local mocked request with correct prompt, reciprocal nearby gaze without position changes. Screenshots inspected: direct-speech-settings.png, event-record-style.png, nearby-gaze.png and adapted game skill capture. No production LLM requests or manual refresh of user tab.
+- Full-project tsc did not finish in the validation window; no claim of full typecheck success.
+
+2026-10-04 — Portrait opens live shared emotion buffs
+- Main character portrait retains camera centering and opens the mood sheet via the existing home menu. Shows emoji, name, intensity and description; distinguishes disabled feature from no active buffs. User portrait remains camera-only.
+- Removed the chat header mood strip so the avatar is the dedicated visual entry. Reads the same CharacterProfile.activeBuffs; no second mood store or model call on viewing.
+- Verified shared evaluator persistence broadcasts emotion-updated to OSContext and useHomeEmotion, connecting chat state and local behavior. 21 panel/evaluation/behavior tests passed, including live buff prop updates and disabled gate. Isolated browser screenshot avatar-mood.png inspected; close/open test uses mocked fixture, not user's production chat.
+
+2026-10-04 — 一坐一站的二号拥抱改为跪姿抱腰腹、侧头、坐着方摸头。按用户近景反馈错开四只手：环腰贴左右侧，摸头提前，空闲手放身侧偏后。37项相关测试通过，包含不同身高与换位、膝脚地面、坐位保留、双掌间距。已核对正反近景与动作过渡，浏览器无报错；集成生产构建通过（39.70 秒，保留现有大分块提示）。
+
+2026-10-04 — Permit temporary furniture overlap during social motion
+- Split social clearance into approach, animation sweep, and completion footprint checks. Editor allows furniture overlap only during the animation sweep; structural walls/floor bounds and bystanders remain checked. Navigation and end positions retain furniture clearance. Other runtime consumers retain strict fallback when canPerform is absent.
+- 22 social/facing tests passed, including phase separation and rejection of blocked approach/end/motion bounds. Real mobile fixture regression completed with no page errors: seated floor clicks remain inert, both-user control ownership preserved, paired completion stable, and bystanders do not teleport. Adapted skill and control screenshots inspected.
+
+2026-10-04 — Independent local companionship and automatic speech controls
+- Moved automatic speech from home settings to immediately below autonomous activity in My Home. Each switch is independent; local activity frequency quiet/normal/lively and speech interval often/normal/quiet (2/5/10 minutes) persist in home state.
+- Automatic speech uses idle same-room user presence and conversation-reset elapsed interval, independent of local autonomy or action count. Existing user-click invitation behavior remains when automatic speech is off. Busy/hidden/absent gates and one-request consumption remain.
+- Local companionship now loads only existing policy caches and structured/cached emotional motion bias; no fallback semantic API calls from those local hooks. Explicit conversation still uses the shared emotion evaluation pipeline.
+- 21 options/initiative/panel tests passed plus six local-only policy/emotion tests; browser confirms separate toggles, all selected values and persistence on reopening, no page errors. companion-options.png inspected; game skill runner invoked.
+
+2026-10-04 — 补齐样板房厨房中岛吃饭：按已有中岛/朝向长凳/早餐托盘识别，不改存档，无需 dockId；三处家具入口与目录动作说明接通。吃饭坐点前移 0.15，临时饭碗位于台面前沿。27 项吃饭/家具/厨房/手部测试通过，实际二号走近入座、侧视吃饭、结束留坐并清道具验收，浏览器无报错，集成构建通过（22.96s）。额外目录测试原有 bath_washer 仍期待空动作，但当前已有洗衣，故 1 项旧断言失败；未改该无关测试。截图 output/kitchen-eating/{close,side}.png。
+
+## 2026-10-04 自动开口恢复原始触发规则
+- 按最新要求取消自动开口频率选择，恢复至少 3 次有效自主行为、进入/上次回复后 90 秒、主动邀请间隔 180 秒；本地活动频率仍保留。
+- RoomApp 显式传递当前 App 活跃状态；退出家园或页面隐藏后停止自动触发，并取消仍在等待的自动请求。手动交流不因临时面板隐藏而取消。
+- 设置补充触发条件和离开后停止调用的说明，同步 room3d 文档。
+- 验证：homeInitiative、homePresenceBubbles、homeLifePanel 共 18 项测试通过；隔离浏览器检查开关独立保存、重新打开保持状态、自动开口无频率选择，无页面错误。截图 output/home-life/restored-initiative.png 已检查。
+
+
+## 2026-10-04 统一情绪上下文
+- ContextBuilder 默认关闭情绪注入，仅 chat/home 且角色功能开启时统一注入 buff 与共享 innerState。轻量 emotionState 模块复用原缓存键，避免引入评估管线循环依赖。
+- 私聊/主动私聊改读共享最新状态；innerState 脱离日程注入，显式空字符串用于重生成屏蔽旧状态。
+- 家园评估与主回复并行，使用相同输入；重生成清除请求内旧 buff/innerState 后重新评估。
+- 8 个测试文件、64 项测试通过，包含默认关闭、跨入口共享、无日程注入、一次注入、重生成、家园主回复待返回时评估已启动。未调用真实付费 API。
+
+2026-10-04 — 用户 Meshy zip 四款兽耳替换。import-meshy-ears.mjs 去源贴图/UV，自编几何遮罩配色并减面：狐狸整对 3876，猫狗兔各 3900 三角面；新 meshy-ears.glb 共用 48 骨 head 绑定，保留 ID/毛色耳内染色/版型，尾巴不变。四张缩略图更新，实际捏人器四款切换截图 output/meshy-ears/worn-*.png，无浏览器错误。11 项资产配色回归通过、接入检查 4 款×4姿势零数据失败，衣橱生产构建通过。源 SHA256 与原/最终面数在 art/chibi/meshy-ears-report.json；原始 zip 保留 Downloads，解压中间文件 output/meshy-ears/source。
+
+2026-10-04 — 狐狸耳外八修正：import-meshy-ears 两侧耳根内旋18°、各内收.02。更新正式资产、revision、缩略图，面数3876不变。meshyEars测试通过；真实衣橱 worn-fox.png 检查立耳效果，浏览器无报错。
+
+2026-10-04 — 毛色一键取当前发色与预览手势：GarmentColors 读取头发图层不透明主色，只改 fur，支持原撤销/保存。HairEditor 去旋转滑杆，单指旋转、双指平移缩放、滚轮缩放/Shift平移，Puppet镜头保留自动构图叠加视图偏移，复位归零。实际浏览器验证取色#c4834b、旋转、滚轮、复位通过，无报错；衣橱构建通过29.70s，截图output/meshy-ears/controls.png。
+
+
+## 2026-10-04 日程统一进入 ContextBuilder
+- 核心、实时块和轻量角色上下文改为异步入口，统一按角色日历日读取日程；所有生产调用点及同步 prompt helper 改为 await。像素家园改为每次请求时组装，而非渲染时缓存。
+- 全入口遵守角色日程总开关，false/skipMemories 不影响日程。保留时间感知对钟点的控制。不存在日程不生成、不额外调用 API。
+- 私聊删除重复日程段，worker fire-pack 延后至执行时注入，音乐仍使用独立的日程读取。情绪范围不变。
+- 验证：核心与各入口回归 113 项通过；补充日程/时区/宠物 25 项通过（包含重复覆盖）。Vite 生产构建成功。全仓 tsc 长时间未产出结果已中止，不视为通过。
+
+2026-10-04 — 校园风1按用户新JSON完整替换；兽尾无手动fur时默认继承已穿兽耳毛色，预览与家园同一解析路径。面饰分组列出7面纹/17配饰，整组高低/左右/大小/旋转控制，正式页和独立衣橱页接通（独立页新增选件桥与历史快照）。19项相关测试通过；浏览器验证新套装参数、24个入口、多选取件、位置保存/撤销，无报错，衣橱构建17.93s通过。修正旧动物测试对网格数量/首顶点位置的假设，改按服装ID与外缘点验证头骨跟随。
+
+
+## 2026-10-04 私聊日程单次读取
+- 每次 prompt 组装共用本轮 schedulePromise，ContextBuilder 与音乐氛围不再各查一次；空结果也复用，下一轮重新读取。
+- fire-pack 模板不读取本地日程供音乐使用，保持 worker 现场渲染路径。
+- 36 项相关测试通过，包含每轮一次、下一轮更新、空日程不重读和 fire-pack 回归。
+
+2026-10-04 — 配饰入口可见性修正：面饰内改顶部并列『面纹/配饰』分类（带数量），避免17款配饰埋在面纹与滑杆之后。选择体型始终显示『所有角色都会使用这款体型，包括你和来访角色』。浏览器核对17款、点选切换及提示，无错误，截图output/meshy-ears/accessory-tabs.png。
+
+2026-10-04 — 吃饭穿头与双人座位：脸前握勺目标替代头骨中心，勺子接掌心完整旋转，餐边凳加宽到2.8并设±.85两个位置。补另一角色独立碗勺、占位和结束清理。28项测试、对照页构建及实际浏览器吃饭/结束流程通过；双人截图在output/kitchen-eating/。
+
+2026-10-04 — Home phone photo mode
+- Replaced direct capture entry with frozen portrait session, independent per-resident pose/time/yaw, temporary side-by-side staging, camera orbit/pitch/zoom/height, and screen-space neon/glow/fringe/vignette/exposure baked into PNG. Temporary transforms/camera restored on close; no photo activity in journal. Deferred schedule relocation and blocked autonomous actions while frozen.
+- Two photoSession tests passed. Isolated Edge mobile QA verifies two actors, pose, preview/export canvas, exact restored root positions, no page errors. Skill client smoke and mobile screenshots inspected. Formal user tab not navigated/refreshed.
+
+2026-10-04 — Home phone AMSG2 audit
+- Confirmed shared instant route and home prompt in fire_pack.chat; scheduled renderer stays separate. Fixed pending indicator ending at local 202 handoff, including pending restoration/storage synchronization. Registered embedded reader for OS unread/toast and generation banner suppression without OS navigation changes.
+- 132 targeted tests passed; isolated browser tests pending handoff/storage clear and unread repeated vibration/read stop. No actual user Worker request/deploy performed.
+
+2026-10-04 — Correct photo gestures and stronger bloom
+- Removed deprecated procedural wave/wave-cute from photo picker/runtime; uses approved selected wave and wave-response clips, request version guards and exit cancellation. Glow range 0–3 with colour-preserving highlight extraction and three blur radii; capped colour-leak alpha.
+
+2026-10-04 — Approved photo library + illustration looks
+- 14 approved poses01/03 exported with source hash checks and full finite tracks; 42 production actions (21 solo / 21 paired), searchable dedicated photo panel. Paired freezes reuse social contact/props; switch restores staging before next action. Fixed default photo framing. Added 夏日手绘 / 晴空物语 grading, documented screen-space scope.
+- All 56 assets applied and rendered in isolated Edge with no errors; source selection and restore tests pass (4). Reviewed peace and paired screenshots.
+- User canceled home-phone chat action execution. No changes to chat/Worker action directives were made. Phone remains normal messaging with phone-holding animation.
+
+2026-10-04 — Photo controls and per-resident expressions
+- Removed static pose UI, distinct pair actor selection, adjacent collapse control, direct orbit/pinch/wheel, temporary original preview.
+- Added per-person facial expression and camera gaze; render-scoped head rotation and original face restoration on exit.
+- Five photo unit tests passed; isolated Edge checked expressions/gaze/exit, paired selection, controls and 56 runtime assets; Vite build passed. User tab not refreshed.
+
+2026-10-04 — Water handover and sipping grip
+- Replaced the solid capped water cylinder with a hollow ceramic cup, rounded rim, green band and recessed water surface. Added a two-role waterGrip controller: wrapped fingers, thumb below rim, upright passing, blended handover targets, and a rim-to-mouth sip/tip/release phase. Prop transform follows the solved supporting wrist; removed generic palm-to-palm contact for this action. Phone grip remains unchanged.
+- Validation: chibiWaterGrip/chibiSocialProps/chibiSocial 22 tests passed, including transformed scene parents and mixed body heights. Social fixture Vite build passed (existing chunk size warning). Browser inspected closeups at source 1/2.25/2.27/3/5.7 seconds, no page errors; handover samples move ~2.8cm over 20ms. QA in output/water-grip. Applies to shared social runtime, not a fixture-only patch.
+
+2026-10-04 — Home followups and stalled reply handling
+- Default wardrobe layering on for unspecified values, pet portrait rail and summon-all, schedule header and forced schedule placement on reentry. Photo screen-relative pan and single thin-scroll control area.
+- Added cancellable stage awaits and per-stage request UI/timeouts. Matched ChatApp local ordering: main fetch starts then emotion evaluation runs concurrently on identical messages. No recall skipped. Previous timeout's exact stage unavailable in historical logs.
+- 43 targeted tests plus 21 final tests passed (overlapping suites); isolated Edge verified pet entry, summon, schedule label, pan and scroll; reviewed screenshots. Final Vite build passed. No paid API calls triggered.
+
+2026-10-04 — Photo filter library
+- Set requested daylight default (0.55 / 0.60 / 0.12 / 1.02); named local filter snapshots with apply, remove and undo, validated stored values and surfaced storage errors.
+- Browser verified default values, save/apply/reopen persistence, remove/undo. Vite build passed; resolved Windows case-insensitive module-name collision by using distinct storage/component basenames.
+
+2026-10-04 — Local pet companionship
+- Pet portrait thoughts, idle-pet candidates, character-owned pet/play contact with approach and completion-only attribution. User contact behavior preserved; no extra LLM call.
+- Browser verified character approach/contact and journal attribution with unchanged user position; unit tests cover selection, source/bond ownership, cancellation and pet thought display. Build passed.
+
+2026-10-04 — Bed leisure gating and emotion timing
+- Bed leisure requires an already settled matching bed; stale commands are rejected.
+- Added context-stage and emotion-module timing; concurrent reply/emotion banner exposes both states. Live no-refresh observation: context read ~6.27s, recall ~3.94s, emotion evaluator begins ~0.10s after main dispatch.
+- 14 focused tests passed.
+
+2026-10-04 — Incremental home history / model bed actions
+- Replaced per-save full chat cursor scan with changed-turn indexed writes; migration uses source index and subsequent checks are read-only. 69 context/bridge/parser/panel tests passed, including immediately queued context reads.
+- Preserve both residents furniture posture across actor swaps; keep model action list when user lies down and exclude occupied beds. Added explicit action selection/execution diagnostics.
+
+2026-10-04 — Ordered model action plans
+- actionIds parsing, conditional full action catalog, sequential executor with actor/target posture prerequisites and retained seated/lying states.
+- Browser verified phone auto-lie → both rise → hug, and auto-seat → seated action → rise → bed phone.
+- Additional browser pass: user automatically sits for shoulder interaction while character rises. Panel regression caught and fixed the old single-action gate; ordered-plan submission now tested explicitly.
+
+2026-10-05 — Pet scheduled sleep: local home-time 22:00–08:00 / low energy prefers reachable rest mats then reviewed low beds. Added actual hop-up/sleep/hop-down, wake-before-interaction, sleep spot claims and lifecycle guards; no API. Pet sleep/life/contact tests: 25 passed. Isolated browser confirms bed surface and morning descent; screenshot output/home-life/pet-sleep-bed.png.
+# 2026-10-05 手机加载优化
+
+- 当前房间优先，模型并发上限 3，切房间和添加家具按需补加载；重试/销毁保护。
+- 250 张家具缩略图离线导出（约 1.1 MB），不再阻塞首屏现场生成。
+- 人物转换结果按输入缓存，编辑与随机生成绕过；手机 DPR clear/balanced/eco 提高至 3/2/1.5 上限。
+- 验证：10 个针对性测试通过；独立移动尺寸样板房首屏 33 个 GLB 请求，六房切换共 121 个，无 pageerror。实际转换二次返回同一结果（本地约 395 ms → 0.8 ms，不代表手机耗时）。检查 room screenshot，家具完整。公网测试保持关闭。

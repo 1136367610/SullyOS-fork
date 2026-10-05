@@ -9,7 +9,8 @@ export function windowOpenings(room,edge,catalog){
   const a=catalog.find(a=>a.id===i.assetId),o=a?.wallOpening;
   if(i.stored||!o)return [];
   const mount=wallCandidates(i,a,room,catalog).find(c=>c.face.id.startsWith('shell-'+edge+'-')&&Math.hypot(c.item.x-i.x,c.item.y-i.y,c.item.z-i.z)<.003);
-  return mount?[{lo:i[along]-o.width/2,hi:i[along]+o.width/2,bottom:i.y+o.bottom,top:i.y+o.top}]:[];
+   const angle=i.rotation*Math.PI/180,offset=(o.offset||0)*(e.axis==='z'?Math.cos(angle):-Math.sin(angle));
+   return mount?[{lo:i[along]+offset-o.width/2,hi:i[along]+offset+o.width/2,bottom:i.y+o.bottom,top:i.y+o.top}]:[];
  });
 }
 export function subtractOpenings(panel,openings){

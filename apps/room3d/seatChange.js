@@ -1,4 +1,4 @@
-import {seatChangeFrame} from './chibi/roomMotionFrame.ts';
+import {seatChangeFrame,seatChangeDuration} from './chibi/roomMotionFrame.ts';
 import {bedChangePose} from './bedMotion.js';
 
 // The last short movement into a seat is outside ordinary walking clearance.
@@ -13,6 +13,14 @@ export function seatEntry(transform,map,offset=[0,0]){
 }
 export function seatChangePose(change,time){
  if(change.pose==='bed')return bedChangePose(change,time);
- const f=seatChangeFrame(time,change.rising,change.pose);
- return {...f,position:change.front.map((v,i)=>v+(change.seat[i]-v)*(f.travel??f.weight))};
+ // Face the seat's forward direction before lowering onto it. Use the shortest
+ // yaw arc so a turn across -PI/PI never spins all the way around.
+ const duration=seatChangeDuration(change.pose),turnTime=Math.min(.3,duration*.3);
+ const turn=Math.max(0,Math.min(1,time/turnTime)),blend=turn*turn*(3-2*turn);
+ const target=change.rotation??0,start=change.startRotation??target;
+ const delta=Math.atan2(Math.sin(target-start),Math.cos(target-start));
+ const rotation=change.rising?target:start+delta*blend;
+ const poseTime=change.rising?time:Math.max(0,time-turnTime)*duration/(duration-turnTime);
+ const f=seatChangeFrame(poseTime,change.rising,change.pose);
+ return {...f,rotation,position:change.front.map((v,i)=>v+(change.seat[i]-v)*(f.travel??f.weight))};
 }

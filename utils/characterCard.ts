@@ -65,6 +65,7 @@ export const CARD_STRIPPED_FIELDS = [
   'vrState',
   'chibiStudio',
   'home3D',
+  'homeDefinition',
 ] as const;
 
 /**

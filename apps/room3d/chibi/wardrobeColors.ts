@@ -2,6 +2,14 @@ import * as T from 'three';
 import definitions from './wardrobeColorRegions.json';
 
 export type WardrobeColors = Record<string, Record<string, string>>;
+export function resolveWardrobeColors(wardrobe:{ears?:string;tail?:string},value?:WardrobeColors):WardrobeColors{
+ const clean=cleanWardrobeColors(value),{ears,tail}=wardrobe;
+ if(ears&&tail&&!clean[tail]?.fur){
+  const fur=clean[ears]?.fur??garmentColorRegions[ears]?.find(r=>r.id==='fur')?.color;
+  if(fur)clean[tail]={...clean[tail],fur};
+ }
+ return clean;
+}
 export interface GarmentColorRegion {
  id:string;
  label:string;

@@ -9402,7 +9402,7 @@
     "collection": "kitchen",
     "showroomSource": 4,
     "size": [
-      1.4500000476837158,
+      2.8,
       0.550000011920929,
       0.6499999761581421
     ],
@@ -9413,10 +9413,10 @@
     ],
     "boxes": [
       [
-        -0.7250000238418579,
+        -1.4,
         0,
         -0.32499998807907104,
-        0.7250000238418579,
+        1.4,
         0.550000011920929,
         0.32499998807907104
       ]
@@ -9424,13 +9424,23 @@
     "paintMaterials": [
       "showroom-cream"
     ],
-    "revision": "showrooms-cushions-3",
+    "revision": "showrooms-dining-two-1",
     "seats": [
       {
         "id": "0",
-        "label": "坐垫",
+        "label": "左边",
         "position": [
-          0,
+          -0.85,
+          0.55,
+          0
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "1",
+        "label": "右边",
+        "position": [
+          0.85,
           0.55,
           0
         ],
@@ -15539,6 +15549,1154 @@
         "material": "charcoal",
         "label": "主题色",
         "color": "#292b2e"
+      }
+    ]
+  },
+  {
+    "id": "pet_bird",
+    "name": "团团小鸟",
+    "surface": "floor",
+    "url": "pets/bird.glb",
+    "size": [
+      0.7200000286102295,
+      0.6221893429756165,
+      0.7439316511154175
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.36000001430511475,
+        0,
+        -0.37196582555770874,
+        0.36000001430511475,
+        0.6221893429756165,
+        0.37196582555770874
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "bird",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#f3d565"
+      },
+      {
+        "material": "pet-wings",
+        "label": "翅膀",
+        "color": "#a6b59a"
+      },
+      {
+        "material": "pet-crest",
+        "label": "冠羽",
+        "color": "#f7dc72"
+      },
+      {
+        "material": "pet-tail",
+        "label": "尾巴",
+        "color": "#809581"
+      },
+      {
+        "material": "pet-beak",
+        "label": "鸟喙",
+        "color": "#df9860"
+      },
+      {
+        "material": "pet-feet",
+        "label": "脚爪",
+        "color": "#d6a27f"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#292c32"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "bird-0",
+        "label": "原野黄绿",
+        "colors": {
+          "pet-body": "#f3d565",
+          "pet-wings": "#a6b59a",
+          "pet-crest": "#f7dc72",
+          "pet-tail": "#809581",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-1",
+        "label": "玄凤灰黄",
+        "colors": {
+          "pet-body": "#a6a9ad",
+          "pet-wings": "#737d87",
+          "pet-crest": "#f3dc76",
+          "pet-tail": "#69727c",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-2",
+        "label": "晴空蓝白",
+        "colors": {
+          "pet-body": "#b9dcec",
+          "pet-wings": "#77abc8",
+          "pet-crest": "#f4f1e4",
+          "pet-tail": "#5d849e",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-3",
+        "label": "白羽",
+        "colors": {
+          "pet-body": "#f5f0e8",
+          "pet-wings": "#e1ddd5",
+          "pet-crest": "#f7e7c8",
+          "pet-tail": "#cac6c1",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-4",
+        "label": "桃粉",
+        "colors": {
+          "pet-body": "#efd2cf",
+          "pet-wings": "#c995a5",
+          "pet-crest": "#f7dec3",
+          "pet-tail": "#ae768c",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-5",
+        "label": "薄荷",
+        "colors": {
+          "pet-body": "#d0e2cd",
+          "pet-wings": "#8ab8a4",
+          "pet-crest": "#e8ecbf",
+          "pet-tail": "#659588",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-6",
+        "label": "暖灰",
+        "colors": {
+          "pet-body": "#c2b6aa",
+          "pet-wings": "#8d8179",
+          "pet-crest": "#ded5bf",
+          "pet-tail": "#6b6461",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      },
+      {
+        "id": "bird-7",
+        "label": "深海",
+        "colors": {
+          "pet-body": "#627a91",
+          "pet-wings": "#394f69",
+          "pet-crest": "#d6dcd4",
+          "pet-tail": "#2c4059",
+          "pet-beak": "#df9860",
+          "pet-feet": "#d6a27f",
+          "pet-eyes": "#292c32"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_snake",
+    "name": "盘盘小蛇",
+    "surface": "floor",
+    "url": "pets/snake.glb",
+    "size": [
+      0.7199999690055847,
+      0.6596815586090088,
+      0.7440763711929321
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.35999998450279236,
+        0,
+        -0.37203818559646606,
+        0.35999998450279236,
+        0.6596815586090088,
+        0.37203818559646606
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "snake",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#d99056"
+      },
+      {
+        "material": "pet-belly",
+        "label": "腹部",
+        "color": "#f5deb1"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#322b29"
+      },
+      {
+        "material": "pet-tongue",
+        "label": "舌头",
+        "color": "#be5868"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "snake-0",
+        "label": "玉米橙",
+        "colors": {
+          "pet-body": "#d99056",
+          "pet-belly": "#f5deb1",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-1",
+        "label": "竹叶青",
+        "colors": {
+          "pet-body": "#7eab74",
+          "pet-belly": "#e4e4b8",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-2",
+        "label": "奶油白化",
+        "colors": {
+          "pet-body": "#f1dfb9",
+          "pet-belly": "#fff0d9",
+          "pet-eyes": "#aa6671",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-3",
+        "label": "墨黑",
+        "colors": {
+          "pet-body": "#41484b",
+          "pet-belly": "#a7a9a2",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-4",
+        "label": "沙色",
+        "colors": {
+          "pet-body": "#bca082",
+          "pet-belly": "#e8d9bc",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-5",
+        "label": "紫灰",
+        "colors": {
+          "pet-body": "#a29baa",
+          "pet-belly": "#e0d8df",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-6",
+        "label": "珊瑚",
+        "colors": {
+          "pet-body": "#d7887c",
+          "pet-belly": "#f7d8bb",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      },
+      {
+        "id": "snake-7",
+        "label": "柠檬",
+        "colors": {
+          "pet-body": "#d7cb73",
+          "pet-belly": "#f5e8bc",
+          "pet-eyes": "#322b29",
+          "pet-tongue": "#be5868"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_slime",
+    "name": "软软史莱姆",
+    "surface": "floor",
+    "url": "pets/slime.glb",
+    "size": [
+      0.7599999308586121,
+      0.5250566005706787,
+      0.7453250885009766
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.37999996542930603,
+        0,
+        -0.3726625442504883,
+        0.37999996542930603,
+        0.5250566005706787,
+        0.3726625442504883
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "slime",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#8bc8bc"
+      },
+      {
+        "material": "pet-cheeks",
+        "label": "脸颊",
+        "color": "#dfb6ac"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#243d42"
+      },
+      {
+        "material": "pet-mouth",
+        "label": "嘴巴",
+        "color": "#416a69"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "slime-0",
+        "label": "薄荷",
+        "colors": {
+          "pet-body": "#8bc8bc",
+          "pet-cheeks": "#dfb6ac",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-1",
+        "label": "海盐蓝",
+        "colors": {
+          "pet-body": "#82b9dc",
+          "pet-cheeks": "#c7b4ce",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-2",
+        "label": "樱花",
+        "colors": {
+          "pet-body": "#e3a8bc",
+          "pet-cheeks": "#c47d96",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-3",
+        "label": "柠檬",
+        "colors": {
+          "pet-body": "#e8d377",
+          "pet-cheeks": "#e6ad7a",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-4",
+        "label": "葡萄",
+        "colors": {
+          "pet-body": "#b29dce",
+          "pet-cheeks": "#dcafcd",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-5",
+        "label": "奶油",
+        "colors": {
+          "pet-body": "#ece2c7",
+          "pet-cheeks": "#d8ae9c",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-6",
+        "label": "蜜桃",
+        "colors": {
+          "pet-body": "#e8af88",
+          "pet-cheeks": "#d28580",
+          "pet-eyes": "#243d42",
+          "pet-mouth": "#416a69"
+        }
+      },
+      {
+        "id": "slime-7",
+        "label": "夜墨",
+        "colors": {
+          "pet-body": "#535e72",
+          "pet-cheeks": "#9d85ad",
+          "pet-eyes": "#e8e2ca",
+          "pet-mouth": "#dad1c1"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_cat",
+    "name": "团子猫",
+    "surface": "floor",
+    "url": "pets/cat.glb",
+    "size": [
+      0.8199999928474426,
+      0.813016414642334,
+      1.1847444772720337
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.4099999964237213,
+        0,
+        -0.5923722386360168,
+        0.4099999964237213,
+        0.813016414642334,
+        0.5923722386360168
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "cat",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#cc9863"
+      },
+      {
+        "material": "pet-markings",
+        "label": "口鼻花色",
+        "color": "#f6e6cc"
+      },
+      {
+        "material": "pet-ears",
+        "label": "耳朵内侧",
+        "color": "#d79797"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#34322f"
+      },
+      {
+        "material": "pet-nose",
+        "label": "鼻子与嘴巴",
+        "color": "#a15e69"
+      },
+      {
+        "material": "pet-whiskers",
+        "label": "胡须",
+        "color": "#fff3df"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "cat-0",
+        "label": "橘白",
+        "colors": {
+          "pet-body": "#cc9863",
+          "pet-markings": "#f6e6cc",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-1",
+        "label": "黑白",
+        "colors": {
+          "pet-body": "#383b40",
+          "pet-markings": "#f0eee7",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#ce919b",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-2",
+        "label": "蓝灰",
+        "colors": {
+          "pet-body": "#8995a6",
+          "pet-markings": "#dfe3e7",
+          "pet-ears": "#c49caa",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-3",
+        "label": "奶油",
+        "colors": {
+          "pet-body": "#e6d3ae",
+          "pet-markings": "#fff0d6",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-4",
+        "label": "巧克力",
+        "colors": {
+          "pet-body": "#765a4e",
+          "pet-markings": "#d3b296",
+          "pet-ears": "#b98082",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-5",
+        "label": "银白",
+        "colors": {
+          "pet-body": "#e8e8e2",
+          "pet-markings": "#ffffff",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#61766c",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-6",
+        "label": "暖棕",
+        "colors": {
+          "pet-body": "#a87b60",
+          "pet-markings": "#e7c9a3",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#34322f",
+          "pet-nose": "#a15e69",
+          "pet-whiskers": "#fff3df"
+        }
+      },
+      {
+        "id": "cat-7",
+        "label": "黑猫",
+        "colors": {
+          "pet-body": "#34363d",
+          "pet-markings": "#444650",
+          "pet-ears": "#d79797",
+          "pet-eyes": "#d4b872",
+          "pet-nose": "#826771",
+          "pet-whiskers": "#bfc1c5"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_dog",
+    "name": "卷尾小狗",
+    "surface": "floor",
+    "url": "pets/dog.glb",
+    "size": [
+      0.8399999737739563,
+      0.5489053130149841,
+      1.10028874874115
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.41999998688697815,
+        0,
+        -0.550144374370575,
+        0.41999998688697815,
+        0.5489053130149841,
+        0.550144374370575
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "dog",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#dab17b"
+      },
+      {
+        "material": "pet-markings",
+        "label": "口鼻花色",
+        "color": "#f5e7d1"
+      },
+      {
+        "material": "pet-ears",
+        "label": "耳朵内侧",
+        "color": "#8e6244"
+      },
+      {
+        "material": "pet-tail",
+        "label": "尾巴",
+        "color": "#c49159"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#302c2c"
+      },
+      {
+        "material": "pet-nose",
+        "label": "鼻子与嘴巴",
+        "color": "#46342f"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "dog-0",
+        "label": "金毛色",
+        "colors": {
+          "pet-body": "#dab17b",
+          "pet-markings": "#f5e7d1",
+          "pet-ears": "#8e6244",
+          "pet-tail": "#c49159",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-1",
+        "label": "巧克力",
+        "colors": {
+          "pet-body": "#92725b",
+          "pet-markings": "#d7b9a2",
+          "pet-ears": "#62483f",
+          "pet-tail": "#785a49",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-2",
+        "label": "黑白",
+        "colors": {
+          "pet-body": "#44474c",
+          "pet-markings": "#f3eee4",
+          "pet-ears": "#2f3035",
+          "pet-tail": "#393b41",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-3",
+        "label": "奶油",
+        "colors": {
+          "pet-body": "#e8d6b5",
+          "pet-markings": "#fff3dd",
+          "pet-ears": "#cfb48c",
+          "pet-tail": "#dac39d",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-4",
+        "label": "赤柴色",
+        "colors": {
+          "pet-body": "#bd8151",
+          "pet-markings": "#f4e4c9",
+          "pet-ears": "#925c3e",
+          "pet-tail": "#a96e44",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-5",
+        "label": "银灰",
+        "colors": {
+          "pet-body": "#a9b0b7",
+          "pet-markings": "#e8e6e1",
+          "pet-ears": "#79818c",
+          "pet-tail": "#8b949e",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-6",
+        "label": "雪白",
+        "colors": {
+          "pet-body": "#f0ede5",
+          "pet-markings": "#fffaf0",
+          "pet-ears": "#dfd7ca",
+          "pet-tail": "#e7e1d6",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      },
+      {
+        "id": "dog-7",
+        "label": "焦糖",
+        "colors": {
+          "pet-body": "#b99276",
+          "pet-markings": "#f3d9b4",
+          "pet-ears": "#84654f",
+          "pet-tail": "#a17b5f",
+          "pet-eyes": "#302c2c",
+          "pet-nose": "#46342f"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_turtle",
+    "revision": "20261003-round-head-shark",
+    "name": "圆壳小龟",
+    "surface": "floor",
+    "url": "pets/turtle.glb",
+    "size": [
+      0.7200000882148743,
+      0.6329339742660522,
+      1.1230984926223755
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.36000004410743713,
+        0,
+        -0.5615492463111877,
+        0.36000004410743713,
+        0.6329339742660522,
+        0.5615492463111877
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "turtle",
+    "paintMaterials": [
+      "pet-skin"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-skin",
+        "label": "皮肤",
+        "color": "#8aa974"
+      },
+      {
+        "material": "pet-shell",
+        "label": "龟壳",
+        "color": "#678267"
+      },
+      {
+        "material": "pet-rim",
+        "label": "龟壳边缘",
+        "color": "#c7bb7c"
+      },
+      {
+        "material": "pet-belly",
+        "label": "腹部",
+        "color": "#dfcf94"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#283d35"
+      },
+      {
+        "material": "pet-mouth",
+        "label": "嘴巴",
+        "color": "#546d4a"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "turtle-0",
+        "label": "苔绿",
+        "colors": {
+          "pet-skin": "#8aa974",
+          "pet-shell": "#678267",
+          "pet-rim": "#c7bb7c",
+          "pet-belly": "#dfcf94",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-1",
+        "label": "森林",
+        "colors": {
+          "pet-skin": "#94b187",
+          "pet-shell": "#405e4c",
+          "pet-rim": "#aeab72",
+          "pet-belly": "#d5c38d",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-2",
+        "label": "沙漠",
+        "colors": {
+          "pet-skin": "#c5ad7d",
+          "pet-shell": "#968365",
+          "pet-rim": "#dbc69c",
+          "pet-belly": "#eddbb4",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-3",
+        "label": "翡翠",
+        "colors": {
+          "pet-skin": "#89b6a4",
+          "pet-shell": "#487f70",
+          "pet-rim": "#b7c79b",
+          "pet-belly": "#dfcf94",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-4",
+        "label": "岩灰",
+        "colors": {
+          "pet-skin": "#a9b2a4",
+          "pet-shell": "#6e7871",
+          "pet-rim": "#c2c3aa",
+          "pet-belly": "#dfcf94",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-5",
+        "label": "琥珀",
+        "colors": {
+          "pet-skin": "#c1b184",
+          "pet-shell": "#9d754a",
+          "pet-rim": "#d5b67a",
+          "pet-belly": "#dfcf94",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-6",
+        "label": "浅玉",
+        "colors": {
+          "pet-skin": "#ced9b1",
+          "pet-shell": "#94b293",
+          "pet-rim": "#e6dfb2",
+          "pet-belly": "#f0e3bb",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      },
+      {
+        "id": "turtle-7",
+        "label": "夜池",
+        "colors": {
+          "pet-skin": "#778b83",
+          "pet-shell": "#3f5557",
+          "pet-rim": "#a6aa86",
+          "pet-belly": "#c0bd94",
+          "pet-eyes": "#283d35",
+          "pet-mouth": "#546d4a"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pet_toy_ball",
+    "name": "宠物小球",
+    "surface": "floor",
+    "url": "pets/toy.glb",
+    "size": [
+      0.3400000035762787,
+      0.3400000035762787,
+      0.3400000035762787
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.17000000178813934,
+        0,
+        -0.17000000178813934,
+        0.17000000178813934,
+        0.3400000035762787,
+        0.17000000178813934
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "paintMaterials": [
+      "pet-supply"
+    ],
+    "petInteraction": "play"
+  },
+  {
+    "id": "pet_rest_mat",
+    "name": "宠物休息垫",
+    "surface": "rug",
+    "url": "pets/mat.glb",
+    "size": [
+      1.440000057220459,
+      0.04500000178813934,
+      1.440000057220459
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.7200000286102295,
+        0,
+        -0.7200000286102295,
+        0.7200000286102295,
+        0.04500000178813934,
+        0.7200000286102295
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "paintMaterials": [
+      "pet-supply"
+    ],
+    "petInteraction": "sleep"
+  },
+  {
+    "id": "pet_shark",
+    "revision": "20261003-round-head-shark",
+    "name": "抱抱小鲨鱼",
+    "surface": "floor",
+    "url": "pets/shark.glb",
+    "size": [
+      0.9200000762939453,
+      0.5942491888999939,
+      1.0111526250839233
+    ],
+    "default": [
+      0,
+      0.15,
+      0
+    ],
+    "boxes": [
+      [
+        -0.46000003814697266,
+        0,
+        -0.5055763125419617,
+        0.46000003814697266,
+        0.5942491888999939,
+        0.5055763125419617
+      ]
+    ],
+    "collection": "pets",
+    "category": "pets",
+    "petSpecies": "shark",
+    "paintMaterials": [
+      "pet-body"
+    ],
+    "colorParts": [
+      {
+        "material": "pet-body",
+        "label": "主体",
+        "color": "#6ba7bf"
+      },
+      {
+        "material": "pet-belly",
+        "label": "腹部",
+        "color": "#f4eddb"
+      },
+      {
+        "material": "pet-fins",
+        "label": "侧鳍",
+        "color": "#5689a6"
+      },
+      {
+        "material": "pet-eyes",
+        "label": "眼睛",
+        "color": "#243d49"
+      },
+      {
+        "material": "pet-mouth",
+        "label": "嘴巴",
+        "color": "#405b69"
+      }
+    ],
+    "colorPresets": [
+      {
+        "id": "shark-0",
+        "label": "海湾蓝",
+        "colors": {
+          "pet-body": "#6ba7bf",
+          "pet-belly": "#f4eddb",
+          "pet-fins": "#5689a6",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-1",
+        "label": "礁石灰",
+        "colors": {
+          "pet-body": "#8c9fa7",
+          "pet-belly": "#f3eee3",
+          "pet-fins": "#657985",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-2",
+        "label": "深海蓝",
+        "colors": {
+          "pet-body": "#43647e",
+          "pet-belly": "#cddbe0",
+          "pet-fins": "#2d485f",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-3",
+        "label": "奶油白",
+        "colors": {
+          "pet-body": "#e6dfcc",
+          "pet-belly": "#fff7e5",
+          "pet-fins": "#bdbcae",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-4",
+        "label": "薄荷海",
+        "colors": {
+          "pet-body": "#89b6aa",
+          "pet-belly": "#ecedda",
+          "pet-fins": "#62928b",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-5",
+        "label": "鲸鲨蓝",
+        "colors": {
+          "pet-body": "#587d96",
+          "pet-belly": "#dee7e5",
+          "pet-fins": "#405e76",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-6",
+        "label": "珊瑚粉",
+        "colors": {
+          "pet-body": "#d4a2ac",
+          "pet-belly": "#f7e8df",
+          "pet-fins": "#b48196",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
+      },
+      {
+        "id": "shark-7",
+        "label": "暮光紫",
+        "colors": {
+          "pet-body": "#aaa3c3",
+          "pet-belly": "#eee8f3",
+          "pet-fins": "#817a9f",
+          "pet-eyes": "#243d49",
+          "pet-mouth": "#405b69"
+        }
       }
     ]
   }

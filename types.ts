@@ -572,6 +572,8 @@ export interface ApiPreset {
 }
 
 export interface CharacterBuff {
+  homeBehavior?: {energy:number;approach:number;interaction:number};
+  homeBehaviorAt?: number;
   id: string;
   name: string;      // internal key, e.g. 'reconciliation_fragile'
   label: string;     // display text, e.g. '脆弱的和好'
@@ -785,6 +787,7 @@ export interface ScheduleSlot {
     description?: string; // "在河边慢跑"
     emoji?: string;       // "🏃"
     location?: string;    // "河边"
+    homePosition?: { kind: 'home'; roomId: string } | { kind: 'away' };
     innerThought?: string; // 该时段的内心独白，生成时由AI写好，运行时直接注入
     theater?: SlotTheater; // 该时段的小剧场（窥视演出），按需生成并缓存
 }
@@ -2363,6 +2366,11 @@ export interface ChibiStudioData {
     room?: ChibiStudioSlot;
     vr?: ChibiStudioSlot;
     like520?: ChibiStudioSlot;
+    home3D?: HomeFigureSlot;
+}
+
+export interface HomeFigureSlot extends ChibiStudioSlot {
+    hair: import('./apps/room3d/chibi/types').HairSettings;
 }
 
 // --- BANK / SHOP GAME TYPES (NEW) ---
@@ -2964,6 +2972,9 @@ export interface CharacterProfile {
 
   /** 模块化 3D 小屋，独立于原有 2D 房间；随完整备份保存。 */
   home3D?: import('./apps/room3d/types').Home3DState;
+  /** Local journal → shared message history migration marker. */
+  homeContextBridgeVersion?: 1 | 2;
+  homeDefinition?: import('./apps/room3d/homeDefinition').HomeDefinition;
   roomConfig?: {
       bgImage?: string;
       wallImage?: string;
@@ -3285,6 +3296,8 @@ export interface CharacterExportData extends Omit<CharacterProfile, 'id' | 'memo
 }
 
 export interface UserProfile {
+    wardrobeOutfits?: import('./apps/room3d/chibi/outfitLibrary').SavedOutfit[];
+    chibiStudio?: { home3D?: HomeFigureSlot };
     name: string;
     avatar: string;
     bio: string;

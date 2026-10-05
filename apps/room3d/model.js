@@ -1,3 +1,4 @@
+import {normalizePetLife} from './petState.js';
 import {furnitureGroup,dockCandidates,dockSlots,isDockChair,isDockTable} from './furnitureDock.js';
 import {validateFinishes} from './finishes.js';
 import {ROOM_HALF,ROOM_SIZE_VERSION,MAX_BUILDING_LENGTH,migrateRoomSize} from './dimensions.js';
@@ -82,6 +83,7 @@ export function validateHome(raw,catalog){
    try{const next=findPlace(catalog.find(a=>a.id===i.assetId),room,catalog,i.id);Object.assign(i,next,{color:i.color});}catch{i.stored=true;}
   }
  }
+ if(result.petLife)result.petLife=normalizePetLife(result.petLife,result,catalog);
  result.assetVersion=2;return result;
 }
 export const isWaterablePlant=a=>a?.surface==='floor'&&a.waterable===true;
