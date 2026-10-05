@@ -14,10 +14,12 @@ export async function embedBeautyCaptureImages(root: HTMLElement): Promise<void>
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 12000);
       let objectUrl = '';
+      let loaded = false;
       try {
         const response = await fetch(url.href, { signal: controller.signal, credentials: 'omit' });
         if (!response.ok) throw Error('图片下载失败');
         const blob = await response.blob();
+        loaded = true;
         objectUrl = URL.createObjectURL(blob);
         const image = new Image();
         image.src = objectUrl;
@@ -35,7 +37,12 @@ export async function embedBeautyCaptureImages(root: HTMLElement): Promise<void>
         context.drawImage(image, 0, 0);
         return canvas.toDataURL('image/png');
       } catch {
-        throw Error('封面图片加载失败，可能是图床跨域限制或网络问题。请更换可跨域访问的图片，或稍后重试；不会提交缺图封面。');
+        const reason = loaded
+          ? '封面图片解码或绘制失败，请检查图片格式和尺寸后重试'
+          : url.protocol === 'http:' || url.protocol === 'https:'
+            ? `封面图片加载失败（${url.host}），可能是图床跨域限制或网络问题。请更换可跨域访问的图片，或稍后重试`
+            : '封面本地图片读取失败，请重新打开预览后重试；若仍失败，请重新导入这张图片';
+        throw Error(`${reason}；不会提交缺图封面。`);
       } finally {
         clearTimeout(timer);
         if (objectUrl) URL.revokeObjectURL(objectUrl);

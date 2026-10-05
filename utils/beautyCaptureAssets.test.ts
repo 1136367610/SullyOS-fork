@@ -34,3 +34,19 @@ it('keeps local SVG fragment references and does not fetch unused CSS variables'
  await embedBeautyCaptureImages(root);expect(fetchMock).not.toHaveBeenCalled();expect(root.style.filter).toContain('#shadow');
 });
 
+it('distinguishes local read failures from external image download failures',async()=>{
+ imageMocks();vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+ const root=document.createElement('div');root.style.backgroundImage='url("blob:https://example.com/frame")';
+ await expect(embedBeautyCaptureImages(root)).rejects.toThrow('本地图片读取失败');
+ root.style.backgroundImage='url("https://images.example/frame.png?private=secret")';
+ await expect(embedBeautyCaptureImages(root)).rejects.toThrow('封面图片加载失败（images.example）');
+});
+
+it('does not mislabel decoding failures as cross-origin network failures and releases the image',async()=>{
+ imageMocks();vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,blob:async()=>new Blob(['broken'])}));
+ vi.mocked(HTMLImageElement.prototype.decode).mockRejectedValue(new Error('Invalid image'));
+ const root=document.createElement('div');root.style.backgroundImage='url("data:image/png;base64,YnJva2Vu")';
+ await expect(embedBeautyCaptureImages(root)).rejects.toThrow('解码或绘制失败');
+ expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+});
+
