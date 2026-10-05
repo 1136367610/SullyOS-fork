@@ -58,6 +58,20 @@ it('keeps CSS local through save, apply and editable snapshots; portable exports
     await deleteLibraryDecoration(id);
 });
 
+it('resolves frame images after escaped generated selectors in the preview stylesheet', async () => {
+    const prefix = String.raw`.before\:content-\[\'\'\]::before{content:''}.escaped\"quote{color:red}`;
+    const local = await localizeCssImages(prefix + css);
+    expect(local).not.toContain('base64');
+    const create = vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:frame');
+    vi.spyOn(URL,'revokeObjectURL').mockImplementation(() => {});
+    const resolved = await resolveCssImageUrls(local);
+    expect(resolved.css).toContain(prefix);
+    expect(resolved.css).not.toContain('blobref:');
+    expect(create).toHaveBeenCalledTimes(1);
+    resolved.dispose();
+    expect(await portableCssImages(local)).toBe(prefix + css);
+});
+
 it('backs up CSS references and protects images still used by a character after deleting the preset', async () => {
     const token = 'blobref:img_css_backup';
     await restoreBlobRef(token,dataUrlToBlob(image));

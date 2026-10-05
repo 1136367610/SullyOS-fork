@@ -13,7 +13,11 @@ function urls(css: string): Array<{start: number; end: number; value: string}> {
         return css.length;
     };
     for (let i = 0; i < css.length; i++) {
-        if (css[i] === '/' && css[i + 1] === '*') {
+        // Escaped punctuation in generated selectors (e.g. content-\[\'\'\])
+        // is not the start of a string/comment. Losing quote alignment here
+        // would skip later image URLs in the combined preview stylesheet.
+        if (css[i] === '\\') i++;
+        else if (css[i] === '/' && css[i + 1] === '*') {
             const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 1;
         } else if (css[i] === '"' || css[i] === "'") i = quotedEnd(i);
         else if (css.slice(i, i + 4).toLowerCase() === 'url(' && (i === 0 || !/[\w-]/.test(css[i - 1]))) {
