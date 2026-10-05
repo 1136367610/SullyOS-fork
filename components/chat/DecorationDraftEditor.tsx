@@ -66,7 +66,7 @@ export default function DecorationDraftEditor({outfits=[],onOutfitsChange,preset
  const choose=async(entry:WardrobeEntry)=>{if(!shelf)return;setBusy(true);setError('');try{
    const nextOrigin=await readDecorationOrigin(await entry.attributionKey());
    if(!canEditDecoration(nextOrigin))throw Error('作者禁止二改，请回到装扮库整套应用这份作品。');
-   const next=validateDecoration(await entry.read());
+   const next=validateDecoration(await (entry.readLocal || entry.read)());
    if(shelf==='whitebox'){setDraft(old=>({...old,parts:{...old.parts,...next.parts}}));}
    else if(shelf==='avatar'){
     const css=workshopCss(next,'avatar');
@@ -83,7 +83,7 @@ export default function DecorationDraftEditor({outfits=[],onOutfitsChange,preset
  }catch(e){setError(e instanceof Error?e.message:'无法读取预设');}finally{setBusy(false);}};
  const matches=sources.filter(entry=>entry.kind==='chat-decoration'&&(!shelf||entry.categories?.includes(shelf))&&entry.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
  const pageCount=Math.max(1,Math.ceil(matches.length/8));const currentPage=Math.min(page,pageCount-1);
- const loadOutfit=async(entry:WardrobeEntry)=>{setBusy(true);setError('');try{const nextOrigin=await readDecorationOrigin(await entry.attributionKey());if(!canEditDecoration(nextOrigin))throw Error('作者禁止二改');const next=validateDecoration(await entry.read());setDraft(next);setExtraCss('');setOrigins(Object.fromEntries(Object.keys(next.parts).map(key=>[key,nextOrigin])));setLabels({});setSideOpen(false);setOutfitOpen(false);setNotice('已载入搭配，点击应用搭配后才会更改角色。');}catch(e){setError(e instanceof Error?e.message:'读取失败');}finally{setBusy(false);}};
+ const loadOutfit=async(entry:WardrobeEntry)=>{setBusy(true);setError('');try{const nextOrigin=await readDecorationOrigin(await entry.attributionKey());if(!canEditDecoration(nextOrigin))throw Error('作者禁止二改');const next=validateDecoration(await (entry.readLocal || entry.read)());setDraft(next);setExtraCss('');setOrigins(Object.fromEntries(Object.keys(next.parts).map(key=>[key,nextOrigin])));setLabels({});setSideOpen(false);setOutfitOpen(false);setNotice('已载入搭配，点击应用搭配后才会更改角色。');}catch(e){setError(e instanceof Error?e.message:'读取失败');}finally{setBusy(false);}};
  return createPortal(<div data-dress-guide={!maker?'outfit':undefined} className={`decoration-draft ${maker?'decoration-maker':'decoration-current'}`} role="dialog" aria-modal="true" aria-label={maker?`${shelves.find(([id])=>id===maker)?.[1]}制作器`:'我的搭配'}>
   <header><button data-dress-guide={!maker?'outfit-back':undefined} disabled={busy} onClick={onClose}>‹ 返回</button><strong>{maker?`${shelves.find(([id])=>id===maker)?.[1]}制作器`:'我的搭配'}</strong><button disabled={busy||locked} onClick={()=>save(!maker)}>{busy?'保存中…':maker?'保存预设':'应用搭配'}</button></header>
   <div className="decoration-composer-body"><div className="decoration-composer-preview">

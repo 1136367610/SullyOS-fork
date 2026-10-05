@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {UPLOADED_AVATAR_FRAME_STYLE, uploadedAvatarFrameCss} from '../../utils/avatarFrameUpload';
-import {blobToDataUrl} from '../../utils/blobRef';
+import {putImageBlobDeduped} from '../../utils/blobRef';
 
 export default function AvatarFrameImageEditor({css, disabled, onChange, onBusy, onError}: {
     css: string; disabled: boolean; onChange: (css: string) => void;
@@ -16,23 +16,25 @@ export default function AvatarFrameImageEditor({css, disabled, onChange, onBusy,
             const file = event.target.files?.[0]; event.target.value = '';
             if (!file) return;
             onBusy(true); onError('');
+            let temporaryUrl: string | undefined;
             try {
                 if (file.size > 12 * 1024 * 1024) throw Error('请选择 12 MB 以内的图片');
                 if (!file.type.startsWith('image/')) throw Error('请上传图片文件');
                 // Preserve transparency and animation (including WebP/APNG).
-                // Large embedded data is folded only in the code editor, not rewritten.
-                const image = await blobToDataUrl(file);
+                temporaryUrl = URL.createObjectURL(file);
                 const img = new Image();
                 await new Promise<void>((resolve, reject) => {
-                    img.onload = () => resolve(); img.onerror = () => reject(Error('头像框图片读取失败')); img.src = image;
+                    img.onload = () => resolve(); img.onerror = () => reject(Error('头像框图片读取失败')); img.src = temporaryUrl!;
                 });
+                if (!alive.current) return;
+                const {token: image} = await putImageBlobDeduped(file);
                 if (!alive.current) return;
                 const next = {image, width: img.naturalWidth, height: img.naturalHeight};
                 setFrame(next); setFit({...UPLOADED_AVATAR_FRAME_STYLE});
                 onChange(uploadedAvatarFrameCss(image, next.width, next.height));
             } catch (error) {
                 if (alive.current) onError(error instanceof Error ? error.message : '图片读取失败');
-            } finally { if (alive.current) onBusy(false); }
+            } finally { if (temporaryUrl) URL.revokeObjectURL(temporaryUrl); if (alive.current) onBusy(false); }
         }}/></label>
         {adjustable && <fieldset disabled={disabled}><legend>头像框位置与大小</legend>
             {([

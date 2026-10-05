@@ -3,6 +3,7 @@ import { stopInstantChat } from '../utils/amsgInstantChat';
 import {resolvePsycheAppearance} from '../utils/psycheAppearance';
 import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
+import BlobRefStyle from '../components/chat/BlobRefStyle';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useOS } from '../context/OSContext';
@@ -3553,8 +3554,8 @@ const Chat: React.FC = () => {
                  守护样式统一放在气泡主题 customCss 之后（见下），保证对所有用户 CSS 都能兜底。 */}
              {/* 心象卡片自定义 CSS（per-character）：作用于 .sully-psyche-* 各零件，编辑入口在个性装扮 / 聊天装扮的心象分栏 */}
              {resolvePsycheAppearance(osTheme, char).customCss && <style>{resolvePsycheAppearance(osTheme, char).customCss}</style>}
-             {osTheme.chatChromeCustomCss && <style>{osTheme.chatChromeCustomCss}</style>}
-             {char.chromeCustomCss && <style>{char.chromeCustomCss}</style>}
+             {osTheme.chatChromeCustomCss && <BlobRefStyle css={osTheme.chatChromeCustomCss}/>}
+             {char.chromeCustomCss && <BlobRefStyle css={char.chromeCustomCss}/>}
              {scheduleChangeNotice && (
                <ScheduleChangeNotice
                  key={scheduleChangeNotice.eventId}
