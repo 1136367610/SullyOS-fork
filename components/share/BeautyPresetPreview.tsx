@@ -1,3 +1,4 @@
+import {resolveCssImageUrls} from '../../utils/cssImageAssets';
 import {decorationPreviewScenes,decorationThumbnailPart,type DecorationThumbnailPart} from '../../utils/decorationPreviewScenes';
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {embedBeautyCaptureImages} from '../../utils/beautyCaptureAssets';
@@ -63,7 +64,7 @@ export default memo(forwardRef<BeautyPreviewHandle, Props>(function BeautyPreset
   useEffect(() => {
     if(!visible)return;
     setReady(false); setError('');
-    let alive = true;let cleanup:undefined|(()=>void);
+    let alive = true;let cleanup:undefined|(()=>void);let releaseImages:undefined|(()=>void);
     const build = async () => { try {
       const sample = isChat
         ? await import('../chat/ChatDecorationSample').then(module=>alive?module.renderChatDecorationSample(data,sceneId,part,liveState):null)
@@ -78,6 +79,9 @@ export default memo(forwardRef<BeautyPreviewHandle, Props>(function BeautyPreset
       // Only text CSS and our own escaped sample markup cross this boundary, never scripts.
       shadow.adoptedStyleSheets=[];
       style.textContent = sample ? sample.css+'\n*{animation:none!important;transition:none!important;pointer-events:none!important}.sample-messages,.no-scrollbar{pointer-events:auto!important}'+(!compact?'[data-preview-action],[data-preview-action] *,[data-preview-backdrop],.sully-chat-transfer-dialog{pointer-events:auto!important}[data-preview-action]:focus-visible{outline:2px solid #8a72ad!important;outline-offset:2px}':'') : (parsed.querySelector('style')?.textContent || '').replace('html,body{', '.beauty-preview-body{').replace('body{background:', '.beauty-preview-body{background:');
+      const images = await resolveCssImageUrls(style.textContent || '');
+      if (!alive) {images.dispose(); return;}
+      releaseImages = images.dispose; style.textContent = images.css;
       const body = document.createElement('div'); body.className = 'beauty-preview-body';
       for (const child of Array.from(parsed.body.children)) body.append(child.cloneNode(true));
       shadow.replaceChildren(style, body);
@@ -89,10 +93,10 @@ export default memo(forwardRef<BeautyPreviewHandle, Props>(function BeautyPreset
       // Preset :host selectors cannot resize, position or expose the host outside its clip.
       for (const [key, value] of Object.entries({ width: '360px', height: `${height}px`, display: 'block', position: 'relative', overflow: 'hidden', contain: 'strict', 'pointer-events': compact ? 'none' : 'auto' })) host.current.style.setProperty(key, value, 'important');
       setReady(true);
-    } catch (e) { if(alive)setError(e instanceof Error ? e.message : '预览失败'); } };
+    } catch (e) { releaseImages?.(); if(alive)setError(e instanceof Error ? e.message : '预览失败'); } };
     const cancel=compact?enqueuePreviewBuild(build):undefined;
     if(!compact)void build();
-    return () => {alive=false;cancel?.();cleanup?.();};
+    return () => {alive=false;cancel?.();cleanup?.();releaseImages?.();};
   }, [data,sceneId,isChat,compact,part,height,liveState,desktopPage,visible]);
   useEffect(() => {
     if (!container.current) return;

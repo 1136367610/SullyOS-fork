@@ -19,11 +19,11 @@ let root: Root;
 const onPanelAction = vi.fn();
 const categories = [{ id: 'a', name: '分组 A' }, { id: 'b', name: '分组 B' }];
 
-function Panel({ emojis }: { emojis: Emoji[] }) {
+function Panel({ emojis, showPanel = 'emojis' }: { emojis: Emoji[]; showPanel?: 'emojis'|'none'|'actions' }) {
     const [activeCategory, setActiveCategory] = useState('a');
     return createElement(ChatInputArea, {
         input: '', setInput: () => {}, isTyping: false, selectionMode: false,
-        showPanel: 'emojis', setShowPanel: () => {}, onSend: () => {},
+        showPanel, setShowPanel: () => {}, onSend: () => {},
         onDeleteSelected: () => {}, selectedCount: 0,
         emojis: emojis.filter(e => e.categoryId === activeCategory), categories, activeCategory,
         onPanelAction: (action, payload) => {
@@ -63,6 +63,27 @@ afterEach(() => {
 });
 
 describe('表情面板的记录身份与图片复用', () => {
+    it('首次打开才加载，关闭再打开或切加号不重建图片，退出聊天仍释放引用', async () => {
+        const ref = await putImageBlob(dataUrlToBlob(PNG));
+        const emojis = [{name: '缓存', url: ref, categoryId: 'a'}];
+        const show = async (showPanel: 'none'|'emojis'|'actions') => {
+            await act(async () => { root.render(createElement(Panel, {emojis, showPanel})); });
+        };
+        await show('none'); expect(thumbnails()).toHaveLength(0);
+        await show('emojis');
+        await act(async () => { await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalled()); });
+        const first = thumbnails()[0]; const src = first.src;
+        const calls = createObjectURL.mock.calls.length;
+        for (const state of ['none','actions','emojis','none','emojis'] as const) {
+            await show(state);
+            expect(thumbnails()[0]).toBe(first);
+            expect(first.src).toBe(src);
+            expect(container.querySelector<HTMLElement>('[data-testid="emoji-panel"]')!.style.display).toBe(state === 'emojis' ? 'flex' : 'none');
+        }
+        expect(createObjectURL).toHaveBeenCalledTimes(calls);
+        await act(async () => root.render(null));
+        expect(revokeObjectURL).toHaveBeenCalledWith(src);
+    });
     it('共用图片令牌的表情反复切分组、重新读取后，都不残留或复制旧格子', async () => {
         const sharedRef = await putImageBlob(dataUrlToBlob(PNG));
         const emojis: Emoji[] = [
