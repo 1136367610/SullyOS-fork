@@ -160,6 +160,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     const [selectedEmojis, setSelectedEmojis] = useState<Emoji[]>([]);
     // 手动分页避免旧版/第三方 WebView 不触发 IntersectionObserver，永远卡在「加载中」。
     const [emojiPage, setEmojiPage] = useState(0);
+    const [emojiPanelVisited, setEmojiPanelVisited] = useState(showPanel === 'emojis');
+    useEffect(() => {
+        if (showPanel === 'emojis') setEmojiPanelVisited(true);
+    }, [showPanel]);
     const emojiPageCount = Math.max(1, Math.ceil(emojis.length / EMOJI_PAGE_SIZE));
     const emojiPageStart = emojiPage * EMOJI_PAGE_SIZE;
     const visibleEmojis = emojis.slice(emojiPageStart, emojiPageStart + EMOJI_PAGE_SIZE);
@@ -772,8 +776,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                 >
 
                     {/* Emojis Panel with Categories */}
-                    {showPanel === 'emojis' && (
-                        <>
+                    {(emojiPanelVisited || showPanel === 'emojis') && (
+                        <div data-testid="emoji-panel" style={{ display: showPanel === 'emojis' ? 'flex' : 'none' }} className="flex-col min-h-0 flex-1">
                             {/* Categories Bar */}
                             <div className={`sully-chat-emoji-categories relative flex shrink-0 ${panelTopBarSurfaceClass}`} style={{ backgroundColor: 'inherit' }}>
                                 {/* touch-action: pan-x —— 显式告诉浏览器"从分组 chip 上起手的触摸就是横向滚动"，
@@ -918,7 +922,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                                     </div>
                                 )}
                             </div>
-                        </>
+                        </div>
                     )}
 
                     {/* Actions Panel：外部提供 actionsContent 时整体替换内置双页网格 */}

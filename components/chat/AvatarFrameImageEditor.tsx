@@ -1,0 +1,51 @@
+import React, {useEffect, useRef, useState} from 'react';
+import {UPLOADED_AVATAR_FRAME_STYLE, uploadedAvatarFrameCss} from '../../utils/avatarFrameUpload';
+import {blobToDataUrl} from '../../utils/blobRef';
+
+export default function AvatarFrameImageEditor({css, disabled, onChange, onBusy, onError}: {
+    css: string; disabled: boolean; onChange: (css: string) => void;
+    onBusy: (busy: boolean) => void; onError: (error: string) => void;
+}) {
+    const [frame, setFrame] = useState<{image: string; width: number; height: number} | null>(null);
+    const [fit, setFit] = useState({...UPLOADED_AVATAR_FRAME_STYLE});
+    const alive = useRef(true);
+    useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+    const adjustable = frame && css === uploadedAvatarFrameCss(frame.image, frame.width, frame.height, fit);
+    return <>
+        <label>选择透明头像框图片<input type="file" accept="image/*" disabled={disabled} onChange={async event => {
+            const file = event.target.files?.[0]; event.target.value = '';
+            if (!file) return;
+            onBusy(true); onError('');
+            try {
+                if (file.size > 12 * 1024 * 1024) throw Error('请选择 12 MB 以内的图片');
+                if (!file.type.startsWith('image/')) throw Error('请上传图片文件');
+                // Preserve transparency and animation (including WebP/APNG).
+                // Large embedded data is folded only in the code editor, not rewritten.
+                const image = await blobToDataUrl(file);
+                const img = new Image();
+                await new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve(); img.onerror = () => reject(Error('头像框图片读取失败')); img.src = image;
+                });
+                if (!alive.current) return;
+                const next = {image, width: img.naturalWidth, height: img.naturalHeight};
+                setFrame(next); setFit({...UPLOADED_AVATAR_FRAME_STYLE});
+                onChange(uploadedAvatarFrameCss(image, next.width, next.height));
+            } catch (error) {
+                if (alive.current) onError(error instanceof Error ? error.message : '图片读取失败');
+            } finally { if (alive.current) onBusy(false); }
+        }}/></label>
+        {adjustable && <fieldset disabled={disabled}><legend>头像框位置与大小</legend>
+            {([
+                ['avatarDecorationX', '左右位置', 0, 100, 0.1],
+                ['avatarDecorationY', '上下位置', 0, 100, 0.1],
+                ['avatarDecorationScale', '缩放', 0.5, 3, 0.01],
+                ['avatarDecorationRotate', '旋转', -180, 180, 1],
+            ] as const).map(([key, label, min, max, step]) => <label key={key}>{label}：{fit[key]}
+                <input aria-label={label} type="range" min={min} max={max} step={step} value={fit[key]} onChange={event => {
+                    const next = {...fit, [key]: Number(event.target.value)}; setFit(next);
+                    onChange(uploadedAvatarFrameCss(frame.image, frame.width, frame.height, next));
+                }}/>
+            </label>)}
+        </fieldset>}
+    </>;
+}

@@ -1452,10 +1452,10 @@ ${memberTimeline || '(暂无互动记录)'}
                 });
             }
 
-            // 两层容错解析（严格 JSON → 逐对象抢救），两层皆空且模型确实吐了内容
+            // 严格 JSON → 逐对象抢救 → 按当前群成员姓名恢复掉格式的正文。
             // 时明确提示用户，不再"正在输入…"消失后什么都不发生
             const rawContent = data.choices?.[0]?.message?.content ?? '';
-            const actions = parseDirectorActions(rawContent);
+            const actions = parseDirectorActions(rawContent, groupMembers);
             if (actions.length === 0 && String(rawContent).trim()) {
                 console.error('Director Parse Error', rawContent);
                 addToast('AI 输出格式无法解析，请重试', 'error');
