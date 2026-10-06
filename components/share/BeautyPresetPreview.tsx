@@ -2,6 +2,7 @@ import {resolveCssImageUrls} from '../../utils/cssImageAssets';
 import {decorationPreviewScenes,decorationThumbnailPart,type DecorationThumbnailPart} from '../../utils/decorationPreviewScenes';
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {embedBeautyCaptureImages} from '../../utils/beautyCaptureAssets';
+import {renderIsolatedBeautyCapture, waitForBeautyCapture, waitForBeautyCaptureFonts} from '../../utils/beautyCaptureWait';
 import {enqueuePreviewBuild} from '../../utils/previewRenderQueue';
 import { beautyPreviewDocument, PREVIEW_WIDTH, PREVIEW_HEIGHT } from '../../utils/beautyPreview';
 import {bindDecorationPreview,type DecorationPreviewState} from '../../utils/decorationPreviewInteraction';
@@ -38,6 +39,8 @@ function copyPaint(element: Element, scrolls: Array<[HTMLElement,number,number]>
 export default memo(forwardRef<BeautyPreviewHandle, Props>(function BeautyPresetPreview({ data, compact = false, sceneScope = 'preset', thumbnailPart }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
+  const activeCapture = useRef<AbortController|null>(null);
+  useEffect(() => () => activeCapture.current?.abort(), []);
   const [width, setWidth] = useState(PREVIEW_WIDTH);
   const [desktopPage, setDesktopPage] = useState(0);
   const [desktopPages, setDesktopPages] = useState(1);
@@ -107,25 +110,24 @@ export default memo(forwardRef<BeautyPreviewHandle, Props>(function BeautyPreset
     capture: async () => {
       const element = host.current;
       if (!ready || !element?.shadowRoot) throw Error('预览尚未加载完成，请稍后再试');
-      await document.fonts.ready;
-      const { default: html2canvas } = await import('html2canvas');
       const body = element.shadowRoot.querySelector<HTMLElement>('.beauty-preview-body');
       if (!body) throw Error('预览内容尚未就绪');
-      const scrolls:Array<[HTMLElement,number,number]>=[];
-      const snapshot = copyPaint(body,scrolls);
-      const holder = document.createElement('div');
-      holder.style.cssText = `position:fixed;left:-10000px;top:0;width:360px;height:${height}px;overflow:hidden;pointer-events:none;contain:strict`;
-      holder.append(snapshot); document.body.append(holder);
-      for(const [element,top,left] of scrolls){element.scrollTop=top;element.scrollLeft=left;}
+      activeCapture.current?.abort();
+      const controller = new AbortController(); activeCapture.current = controller;
+      let stage = '预览字体加载';
+      const timeout = window.setTimeout(() => controller.abort(Error(`${stage}超时，请检查网络后重试；不会提交未完成的封面。`)), 30000);
       try {
-        await embedBeautyCaptureImages(snapshot);
-        // html2canvas flattens Shadow DOM into its clone. Exclude all original previews
-        // so untrusted selectors cannot see the rest of the app in that temporary clone.
-        // The foreignObject painter serializes the element at a one-pixel inset.
-        // Cancel the temporary holder's off-screen coordinates without clipping it.
-        const bounds = snapshot.getBoundingClientRect();
-        return await html2canvas(snapshot, { x: 1 - bounds.left, y: 1 - bounds.top, scale: 2, width: PREVIEW_WIDTH, height, backgroundColor: null, foreignObjectRendering: true, useCORS: true, imageTimeout: 8000, logging: false, ignoreElements: node => node.hasAttribute('data-beauty-preview-source') });
-      } finally { holder.remove(); }
+        await waitForBeautyCaptureFonts(body, controller.signal);
+        const scrolls:Array<[HTMLElement,number,number]>=[];
+        const snapshot = copyPaint(body,scrolls);
+        stage = '封面图片加载';
+        await waitForBeautyCapture(embedBeautyCaptureImages(snapshot, controller.signal), controller.signal);
+        stage = '封面绘制';
+        return await renderIsolatedBeautyCapture(snapshot, PREVIEW_WIDTH, height, controller.signal, scrolls);
+      } finally {
+        clearTimeout(timeout);
+        if (activeCapture.current === controller) activeCapture.current = null;
+      }
     },
   }), [ready,height]);
   return <div className="beauty-preset-preview" data-thumbnail-part={part} ref={container}>
