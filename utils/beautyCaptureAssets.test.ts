@@ -56,3 +56,15 @@ it('does not mislabel decoding failures as cross-origin network failures and rel
  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
 });
 
+it('aborts an in-flight download on the overall capture deadline and stops before later images',async()=>{
+ imageMocks();const fetchMock=vi.fn().mockReturnValue(new Promise(()=>{}));vi.stubGlobal('fetch',fetchMock);
+ const root=document.createElement('div');root.innerHTML='<img src="https://images.example/first.png"><img src="https://images.example/second.png">';
+ const controller=new AbortController();
+ const pending=embedBeautyCaptureImages(root,controller.signal);
+ const rejected=expect(pending).rejects.toThrow('封面图片加载超时');
+ controller.abort(Error('封面图片加载超时'));
+ await rejected;
+ expect(fetchMock).toHaveBeenCalledTimes(1);
+ expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+});
+
