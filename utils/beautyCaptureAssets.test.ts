@@ -34,6 +34,12 @@ it('keeps local SVG fragment references and does not fetch unused CSS variables'
  await embedBeautyCaptureImages(root);expect(fetchMock).not.toHaveBeenCalled();expect(root.style.filter).toContain('#shadow');
 });
 
+it('reports a missing image path as HTTP 404 instead of blaming CORS',async()=>{
+ imageMocks();vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,status:404}));
+ const root=document.createElement('div');root.innerHTML='<img src="https://qegj567-cloud.github.io/sully/head.png">';
+ await expect(embedBeautyCaptureImages(root)).rejects.toThrow('图片地址不存在（qegj567-cloud.github.io，HTTP 404）');
+});
+
 it('distinguishes local read failures from external image download failures',async()=>{
  imageMocks();vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
  const root=document.createElement('div');root.style.backgroundImage='url("blob:https://example.com/frame")';
