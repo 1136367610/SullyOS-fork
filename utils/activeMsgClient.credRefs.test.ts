@@ -143,6 +143,7 @@ describe('排程任务的凭据', () => {
 
     expect(putRows()).toEqual([{
       credId: `char:${CHAR_ID}/chat`,
+      owner: { type: 'character', id: CHAR_ID }, ownerGeneration: 0,
       value: {
         apiUrl: 'https://api.example.dev/v1/chat/completions',
         apiKey: 'sk-global',
@@ -333,6 +334,7 @@ describe('即时对话的凭据与情绪评估', () => {
     const credBody = capturedPayloads.find((p) => p && 'credentials' in p);
     expect(credBody.credentials).toEqual([{
       credId: `char:${CHAR_ID}/instant`,
+      owner: { type: 'character', id: CHAR_ID }, ownerGeneration: 0,
       value: {
         apiUrl: 'https://api.example.dev/v1/chat/completions',
         apiKey: 'sk-global',

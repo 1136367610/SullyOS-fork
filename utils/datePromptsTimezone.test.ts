@@ -40,7 +40,7 @@ const peekText = async (char: CharacterProfile): Promise<string> => {
 describe('见面 Peek 注入的当前时间跟随角色时区', () => {
     it('角色在纽约时写的是纽约的 09:00，不是被多减一个时差的 07-25 21:00', async () => {
         process.env.TZ = 'Asia/Shanghai';
-        vi.useFakeTimers();
+        vi.useFakeTimers({toFake:['Date']});
         vi.setSystemTime(INSTANT);
 
         const text = (await peekText(makeChar({
@@ -54,7 +54,7 @@ describe('见面 Peek 注入的当前时间跟随角色时区', () => {
 
     it('日期与星期必须自洽（旧实现里 07-25 会配上周日）', async () => {
         process.env.TZ = 'Asia/Shanghai';
-        vi.useFakeTimers();
+        vi.useFakeTimers({toFake:['Date']});
         vi.setSystemTime(INSTANT);
 
         const text = (await peekText(makeChar({
@@ -73,7 +73,7 @@ describe('见面 Peek 注入的当前时间跟随角色时区', () => {
 
     it('没开自定义时区的角色仍写设备时间', async () => {
         process.env.TZ = 'Asia/Shanghai';
-        vi.useFakeTimers();
+        vi.useFakeTimers({toFake:['Date']});
         vi.setSystemTime(INSTANT);
 
         expect((await peekText(makeChar({})))).toContain('当前时间: 2026-07-26 21:00 周日');

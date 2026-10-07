@@ -1,7 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {generateHomeReply} from './homeConversation';
 import {evaluateHomeReplyEmotion} from './homeReplyEmotion';
-vi.mock('./chatRequestPayload',()=>({buildChatRequestPayload:vi.fn(async()=>({fullMessages:[{role:'user',content:'你好'}]}))}));
+vi.mock('./chatRequestPayload',()=>({buildChatRequestPayload:vi.fn(async()=>({flags:{promptBuildSkipped:false},fullMessages:[{role:'user',content:'你好'}]}))}));
 vi.mock('./chatContextRange',()=>({loadCharacterContextRange:vi.fn(async()=>({messages:[],hwm:0}))}));
 vi.mock('./homeReplyEmotion',()=>({evaluateHomeReplyEmotion:vi.fn(async()=>{})}));
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});

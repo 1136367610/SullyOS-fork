@@ -70,7 +70,7 @@ describe('用户所在地节假日', () => {
     });
     it('前后台均尊重时间感知关闭，后台不使用角色时区计算用户假期', async () => {
         const cfg = { ...defaultRealtimeConfig, feishuEnabled: false, feishuAppId: '', feishuAppSecret: '', feishuBaseId: '', feishuTableId: '', xhsEnabled: false, userHolidays: china };
-        vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-24T17:00Z'));
+        vi.useFakeTimers({toFake:['Date']}); vi.setSystemTime(new Date('2026-09-24T17:00Z'));
         expect(await RealtimeContextManager.buildFullContext(cfg, 'America/New_York', { includeTime: false })).toBe('');
         const args = { toolConfig: { ...buildToolConfig(cfg), userHolidays: china }, nowMs: Date.now(), tzId: 'America/New_York', globalRows: [], globalNamespace: 'amsg:global', timeAwarenessEnabled: true };
         const text = await buildUserHolidayBlock(args);
@@ -81,7 +81,7 @@ describe('用户所在地节假日', () => {
         expect(await buildUserHolidayBlock({ ...args, nowMs: Date.parse('2026-09-28T04:00Z') })).toBe('');
     });
     it('共用用户信息区包含实际用户名；关闭、普通日、见面架空模式不注入', async () => {
-        vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 26, 12));
+        vi.useFakeTimers({toFake:['Date']}); vi.setSystemTime(new Date(2026, 8, 26, 12));
         localStorage.setItem('os_realtime_config', JSON.stringify({ userHolidays: china }));
         const char = { id: 'test', name: 'Sully', timeAwarenessEnabled: true } as any;
         const user = { name: '小桃', bio: '测试用户简介' } as any;

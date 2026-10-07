@@ -1054,7 +1054,7 @@ ${isInitialGeneration ? `
       }
   };
 
-  // 真正执行删除。名下有 amsg2 任务的角色 deleteCharacter 会先 await 云端清理，
+  // 真正执行删除。新版 Worker 先停用云端归属，清理操作受理后才放行本地删除，
   // 清不掉返回 cloud-cleanup-failed 且本地未删 → 转进「重试 / 仍然删除」弹窗；
   // force=true 是用户在那个弹窗里选了「仍然删除」，放行本地删除。
   const runDeleteCharacter = async (targetId: string, force = false) => {
@@ -1068,7 +1068,7 @@ ${isInitialGeneration ? `
           }
           setDeleteConfirmTarget(null);
           setCloudCleanupFailTarget(null);
-          addToast('连接已断开', 'success');
+          addToast(result.cloudUnconfirmed ? '本地角色已删除，云端清理未确认，请到设置里的云端数据管理重试。' : result.cloudPending ? '角色已删除，云端清理已受理，可在设置里查看进度。' : '连接已断开', result.cloudUnconfirmed ? 'error' : 'success');
       } finally {
           setIsDeleting(false);
       }
@@ -2145,7 +2145,7 @@ ${isInitialGeneration ? `
             在这里给出重试或强行放行的选择。 */}
         <Modal
             isOpen={!!cloudCleanupFailTarget}
-            title="云端还有任务没清掉"
+            title="云端清理尚未确认"
             onClose={() => setCloudCleanupFailTarget(null)}
             footer={<div className="flex gap-2 w-full">
                 <button
@@ -2161,9 +2161,9 @@ ${isInitialGeneration ? `
             </div>}
         >
             <p className="text-sm text-slate-600 leading-relaxed py-2">
-                ta 名下还有主动消息 2.0 任务没能在云端取消（可能是断网或 Worker 没响应），角色暂时没有删除。<br/>
+                ta 的云端数据还没能确认清理（可能是断网或 Worker 没响应），本地角色暂时没有删除。<br/>
                 <span className="text-xs text-red-400 font-bold">选「仍然删除」的话，残留的任务之后可能仍会到点推送</span>
-                <span className="text-xs text-slate-400">——届时可去设置里「清除云端状态」兜底。</span>
+                <span className="text-xs text-slate-400">——可以去设置 → 主动消息 2.0 → 云端数据管理继续检查。</span>
             </p>
         </Modal>
     </div>

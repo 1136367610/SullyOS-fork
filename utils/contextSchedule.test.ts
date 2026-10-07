@@ -7,7 +7,7 @@ import {buildHomeConversationPrompt} from './homeConversation';
 const char:any={id:'c',name:'C',scheduleFeatureEnabled:true,customTimezoneEnabled:true,customTimezone:'America/New_York'};
 const user:any={name:'U'};
 const schedule={slots:[{startTime:'00:00',activity:'夜间安排'},{startTime:'09:00',activity:'日程标记画画'},{startTime:'22:00',activity:'晚间安排'}]};
-beforeEach(()=>{m.load.mockReset().mockResolvedValue(schedule);vi.useFakeTimers();vi.setSystemTime(new Date('2026-07-26T13:30:00Z'));});
+beforeEach(()=>{m.load.mockReset().mockResolvedValue(schedule);vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-07-26T13:30:00Z'));});
 afterEach(()=>vi.useRealTimers());
 it('default core includes current and full-day schedule even with false; changes are read each request',async()=>{
  let core=await ContextBuilder.buildCoreContext(char,user,false);

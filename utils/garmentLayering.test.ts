@@ -173,7 +173,7 @@ describe('shipped wardrobe layering integration',()=>{
    return new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
   });
   const body=new T.Mesh(createBlankBody('skin'),new T.MeshStandardMaterial()),hair=new T.Group(),root=new T.Group();root.add(body,hair);const rig=bindBlankBody(body,hair,true);
-  const items={top:'sailor-long',outer:'slouch-cardigan'},base=await dressApprovedWardrobe(rig,items);
+  const items={top:'sailor-long',outer:'slouch-cardigan'},base=await dressApprovedWardrobe(rig,items,{}, {},false);
   const inner=base.meshes.filter(m=>m.userData.garmentId===items.top),outer=base.meshes.filter(m=>m.userData.garmentId===items.outer);
   const bodyPositions=Array.from(rig.mesh.geometry.attributes.position.array),result=createLayeredClothingMasks(outer,inner,rig.skeleton);
   let buried=0,cuffs=0;
@@ -196,7 +196,7 @@ describe('shipped wardrobe layering integration',()=>{
    return new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
   });
   const body=new T.Mesh(createBlankBody('skin'),new T.MeshStandardMaterial()),hair=new T.Group(),root=new T.Group();root.add(body,hair);const rig=bindBlankBody(body,hair,true);
-  const items={top:'fitted-sweater',outer:outerId},base=await dressApprovedWardrobe(rig,items);
+  const items={top:'fitted-sweater',outer:outerId},base=await dressApprovedWardrobe(rig,items,{}, {},false);
   const counts=base.meshes.filter(m=>m.userData.garmentId===items.top).map(m=>m.geometry.index!.count);
   const outer=base.meshes.filter(m=>m.userData.garmentId===items.outer).map(m=>Array.from(m.geometry.attributes.position.array));base.dispose();
   const layered=await dressApprovedWardrobe(rig,items,{}, {},true);
@@ -205,6 +205,6 @@ describe('shipped wardrobe layering integration',()=>{
   layered.dispose();
   const restored=await dressApprovedWardrobe(rig,{top:items.top},{},{},true);
   expect(restored.meshes.map(m=>m.geometry.index!.count)).toEqual(counts);expect(restored.layeringReport).toBeUndefined();restored.dispose();
-  const again=await dressApprovedWardrobe(rig,items);expect(again.meshes.filter(m=>m.userData.garmentId===items.top).map(m=>m.geometry.index!.count)).toEqual(counts);again.dispose();
+  const again=await dressApprovedWardrobe(rig,items,{}, {},false);expect(again.meshes.filter(m=>m.userData.garmentId===items.top).map(m=>m.geometry.index!.count)).toEqual(counts);again.dispose();
  });
 });

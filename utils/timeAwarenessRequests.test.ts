@@ -24,7 +24,7 @@ const textOf = (messages: Array<{ content: any }>): string => messages
     .map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content))
     .join('\n');
 
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
+beforeEach(() => { vi.useFakeTimers({toFake:['Date']}); vi.setSystemTime(now); });
 afterEach(() => vi.useRealTimers());
 
 describe.each([

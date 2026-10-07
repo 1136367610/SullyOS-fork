@@ -9,7 +9,7 @@ const clip=(id:string)=>JSON.parse(readFileSync(`public/room3d/motions/selected/
 afterEach(()=>vi.unstubAllGlobals());
 function actor(z:number){
  const root=new T.Group();root.position.z=z;root.rotation.y=z>0?Math.PI:0;let hips=new T.Quaternion();
- return {visitor:{root,motionScale:.4,animate:()=>hips.identity(),finishPose:()=>{},classicPoint:()=>new T.Vector3(),classicContact:()=>{},applySelectedFrame:(f:any,w:number)=>hips.identity().slerp(f.rotations.hips,w)} as unknown as ChibiVisitor,
+ return {visitor:{root,motionScale:.4,setActionExpression:()=>{},animate:()=>hips.identity(),finishPose:()=>{},classicPoint:()=>new T.Vector3(),classicContact:()=>{},applySelectedFrame:(f:any,w:number)=>hips.identity().slerp(f.rotations.hips,w)} as unknown as ChibiVisitor,
  facing:()=>new T.Vector3(0,0,1).applyQuaternion(hips).applyQuaternion(root.quaternion)};
 }
 const signed=(v:T.Vector3)=>Math.atan2(v.x,v.z);

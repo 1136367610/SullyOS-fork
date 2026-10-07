@@ -60,7 +60,7 @@ describe('Blank Buddy skinning',()=>{
  it('binds all vertices with normalized valid influences without changing the approved rest shape',()=>{
   const {rig,dispose}=setup();try{
    expect(rig.skeleton.bones.length).toBe(42);const g=rig.mesh.geometry,p=g.attributes.position,weights=g.attributes.skinWeight,indices=g.attributes.skinIndex;
-   expect(g.index!.count/3).toBeLessThanOrEqual(4000);
+   const approved=createBlankBody('skin');expect(g.index!.count).toBe(approved.index!.count);approved.dispose();
    rig.setPose('bind');const v=new T.Vector3(),rest=new T.Vector3();
    for(let i=0;i<p.count;i++){
     let sum=0;for(let j=0;j<4;j++){const w=weights.array[i*4+j],id=indices.array[i*4+j];expect(w).toBeGreaterThanOrEqual(0);expect(id).toBeLessThan(42);sum+=w;}
