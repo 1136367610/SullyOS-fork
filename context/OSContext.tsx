@@ -1,3 +1,4 @@
+import { retireCloudCharacter } from '../utils/amsgCloudRetirement';
 import { resolveDialogueApi } from '../utils/characterApi';
 import {isBuiltinAppearance, readBuiltinAppearance} from '../utils/builtinAppearance';
 import { browserHolidayCache, deviceTimeZone, getUserHolidayReminder } from '../utils/userHolidays';
@@ -306,8 +307,8 @@ const normalizeMemoryPalaceConfig = (value?: Partial<MemoryPalaceGlobalConfig> |
   featureFlags: { ...defaultMemoryPalaceConfig.featureFlags, ...(value?.featureFlags || {}) },
 });
 
-/** deleteCharacter 的结果：cloud-cleanup-failed = 云端还有任务没清掉，本地没删。 */
-export type DeleteCharacterResult = { status: 'deleted' } | { status: 'cloud-cleanup-failed' };
+/** 云端未确认时保留本地；已受理但未完成的操作由云端继续。 */
+export type DeleteCharacterResult = { status: 'deleted'; cloudPending?: boolean; cloudUnconfirmed?: boolean } | { status: 'cloud-cleanup-failed' };
 
 /**
  * resetSystem 的结果。
@@ -3316,10 +3317,14 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   };
   const deleteCharacter = async (id: string, options?: { force?: boolean }): Promise<DeleteCharacterResult> => {
     const target = characters.find(c => c.id === id);
+    const retirement = target ? await retireCloudCharacter(target) : { status: 'skipped' as const };
+    const managed = retirement.status === 'accepted' || retirement.status === 'failed';
+    if (retirement.status === 'failed' && !options?.force) return { status: 'cloud-cleanup-failed' };
+    // 新 Worker 在接受删除前先阻止旧请求写回；旧 Worker 保留有限兼容路径。
     // 主动消息 2.0 的任务活在用户自己的 worker 上，不随本地角色删除消失：留着的话
     // 到点照样跑一整轮生成 + 推送，用户会收到一个已经删掉的角色发来的消息（还每次
     // 真烧一轮 LLM）。本地记录一删就再没有 uuid 可取消，所以必须赶在删除之前清。
-    // 没排过任务的角色不发任何请求。
+    // 新协议按云端归属处理，不以本地有没有排过任务决定是否清理。
     const localTaskUuids = (target?.activeMsg2Config?.tasks ?? [])
       .map(t => t.taskUuid);
 
@@ -3327,7 +3332,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     // 任务残留下来，之后「已删角色」的推送还会弹出来。名下真有任务（本地清单有、或远端
     // 查得到）的角色才付这次等待，清不掉就先不删本地、把选择权交回给调用方；
     // 从没配过 2.0 或没填 worker 地址的角色一个请求都不发，路径跟原来一样快。
-    if (!options?.force && charMayHaveCloudState(target)) {
+    if (!managed && !options?.force && charMayHaveCloudState(target)) {
       let workerConfigured = false;
       try {
         workerConfigured = Boolean((await ActiveMsgStore.getGlobalConfig()).workerUrl?.trim());
@@ -3368,25 +3373,25 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             const cloudCleanup = await purgeCharCloudState(target);
             if (cloudCleanup.status === 'failed') {
               console.warn('[deleteCharacter] 云端状态清理失败（角色照常删除）', cloudCleanup.error);
-              addToast('ta 在云端的聊天上下文没能清掉，可以去设置里「清除云端状态」兜一下', 'error');
+              addToast('ta 在云端的聊天上下文没能清掉，可以去设置 → 主动消息 2.0 → 云端数据管理中检查', 'error');
             }
           })();
         }
       }
-    } else if (options?.force && charMayHaveCloudState(target)) {
+    } else if (!managed && options?.force && charMayHaveCloudState(target)) {
       // 「仍然删除」放行后仍旧尽力清一次：能清掉多少算多少，失败只提示、不再拦。
       void (async () => {
         try {
           if (localTaskUuids.length > 0) {
             const { failed } = await ActiveMsgClient.cancelAllTasksForChar(id, localTaskUuids);
             if (failed.size > 0) {
-              addToast(`ta 还有 ${failed.size} 个主动消息任务留在远端没取消掉，可能仍会到点推送——可以去设置里「清除云端状态」兜一下`, 'error');
+              addToast(`ta 还有 ${failed.size} 个主动消息任务留在远端没取消掉，可能仍会到点推送——可以去设置 → 主动消息 2.0 → 云端数据管理中检查`, 'error');
             }
           }
           const cloudCleanup = await purgeCharCloudState(target);
           if (cloudCleanup.status === 'failed') {
             console.warn('[deleteCharacter] 云端状态清理失败（角色照常删除）', cloudCleanup.error);
-            addToast('ta 在云端的聊天上下文没能清掉，可以去设置里「清除云端状态」兜一下', 'error');
+            addToast('ta 在云端的聊天上下文没能清掉，可以去设置 → 主动消息 2.0 → 云端数据管理中检查', 'error');
           }
         } catch (err) {
           console.warn('[deleteCharacter] 远端主动消息任务清理失败', err);
@@ -3408,7 +3413,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     } catch (err) {
         console.warn('[deleteCharacter] 表情包残留清理失败（不影响角色删除）', err);
     }
-    return { status: 'deleted' };
+    return { status: 'deleted', cloudPending: retirement.status === 'accepted' && !retirement.completed, cloudUnconfirmed: retirement.status === 'failed' };
   };
 
   // 角色分组方法（神经链接"文件夹"）

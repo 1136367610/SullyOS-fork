@@ -34,6 +34,7 @@ vi.mock('./activeMsgStore', () => ({
 }));
 
 import {
+  discardAmsgPendingState,
   FLUSH_DEBOUNCE_MS,
   AMSG2_PENDING_SYNC_LS_KEY,
   AMSG2_PENDING_CRED_SYNC_LS_KEY,
@@ -954,4 +955,23 @@ describe('活跃会话租约', () => {
     expect(ActiveMsgClient.syncChatPresence).toHaveBeenCalledTimes(3);
     stopAmsgChatPresence(charId);
   });
+});
+
+
+it('停用或恢复角色时丢弃旧重试快照，飞行请求失败也不能重新入队', async () => {
+  const character = charWithAiTask(nextCharId());
+  let rejectUpload!: (error: Error) => void;
+  vi.mocked(ActiveMsgClient.syncCharFirePacks).mockImplementationOnce(() => new Promise((_, reject) => { rejectUpload = reject; }));
+  markAmsgStateDirty(snapshotOf(character));
+  const flushing = flushAmsgState('before-retirement');
+  await vi.advanceTimersByTimeAsync(1);
+  discardAmsgPendingState(character.id);
+  rejectUpload(new Error('旧请求被云端拒绝'));
+  await flushing;
+  await vi.advanceTimersByTimeAsync(IDLE_WINDOW_MS);
+  expect(ActiveMsgClient.syncCharFirePacks).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(localStorage.getItem(AMSG2_PENDING_SYNC_LS_KEY) || '[]')).not.toContain(character.id);
+  markAmsgStateDirty(snapshotOf(character));
+  await flushAmsgState('new-user-change');
+  expect(ActiveMsgClient.syncCharFirePacks).toHaveBeenCalledTimes(2);
 });
