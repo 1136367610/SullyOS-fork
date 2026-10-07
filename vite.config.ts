@@ -207,9 +207,9 @@ export default defineConfig({
             }
             return 'vendor';
           }
-          if (id.includes('utils/memoryPalace')) {
-            return 'memory-palace';
-          }
+          // Let Rollup place application modules by their real dependency graph.
+          // Forcing memoryPalace into one chunk also hoists shared contexts and
+          // creates application -> React vendor -> application startup cycles.
         }
       }
     }
