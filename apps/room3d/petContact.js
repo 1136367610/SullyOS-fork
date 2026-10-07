@@ -5,7 +5,7 @@ const smooth=(t,a,b)=>THREE.MathUtils.smootherstep(t,a,b);
 export function createPetContact({life,home,catalog,bridge,headPoint}){
  let session=null;
  const point=new THREE.Vector3();
- function cancel(stop=true){if(!session)return;const s=session;session=null;if(life.runtime.get(s.pet.id)===s.runtime)life.runtime.delete(s.pet.id);if(stop)s.actor.stop();s.actor.reset(!stop);life.save();}
+ function cancel(stop=true,persist=true){if(!session)return;const s=session;session=null;if(life.runtime.get(s.pet.id)===s.runtime)life.runtime.delete(s.pet.id);if(stop)s.actor.stop();s.actor.reset(!stop);if(persist)life.save();}
  function start(id,kind,options={}){
   if(!['pet','play','carry'].includes(kind))throw Error('未知接触动作');
   if(session){if(session.pet.id===id&&session.phase==='held'&&kind==='carry')return drop();throw Error('先完成当前互动，或把怀里的小伙伴放下来');}

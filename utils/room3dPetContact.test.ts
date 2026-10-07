@@ -1,4 +1,4 @@
-import {it,expect} from 'vitest';
+import {it,expect,vi} from 'vitest';
 import * as T from 'three';
 import catalog from '../public/room3d/catalog.json';
 import {createHome} from '../apps/room3d/model.js';
@@ -19,3 +19,10 @@ it('squat grounds ankles, lowers hips and reaches the pet without stretching bon
 it('records holding only after lift, and dropping only after lowering, without repeating held frames',()=>{const events:any[]=[];const s=setup(e=>events.push(e));events.length=0;s.contact.start(s.pet.id,'carry');s.tick(2);expect(events).toHaveLength(0);s.arrive();s.tick(2.5);expect(events.map(e=>e.text)).toEqual(['被你抱在怀里']);s.tick(3);expect(events).toHaveLength(1);s.contact.drop();s.tick(1);expect(events).toHaveLength(1);s.tick(1.5);expect(events.map(e=>e.text)).toEqual(['被你抱在怀里','被你轻轻放回地面']);});
 
 it('attributes autonomous pet contact to the character only after completion',()=>{const events:any[]=[];const s=setup(e=>events.push(e));events.length=0;s.contact.start(s.pet.id,'play',{actorId:'char',actorName:'Noir',source:'local'});s.arrive();s.tick(2);expect(events).toHaveLength(0);expect(s.contact.inspect()?.actorId).toBe('char');s.tick(5);expect(events).toHaveLength(1);expect(events[0]).toMatchObject({source:'local',actorName:'Noir',petName:'团子',text:'和Noir玩了一会儿'});expect(s.pet.relations.char).toBeGreaterThan(0);expect(s.pet.relations.user).toBeUndefined();});
+
+
+it('backup restoration cancels held-pet ownership without saving the old life over incoming data',()=>{
+ const s=setup();s.contact.start(s.pet.id,'carry');s.arrive();s.tick(2.5);
+ const save=vi.spyOn(s.life,'save');s.contact.cancel(true,false);
+ expect(save).not.toHaveBeenCalled();expect(s.contact.inspect()).toBeNull();expect(s.life.runtime.has(s.pet.id)).toBe(false);
+});

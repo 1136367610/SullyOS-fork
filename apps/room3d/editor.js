@@ -1,3 +1,4 @@
+import {trackHomeFeature,trackHomeTransfer} from '../../utils/homeAnalytics';
 import {createAssetQueue} from './assetQueue.js';
 import {nowInTimeZone} from '../../utils/timezone';
 import {createPhotoSession} from './photoSession.js';
@@ -1169,9 +1170,25 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   saved=true;
   try{if(storageKey)localStorage.setItem(storageKey,JSON.stringify(state));const result=onChange?.(clone(state));if(result?.catch)result.catch(()=>{saved=false;notify('保存失败，当前布置仍保留在画面中，可导出备份',true)});}catch{saved=false;message='保存失败，请导出备份';error=true}
  }
- function commit(mutator,{templateUpgrade=false}={}){
+ const restoredLifeSnapshots=new WeakSet();
+ function restoreSavedLife(){
+  petSystem?.contact.cancel(true,false);restoreFurnitureCharacter();cancelCompanionAction();stopSocial();
+  journal=readHomeRecords(state);state.records=journal;
+  residentRoom=state.residentRoomId===null?null:state.rooms.some(r=>r.id===state.residentRoomId)?state.residentRoomId:state.activeRoomId;
+  lastScheduleRoom=undefined;visitorLocation=null;visitorSeat=null;visitorActivity=null;visitorPlant=null;visitorMotion='idle';
+  petSystem?.life.restore(state.petLife);
+ }
+ function travelHistory(from,to){
+  if(!from.length)return;
+  const target=from.pop(),before=clone(state),restoreLife=restoredLifeSnapshots.has(target);
+  if(restoreLife)restoredLifeSnapshots.add(before);
+  to.push(before);state=target;stopWalking();visitorLocation=null;selected=null;panel=null;
+  if(restoreLife)restoreSavedLife();
+  persist();rebuild();renderUI();
+ }
+ function commit(mutator,{templateUpgrade=false,restoreLife=false}={}){
   const before=clone(state),selectionBefore=selected,panelBefore=panel,rotationBefore=rotationPreview;stopWalking();message='';error=false;
-  try{mutator();const budgetError=phone&&!templateUpgrade&&phoneBudgetError(before,state,catalog);if(budgetError)throw Error(budgetError);let unmounted=0;for(const r of state.rooms)for(const i of r.items){const a=asset(i.assetId);if(a?.surface==='wall'&&!i.stored&&wallPlacementError(i,a,r,catalog)){i.stored=true;unmounted++;}}if(unmounted)message='墙面变化，失去承托的挂墙物件已收纳，可撤销';undo.push(before);if(undo.length>40)undo.shift();redo=[];persist();rebuild();renderUI();return true;}catch(e){state=before;selected=selectionBefore;panel=panelBefore;rotationPreview=rotationBefore;rebuild();notify(e.message,true);return false;}
+  try{mutator();const budgetError=phone&&!templateUpgrade&&phoneBudgetError(before,state,catalog);if(budgetError)throw Error(budgetError);let unmounted=0;for(const r of state.rooms)for(const i of r.items){const a=asset(i.assetId);if(a?.surface==='wall'&&!i.stored&&wallPlacementError(i,a,r,catalog)){i.stored=true;unmounted++;}}if(unmounted)message='墙面变化，失去承托的挂墙物件已收纳，可撤销';if(restoreLife){restoreSavedLife();restoredLifeSnapshots.add(before);}undo.push(before);if(undo.length>40)undo.shift();redo=[];persist();rebuild();renderUI();return true;}catch(e){state=before;if(restoreLife&&restoredLifeSnapshots.has(before))restoreSavedLife();selected=selectionBefore;panel=panelBefore;rotationPreview=rotationBefore;rebuild();notify(e.message,true);return false;}
  }
  function applyColor(root,color,wall=false,id='',materialColors={}){
   root.traverse(o=>{if(!o.isMesh)return;const mats=Array.isArray(o.material)?o.material:[o.material];
@@ -1445,7 +1462,7 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   }else if(panel==='selected'||panel==='palette')sheet='';
   else if(panel==='rooms')sheet=`<header><h2>房间与楼层</h2><button data-action="close">×</button></header><div class="h3-actions" aria-label="房间显示范围"><button data-action="room-scope" data-value="floor" ${viewMode==='flat'?'disabled':''} aria-pressed="${effectiveRoomScope()==='floor'}">显示同层</button><button data-action="room-scope" data-value="room" aria-pressed="${effectiveRoomScope()==='room'}">只看当前房间</button></div><p>${viewMode==='flat'?'锁定视角时逐间呈现；':''}选择下方房间切换；总览仍可查看全部小屋。</p><div class="h3-roomlist">${state.rooms.map(n=>`<button data-action="room" data-id="${n.id}" aria-pressed="${n.id===r.id}"><span>${esc(n.name)}</span><small>${n.level+1}F · ${connectedRooms(state,n.id,catalog).length>1?'已合并 · ':''}${n.x}, ${n.z}</small></button>`).join('')}</div>`;
   else if(panel==='expand')sheet=`<header><h2>从${esc(r.name)}扩建</h2><button data-action="close">×</button></header><div class="h3-expand">${[['back','后方'],['up','楼上'],['front','前方'],['left','左边'],['down','楼下'],['right','右边']].map(([dir,label])=>`<button data-action="expand" data-direction="${dir}" ${dir==='down'&&r.level===0?'disabled':''}>＋ ${label}</button>`).join('')}</div><p>已有房间的位置会直接进入。新房间先留空，慢慢布置。</p>`;
-  else if(panel==='room-style')sheet=`<header><h2>${esc(r.name)} · 装扮</h2><button data-action="close">×</button></header><input class="h3-rename" aria-label="房间名字" maxlength="40" value="${esc(r.name)}"><div class="h3-actions"><button data-action="rename">保存名字</button><button data-action="room-share">分享当前房间</button><button data-action="export">导出整屋备份</button><button data-action="import">恢复整屋备份</button></div><p>墙面颜色</p><div class="h3-swatches">${['#FFF2E3',...PALETTE.slice(0,5)].map(c=>`<button aria-label="墙色 ${c}" style="background:${c}" data-action="wall" data-value="${c}"></button>`).join('')}</div>`;
+  else if(panel==='room-style')sheet=`<header><h2>${esc(r.name)} · 装扮</h2><button data-action="close">×</button></header><input class="h3-rename" aria-label="房间名字" maxlength="40" value="${esc(r.name)}"><div class="h3-actions"><button data-action="rename">保存名字</button><button data-action="room-share">分享当前房间</button><button data-action="export">导出整屋备份</button><button data-action="import">恢复整屋备份</button></div><p>整屋备份包含房屋、日常记录与宠物。双方形象、自绘素材、秘密与日程请在设置中使用整合导出备份。</p><p>墙面颜色</p><div class="h3-swatches">${['#FFF2E3',...PALETTE.slice(0,5)].map(c=>`<button aria-label="墙色 ${c}" style="background:${c}" data-action="wall" data-value="${c}"></button>`).join('')}</div>`;
   if(panel==='rooms')sheet+='<div class="h3-actions"><button data-action="panel" data-panel="room-style">修改当前房间名称与装扮</button><button data-action="room-share">分享当前房间</button></div>';
   if(!onMenu&&(panel==='rooms'||panel==='expand'))sheet+=`<p>精装房配色</p><select aria-label="新样板房配色" data-showroom-palette><option value="">原木黑白绿 · 原版</option>${Object.entries(ROOM_PALETTES).filter(([id])=>id!=='sage').map(([id,p])=>`<option value="${id}" ${showroomPalette===id?'selected':''}>${p.name}</option>`).join('')}</select><p>追加一间样板房 · 保留已有布置</p><div class="h3-actions">${Object.entries(SHOWROOMS).map(([id,t])=>`<button data-action="showroom" data-value="${id}">＋ ${t.name}</button>`).join('')}</div><p>自动放在当前房间旁的空位，可撤销；家具、墙纸和地板均可继续修改。</p>`;
   if(panel==='room-style')sheet+=`<p>精装房配色 · 家具与墙地一起换色</p><div class="h3-actions">${Object.entries(ROOM_PALETTES).map(([id,p])=>`<button data-action="room-palette" data-value="${id}"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;background:${p.accent}"></span>${p.name}</button>`).join('')}</div><p>浅色系保留原木；黑白紫统一黑白家具。可撤销、导出分享。</p>`;
@@ -1473,15 +1490,15 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   if(d.action==='edit'||d.action==='overview')restoreFurnitureCharacter();
   if(d.action==='life'){panel=null;closeInteraction();renderUI();if(d.panel==='pets')petSystem?.open();else onMenu?.(d.panel);return;}
   if(d.action?.startsWith('chibi-')&&!furnitureUser&&residentRoom!==undefined&&(residentRoom===null||current().id!==residentRoom)){notify('角色现在不在这个房间哦');return;}
-  if(d.action==='room-share'){
+  if(d.action==='room-share'){trackHomeFeature('room-share');
    try{sharedRoomText=JSON.stringify(exportRoomLayout(current(),catalog),null,2);roomImportDraft=null;panel='room-share';selected=null;renderUI();}catch(e){notify(e.message,true);}return;
   }
   if(d.action==='room-layout-download'){
    const url=URL.createObjectURL(new Blob([sharedRoomText],{type:'application/json'})),a=document.createElement('a');
-   a.href=url;a.download=(current().name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_')||'房间')+'.room.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+   a.href=url;a.download=(current().name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_')||'房间')+'.room.json';a.click();trackHomeTransfer('export-room');setTimeout(()=>URL.revokeObjectURL(url),1000);return;
   }
   if(d.action==='room-layout-copy'){
-   navigator.clipboard?.writeText(sharedRoomText).then(()=>{if(!destroyed)notify('房间参数已复制，可以发给朋友');}).catch(()=>{if(!destroyed)notify('请选中上方参数文本手动复制',true);});
+   navigator.clipboard?.writeText(sharedRoomText).then(()=>{trackHomeTransfer('copy-room');if(!destroyed)notify('房间参数已复制，可以发给朋友');}).catch(()=>{if(!destroyed)notify('请选中上方参数文本手动复制',true);});
    if(!navigator.clipboard)notify('请选中上方参数文本手动复制',true);return;
   }
   if(d.action==='room-layout-preview'){
@@ -1493,7 +1510,7 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   }
   if(d.action==='room-layout-apply'){
    if(!roomImportDraft||roomImportDraft.targetId!==current().id){notify('请在目标房间重新读取参数',true);return;}
-   if(commit(()=>{state=applyRoomLayout(state,current().id,roomImportDraft.room,catalog);selected=null;panel=null;message='房间布局已应用，可撤销';})){roomImportDraft=null;visitorActivity=null;visitorSeat=null;visitorPlant=null;heldPlush=null;visitorMotion='idle';edit=true;overview=false;controls.enabled=true;placeVisitor();renderUI();host.focus({preventScroll:true});dirty=true;wake();}return;
+   if(commit(()=>{state=applyRoomLayout(state,current().id,roomImportDraft.room,catalog);selected=null;panel=null;message='房间布局已应用，可撤销';})){trackHomeTransfer('import-room');roomImportDraft=null;visitorActivity=null;visitorSeat=null;visitorPlant=null;heldPlush=null;visitorMotion='idle';edit=true;overview=false;controls.enabled=true;placeVisitor();renderUI();host.focus({preventScroll:true});dirty=true;wake();}return;
   }
   if(d.blocked){notify(d.blocked,true);return;}
   if(d.action==='pet-panel'){closeInteraction();petSystem.open(d.id);return;}
@@ -1630,7 +1647,7 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   if(d.action==='remove-building'){if(item()&&asset(item().assetId)?.building)commit(()=>{selectedOwner().items=selectedOwner().items.filter(i=>i.id!==selected);selected=null;panel=null;message='墙段已拆除，可以撤销'});return}
   if(d.action==='back'){if(overview){overview=false;rebuild();renderUI();}else if(panel){panel=null;renderUI();}else if(edit){edit=false;rebuild();renderUI();}else onBack?.();return}
   if(d.action==='close'){panel=null;renderUI();return}
-  if(d.action==='edit'){if(!edit){putPlushBack();stopMirror();visitorActivity=null;gamingEffects.clear();kitchenEffects.updateMeal(null,0);visitorMotion='idle';visitor?.animate(0,'idle',visitorSeat?.bed?'lying':visitorSeat?'seated':'standing',currentSeatPose());}stopWalking();edit=!edit;selected=null;panel=null;controls.enabled=true;rebuild();resize(true);updateSelection();renderUI();return}
+  if(d.action==='edit'){if(!edit){trackHomeFeature('edit');putPlushBack();stopMirror();visitorActivity=null;gamingEffects.clear();kitchenEffects.updateMeal(null,0);visitorMotion='idle';visitor?.animate(0,'idle',visitorSeat?.bed?'lying':visitorSeat?'seated':'standing',currentSeatPose());}stopWalking();edit=!edit;selected=null;panel=null;controls.enabled=true;rebuild();resize(true);updateSelection();renderUI();return}
   if(d.action==='room-scope'){if(viewMode==='flat')return;if(!['floor','room'].includes(d.value))return;if(rotationPreview&&!changeItem(rotationPreview))return;stopWalking();visitorLocation=null;roomScope=d.value;overview=false;selected=null;try{localStorage.setItem('sully-home3d-room-scope',roomScope);}catch{}rebuild();renderUI();return;}
   if(d.action==='overview'){stopWalking();overview=!overview;edit=false;panel=null;selected=null;controls.enabled=true;rebuild();renderUI();return}
   if(onMenu&&(d.action==='expand'||d.action==='showroom'||d.action==='panel'&&['building','expand','chibi'].includes(d.panel)))return;
@@ -1639,8 +1656,8 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   if(d.action==='adopt-pet'){petSystem?.open(null,selected);return;}
   if(d.action==='palette'){panel=panel==='palette'?'selected':'palette';renderUI();return}
   if(d.action==='zoom'){residentFraming=false;camera.zoom=Math.max(controls.minZoom,Math.min(controls.maxZoom,camera.zoom*Number(d.factor)));camera.updateProjectionMatrix();dirty=true;wake();return}
-  if(d.action==='redo'){if(redo.length){undo.push(clone(state));state=redo.pop();stopWalking();visitorLocation=null;selected=null;panel=null;persist();rebuild();renderUI()}return}
-  if(d.action==='undo'){if(undo.length){redo.push(clone(state));state=undo.pop();stopWalking();visitorLocation=null;selected=null;panel=null;persist();rebuild();renderUI()}return}
+  if(d.action==='redo'){travelHistory(redo,undo);return}
+  if(d.action==='undo'){travelHistory(undo,redo);return}
   if(d.action==='building-room'){stopWalking();visitorLocation=null;activateRoom(state.rooms.find(r=>r.id===d.id));selected=null;persist();rebuild();renderUI();return}
   if(d.action==='room'||d.action==='floor'){const r=d.action==='room'?state.rooms.find(r=>r.id===d.id):state.rooms.find(r=>r.level===Number(d.level));if(r){stopWalking();visitorLocation=null;activateRoom(r);overview=false;selected=null;panel=null;persist();rebuild();renderUI()}return}
   if(d.action==='showroom'){commit(()=>{const added=addShowroom(state,d.value,catalog,{compact:phone});if(showroomPalette)applyRoomPalette(added,showroomPalette,catalog);visitorLocation=null;panel=null;selected=null;edit=true;overview=false;controls.enabled=true;message=phone&&d.value==='bedroom'?'已添加手机精简卧室，每件家具都可以单独调整':'样板房已搬来，每件家具都可以单独调整';});return;}
@@ -1672,8 +1689,8 @@ export async function mountHomeEditor(host,{assetBase,initialState,onChange,onBa
   if(d.action==='store'){commit(()=>{const i=item();if(i){for(const member of furnitureGroup(selectedOwner(),i.id)){member.stored=true;if(member.id===i.id){member.supportId=null;member.dockId=null;member.dockSlot=null;}}}selected=null;panel=null;message='已收纳，桌面小物和吸附的椅子会一起收好';error=false});return}
   if(d.action==='wall'){commit(()=>{current().wall=d.value});return}
   if(d.action==='rename'){const name=ui.querySelector('.h3-rename').value.trim();if(name)commit(()=>{current().name=name});return}
-  if(d.action==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='我的小屋.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return}
-  if(d.action==='import'){const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{try{const f=input.files?.[0];if(!f)return;if(f.size>1024*1024)throw Error('布置文件过大');const incoming=validateHome(JSON.parse(await f.text()),catalog);const budgetError=phone&&phoneBudgetError(null,incoming,catalog);if(budgetError)throw Error(budgetError);commit(()=>{state=incoming;selected=null;panel=null;message='布置已导入，可撤销回到刚才的房间'})}catch(e){notify(e.message,true)}};input.click();}
+  if(d.action==='export'){try{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});if(blob.size>16*1024*1024)throw Error('整屋备份超过 16 MB，请在设置中使用整合导出');const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='我的小屋.json';a.click();trackHomeTransfer('export-home');setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){notify(e.message,true);}return}
+  if(d.action==='import'){const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{try{const f=input.files?.[0];if(!f)return;if(f.size>16*1024*1024)throw Error('整屋备份过大（上限 16 MB）');const text=await f.text();if(destroyed)return;const incoming=validateHome(JSON.parse(text),catalog);const budgetError=phone&&phoneBudgetError(null,incoming,catalog);if(budgetError)throw Error(budgetError);if(commit(()=>{state=incoming;selected=null;panel=null;message='布置已导入，可撤销回到刚才的房间'},{restoreLife:true}))trackHomeTransfer('import-home')}catch(e){notify(e.message,true)}};input.click();}
  }
  ui.addEventListener('input',e=>{if(!e.target.matches?.('.h3-furniture-search')||e.isComposing)return;furnitureQuery=e.target.value;renderUI();const input=ui.querySelector('.h3-furniture-search');input?.focus();},{signal:abort.signal});
  ui.addEventListener('compositionend',e=>{if(e.target.matches?.('.h3-furniture-search')){furnitureQuery=e.target.value;renderUI();ui.querySelector('.h3-furniture-search')?.focus();}},{signal:abort.signal});
