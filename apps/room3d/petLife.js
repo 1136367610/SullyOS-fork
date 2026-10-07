@@ -29,7 +29,7 @@ export function choosePetAction(candidates,pet,random=Math.random){
 }
 
 export function createPetLife({home,catalog,changed=()=>{},random=Math.random,actors=()=>[],onEvent=()=>{},getHour=()=>new Date().getHours()}){
- const sleepCooldown=new Map();
+ const sleepCooldown=new Map(),removedPets=[];
  const data=normalizePetLife(home().petLife,home(),catalog),runtime=new Map(),maps=new Map();let clock=0,lastSave=0;
  const roomFor=p=>home().rooms.find(r=>r.id===p.roomId);
  const mapFor=p=>{if(!maps.has(p.id)){const map=petMap(roomFor(p),catalog,p,data.pets),free=map.free;map.free=(x,z)=>free(x,z)&&!actors().some(a=>a.roomId===p.roomId&&Math.hypot(a.x-x,a.z-z)<map.radius+.3);maps.set(p.id,map);}return maps.get(p.id);};
@@ -40,11 +40,25 @@ export function createPetLife({home,catalog,changed=()=>{},random=Math.random,ac
  function restore(raw){
   const next=normalizePetLife(raw,home(),catalog);
   for(const key of Object.keys(data))delete data[key];
-  Object.assign(data,next);runtime.clear();maps.clear();sleepCooldown.clear();clock=0;lastSave=0;attach();
+  Object.assign(data,next);runtime.clear();maps.clear();sleepCooldown.clear();removedPets.length=0;clock=0;lastSave=0;attach();
  }
  function reconcile(){
   maps.clear();attach();for(const p of data.pets){if(!roomFor(p))p.roomId=home().activeRoomId;for(const r of home().rooms)r.items=r.items.filter(i=>i.id!==p.sourceFurnitureId||i.assetId!==p.assetId);if(runtime.get(p.id)?.external||runtime.get(p.id)?.sleepSpot)continue;const spot=freeSpot(p);if(spot&&(p.x!==spot[0]||p.z!==spot[1])){p.x=spot[0];p.z=spot[1];runtime.delete(p.id);}}
   home().petLife=data;
+ }
+ function remove(id){
+  const index=data.pets.findIndex(p=>p.id===id);if(index<0)throw Error('这位小伙伴已经不在家园了');
+  const pet=copy(data.pets[index]);removedPets.push({pet,index});
+  data.pets.splice(index,1);runtime.delete(id);maps.clear();sleepCooldown.delete(id);save();return pet;
+ }
+ function undoRemove(){
+  const entry=removedPets.at(-1);if(!entry)throw Error('没有可以撤回的移出操作');
+  if(data.pets.length>=PET_CAPACITY)throw Error(`家园最多养 ${PET_CAPACITY} 只宠物，先腾出一个位置再撤回`);
+  const p=copy(entry.pet);if(data.pets.some(other=>other.id===p.id))throw Error('这位小伙伴已经在家园了');
+  if(!roomFor(p))p.roomId=home().activeRoomId;
+  maps.clear();const spot=freeSpot(p);maps.delete(p.id);
+  if(!spot)throw Error('房间太满，先留一块宠物活动的空地再撤回');
+  [p.x,p.z]=spot;data.pets.splice(Math.min(entry.index,data.pets.length),0,p);removedPets.pop();maps.clear();save();return p;
  }
  function adopt(assetId,name,traits=[],sourceId){
   if(data.pets.length>=PET_CAPACITY)throw Error(`家园最多养 ${PET_CAPACITY} 只宠物`);
@@ -124,5 +138,5 @@ export function createPetLife({home,catalog,changed=()=>{},random=Math.random,ac
   if(clock-lastSave>15){lastSave=clock;save();}return moving;
  }
  reconcile();
- return {data,runtime,restore,adopt,interact,wake,recordContact(id,text){const p=data.pets.find(p=>p.id===id);if(p){event(p,text);save();}},complete(id,r){const p=data.pets.find(p=>p.id===id);if(p&&runtime.get(id)===r){finish(p,r);runtime.delete(id);}},step,reconcile,attach,save,candidates,refill(id){if(!home().rooms.some(r=>r.items.some(i=>i.id===id&&i.assetId==='pet_bowls'&&!i.stored)))throw Error('食盆已不在房间');data.supplies[id]=5;onEvent({petName:'',text:'你补满了宠物食盆',source:'user',roomId:home().rooms.find(r=>r.items.some(i=>i.id===id)).id});save();},inspect:()=>({pets:copy(data.pets),actions:Object.fromEntries([...runtime].map(([id,r])=>[id,{kind:r.kind,moving:!!r.path.length,manual:!!r.manual,sleepStage:r.sleepStage||null,sleepSpot:r.sleepSpot||null,position:petSleepPose(data.pets.find(p=>p.id===id),r)}]))})};
+ return {data,runtime,restore,adopt,remove,undoRemove,get lastRemoved(){return removedPets.at(-1)?.pet;},interact,wake,recordContact(id,text){const p=data.pets.find(p=>p.id===id);if(p){event(p,text);save();}},complete(id,r){const p=data.pets.find(p=>p.id===id);if(p&&runtime.get(id)===r){finish(p,r);runtime.delete(id);}},step,reconcile,attach,save,candidates,refill(id){if(!home().rooms.some(r=>r.items.some(i=>i.id===id&&i.assetId==='pet_bowls'&&!i.stored)))throw Error('食盆已不在房间');data.supplies[id]=5;onEvent({petName:'',text:'你补满了宠物食盆',source:'user',roomId:home().rooms.find(r=>r.items.some(i=>i.id===id)).id});save();},inspect:()=>({pets:copy(data.pets),actions:Object.fromEntries([...runtime].map(([id,r])=>[id,{kind:r.kind,moving:!!r.path.length,manual:!!r.manual,sleepStage:r.sleepStage||null,sleepSpot:r.sleepSpot||null,position:petSleepPose(data.pets.find(p=>p.id===id),r)}]))})};
 }
