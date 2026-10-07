@@ -51,6 +51,14 @@
 
 ## 验证范围
 
+### 数据库打不开但界面像被清空
+
+`Index with the same ID already exists` 是 WebKit 读取 IndexedDB 内部索引元数据时的错误，不是应用层同名索引的 `ConstraintError`，也不能据此认定 3D 资源触发配额驱逐或记录已被删除。网页拿不到数据库连接时，不能通过 bump schema、删索引或删库重建来承诺恢复。先保留原设备、浏览器、原网址和备份，采集系统版本、浏览器与错误信息；同站点仍可读的旧页面优先导出。不要让用户清网站数据、卸载浏览器或覆盖旧备份。
+
+`DatabaseGuard` 在主界面及其 Provider 挂载前，打开现有数据库并以 readonly 事务检查核心表可读性；失败展示独立诊断，不继续加载空桌面。`openDB` 后续失败也会通知保护界面，即使业务调用方吞掉了异常。入口后台任务同样等待读取检查，角色读取失败后停止默认角色、后续迁移与启动补传。保护页不读取聊天内容、不清存储、不上传诊断；手动复制只含构建、网址路径、浏览器与错误信息。这是失败保护，不是浏览器内部数据库修复，不承诺已损坏存档可恢复。
+
+参考：[WebKit SQLiteIDBBackingStore.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/indexeddb/server/SQLiteIDBBackingStore.cpp)。测试：`utils/databaseHealth.test.ts`、`utils/databaseGuard.test.ts`；独立失败 fixture：`test/fixtures/database-guard.html`（模拟 open 错误，不连接用户数据库）。
+
 ### 主程序加载前的纯黑屏
 
 `scripts/startup-recovery-plugin.ts` 把无依赖的 `public/startup-recovery.js` 内联在入口头部，早于主模块和 Tailwind。入口模块解析/初始化失败时，React 内的报错面板本身也无法启动；此时显示独立的启动诊断和手动更新按钮。12 秒后根节点仍空也显示等待/恢复入口；主程序随后成功挂载时立即收起，不覆盖正常聊天，也不自动循环刷新。
