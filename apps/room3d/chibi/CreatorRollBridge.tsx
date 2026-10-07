@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {readRollCache,writeRollCache,rollCacheKey} from './rollCache';
-export interface RollResult { layers:Record<string,string>; image:string; state?:unknown }
+import {captureCreatorLayer} from './captureCreatorLayer';
+export interface RollResult { layers:Record<string,string>; image:string; state?:unknown; eyeColors?:{L:string;R:string} }
 type BridgeProps={ request:number; savedState?:unknown; extraItems?:unknown[]; editing?:boolean; captureOnly?:boolean; onReady:()=>void; onResult:(r:RollResult)=>void; onError:(message:string)=>void };
 function RawCreatorRollBridge({ request, savedState, extraItems, editing=false, captureOnly=false, onReady, onResult, onError }: BridgeProps) {
     const frame=useRef<HTMLIFrameElement>(null),callbacks=useRef({onReady,onResult,onError});callbacks.current={onReady,onResult,onError};
@@ -10,6 +11,7 @@ function RawCreatorRollBridge({ request, savedState, extraItems, editing=false, 
         let cancelled=false;
         const origin=location.origin;
         const bridge=`<script>
+        const captureCreatorLayer=${captureCreatorLayer.toString()};
         // This document is an isolated copy of the existing creator. Its functions,
         // palette and rendering remain the source of truth; no user draft is saved.
         let rollBusy=false;
@@ -48,16 +50,19 @@ function RawCreatorRollBridge({ request, savedState, extraItems, editing=false, 
             const layers={},whole=document.createElement('canvas');whole.width=whole.height=472;
             const wholeCtx=whole.getContext('2d');
             for(const layer of document.querySelectorAll('.character > .layer')){
-              const canvas=document.createElement('canvas');canvas.width=canvas.height=472;const ctx=canvas.getContext('2d');
-              for(const drawable of layer.querySelectorAll('img,canvas')){
-                let opacity=1,node=drawable;
-                while(node&&node!==layer){opacity*=Number(getComputedStyle(node).opacity);node=node.parentElement;}
-                ctx.globalAlpha=opacity;ctx.drawImage(drawable,0,0,472,472);
-              }
+              const canvas=captureCreatorLayer(layer);
               const key=layer.id.replace('layer-','');layers[key]=canvas.toDataURL();
               wholeCtx.globalAlpha=Number(getComputedStyle(layer).opacity);wholeCtx.drawImage(canvas,0,0);
             }
-            parent.postMessage({type:'experiment-roll-result',id,payload:{layers,image:whole.toDataURL(),state:JSON.parse(JSON.stringify(state))}},${JSON.stringify(origin)});
+            const eyePart=PARTS.find(p=>p.key==='eyes').items.find(p=>p.id===state.selected.eyes);
+            let eyeColors;
+            if(eyePart){
+              const raw=document.createElement('canvas');raw.width=raw.height=472;const ctx=raw.getContext('2d');
+              if(state.flipped.eyes){ctx.translate(472,0);ctx.scale(-1,1);}
+              ctx.drawImage(await loadImage(eyePart.src),0,0,472,472);layers['eyes-raw']=raw.toDataURL();
+              if(!eyePart.noTint){const eyes=state.tintColor.eyes;eyeColors={L:hexForTint(eyes[state.flipped.eyes?'R':'L']),R:hexForTint(eyes[state.flipped.eyes?'L':'R'])};}
+            }
+            parent.postMessage({type:'experiment-roll-result',id,payload:{layers,eyeColors,image:whole.toDataURL(),state:JSON.parse(JSON.stringify(state))}},${JSON.stringify(origin)});
           }catch(error){parent.postMessage({type:'experiment-roll-error',id,message:String(error)},${JSON.stringify(origin)});}
           finally{rollBusy=false;}
         });

@@ -20,3 +20,12 @@ export function tintIrisPixels(pixels:Uint8ClampedArray,color:string,mask?:Uint8
   }
  }
 }
+
+/** Screen-left / screen-right, matching the 2D creator. Untouched sides stay original. */
+export function tintIrisPairPixels(pixels:Uint8ClampedArray,width:number,colors:{L?:string;R?:string},mask?:Uint8ClampedArray){
+ for(let start=0;start<pixels.length;start+=width*4){
+  for(const [offset,end,color] of [[0,Math.floor(width/2)*4,colors.L],[Math.floor(width/2)*4,width*4,colors.R]] as const){
+   if(color&&/^#[\da-f]{6}$/i.test(color))tintIrisPixels(pixels.subarray(start+offset,start+end),color,mask?.subarray(start+offset,start+end));
+  }
+ }
+}

@@ -3,11 +3,11 @@ import originals from './faceOriginals.json';
 import highlights from './faceHighlights.json';
 import {cleanAdjustment,transformFaceSide,cleanMouthChoices,type FaceAdjustments,type FaceAdjustment,type MouthChoices} from './faceAdjustments';
 import {scleraContour,browExpressionRotation,detailBounds,measureFaceLandmarks,type FaceSide} from './faceLandmarks';
-import {tintIrisPixels} from './faceTint';
+import {tintIrisPairPixels} from './faceTint';
 
 export type EyeState='open'|'half'|'closed'|'happy';
 export interface FaceSettings {
- eyeArtwork?:'sully'; baseIrisColor?:string;
+ eyeArtwork?:'sully'; baseIrisColor?:string; irisColors?:{L?:string;R?:string}; heterochromia?:boolean;
  enabled:boolean; useBaseEyes?:boolean; useBaseMouth?:boolean; upper:string; eye:string; lower:string; brow:string; highlight:string;
  eyeState:EyeState; emotion:'neutral'|'angry'|'sad'; mouth:string;
  eyeOffsetY:number; browOffsetY:number; irisColor:string; blink:boolean;
@@ -35,12 +35,15 @@ export function cleanFace(value?:Partial<FaceSettings>):FaceSettings {
  v.eyeOffsetY=Number.isFinite(v.eyeOffsetY)?Math.max(-20,Math.min(20,v.eyeOffsetY)):0;
  v.browOffsetY=Number.isFinite(v.browOffsetY)?Math.max(-20,Math.min(20,v.browOffsetY)):0;
  if(!/^#[\da-f]{6}$/i.test(v.irisColor))v.irisColor=defaultFace.irisColor;
+ const color=(c:unknown)=>typeof c==='string'&&/^#[\da-f]{6}$/i.test(c)?c:undefined;
+ v.baseIrisColor=color(v.baseIrisColor);
+ if(v.irisColors)v.irisColors={L:color(v.irisColors.L),R:color(v.irisColors.R)};
  return v;
 }
 export function applyEyePreset(value:FaceSettings,style:string):FaceSettings{
  const adjustments={...value.adjustments};
  for(const key of ['eyes','upper','iris','lower','brow','highlight','pupil'] as const)delete adjustments[key];
- return cleanFace({...value,eyeArtwork:undefined,upper:style,eye:style==='04'?'01':style,lower:style==='04'?'none':style,brow:'original',highlight:'original',eyeState:'open',emotion:'neutral',eyeOffsetY:0,browOffsetY:0,pupilSrc:undefined,highlightSrc:undefined,adjustments});
+ return cleanFace({...value,useBaseEyes:false,eyeArtwork:undefined,upper:style,eye:style==='04'?'01':style,lower:style==='04'?'none':style,brow:'original',highlight:'original',eyeState:'open',emotion:'neutral',eyeOffsetY:0,browOffsetY:0,pupilSrc:undefined,highlightSrc:undefined,adjustments});
 }
 export function faceLayerIds(settings:FaceSettings,state=settings.eyeState){
  const closed=state==='closed'||state==='happy'||settings.upper==='04';
@@ -87,6 +90,7 @@ function placeHighlight(ctx:CanvasRenderingContext2D,image:HTMLImageElement,adju
  });
 }
 export function composeFace(settings:FaceSettings,images:Record<string,HTMLImageElement>,state=settings.eyeState){
+ const colors={L:settings.irisColors?.L??settings.irisColor,R:settings.irisColors?.R??settings.irisColor};
  const eyes=canvas(),mouth=canvas(),ctx=eyes.getContext('2d')!,m=mouth.getContext('2d')!;
  const layers=faceLayerIds(settings,state),upper=faceAssets[layers.upper],iris=faceAssets[layers.iris];
  const draw=(context:CanvasRenderingContext2D,id:string,dy=0)=>{if(images[id])context.drawImage(images[id],0,dy,472,472);};
@@ -114,7 +118,7 @@ export function composeFace(settings:FaceSettings,images:Record<string,HTMLImage
    // The full reference has lashes over the iris. Keep those strokes out of
    // the iris dye, just as the split path draws them after coloring the iris.
    for(let i=3;i<irisMask.length;i+=4)if(lashes[i])irisMask[i]=0;
-   tintIrisPixels(pixels.data,settings.irisColor,irisMask);
+   tintIrisPairPixels(pixels.data,472,colors,irisMask);
   }
   ctx.putImageData(pixels,0,0);
  }else if(!layers.closed){
@@ -136,7 +140,7 @@ export function composeFace(settings:FaceSettings,images:Record<string,HTMLImage
   });
   // Tint in source space, before resampling, so splitting/scaling never changes the dye rule.
   const source=canvas(),s=source.getContext('2d')!;draw(s,layers.iris);
-  const pixels=s.getImageData(0,0,472,472);tintIrisPixels(pixels.data,settings.irisColor);s.putImageData(pixels,0,0);
+  const pixels=s.getImageData(0,0,472,472);tintIrisPairPixels(pixels.data,472,colors);s.putImageData(pixels,0,0);
   const colored=canvas(),c=colored.getContext('2d')!;
   iris.sides!.forEach((side,i)=>{const cy=(side.top+side.bottom)/2;c.save();c.beginPath();c.rect(i?236:0,0,236,472);c.clip();c.translate(side.x+(i?1:-1)*irisAdjust.spacing,cy+dy);c.scale(irisAdjust.size*irisAdjust.width,irisAdjust.size);c.translate(-side.x,-cy);c.drawImage(source,0,0);c.restore();});
   const aperture=canvas(),a=aperture.getContext('2d')!;
@@ -155,7 +159,7 @@ export function composeFace(settings:FaceSettings,images:Record<string,HTMLImage
   }
  }
  if(!originalPreset)drawPair(ctx,layers.upper,upper.sides!,upperAdjust);
- if(settings.eyeArtwork==='sully'&&(state==='open'||state==='half')&&images.sully){ctx.clearRect(0,0,472,472);ctx.drawImage(images.sully,0,0,472,472);if(settings.baseIrisColor&&/^#[\da-f]{6}$/i.test(settings.baseIrisColor)){const pixels=ctx.getImageData(0,0,472,472);tintIrisPixels(pixels.data,settings.baseIrisColor);ctx.putImageData(pixels,0,0);}}
+ if(settings.eyeArtwork==='sully'&&(state==='open'||state==='half')&&images.sully){ctx.clearRect(0,0,472,472);ctx.drawImage(images.sully,0,0,472,472);if(settings.baseIrisColor||settings.irisColors){const pixels=ctx.getImageData(0,0,472,472);tintIrisPairPixels(pixels.data,472,{L:settings.irisColors?.L??settings.baseIrisColor,R:settings.irisColors?.R??settings.baseIrisColor});ctx.putImageData(pixels,0,0);}}
  // Group controls move the complete eye assembly, including its mask, together.
  const grouped=canvas(),g=grouped.getContext('2d')!,whole=adjust('eyes');
  for(const [i,cx] of [178,297].entries()){g.save();g.beginPath();g.rect(i?236:0,0,236,472);g.clip();g.translate(cx+(i?1:-1)*whole.spacing,272+whole.y);g.scale(whole.size*whole.width,whole.size);g.translate(-cx,-272);g.drawImage(eyes,0,0);g.restore();}
