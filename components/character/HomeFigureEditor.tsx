@@ -77,7 +77,7 @@ export default function HomeFigureEditor({paletteId, name, ownerId, value, seedS
     };
     const useCustomPart = (part: CustomCreatorPart) => {
         const next=selectHomeFigurePart(state,hair.face,part);
-        change({...hair,face:next.face});
+        change({...hair,face:next.face,...(part.categoryKey==='skin'?{skinColor:undefined}:{})});
         if(JSON.stringify(next.state)===JSON.stringify(state))return;
         setReady(false);setRebuilding(true);setError('');revision.current++;
         setState(next.state);

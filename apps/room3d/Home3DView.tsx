@@ -1,3 +1,4 @@
+import {trackHomeEntry,trackHomeFeature} from '../../utils/homeAnalytics';
 import type {HomeConversationContext} from '../../utils/homeConversation';
 import HomePhone from './HomePhone';
 import HomelyHud from './HomelyHud';
@@ -30,17 +31,20 @@ import {HomeSpeechBubble} from './HomeSpeechBubble';
 
 export default function Home3DView({value,onChange,onBack,character,user,api,conversationContext,onDefinition,onFigures,parts:previewParts,hair:inputHair,suspended=false,residents=[],onEditor,presentation='home'}:{presentation?:'home'|'homely';value?:Home3DState;onChange:(value:Home3DState)=>void;onBack:()=>void;character?:CharacterProfile;user?:UserProfile;api?:APIConfig;conversationContext?:HomeConversationContext;onDefinition?:()=>void;onFigures?:()=>void;parts?:Parts;hair?:HairSettings;suspended?:boolean;residents?:HomeResidentOption[];onEditor?:(editor:HomeEditor)=>void}){
  const homely=presentation==='homely';
+ const entryTracked=useRef(false);
  const hair=inputHair??character?.chibiStudio?.home3D?.hair;
  const host=useRef<HTMLDivElement>(null),save=useRef(onChange),back=useRef(onBack),initial=useRef(value);
  const [editor,setEditor]=useState<HomeEditor>(),[parts,setParts]=useState<Parts>(),[residentError,setResidentError]=useState('');
  const userAvatar=useBlobRefUrl(user?.avatar),characterAvatar=useBlobRefUrl(character?.avatar);
  useEffect(()=>{editor?.setResidentPortraits([{id:character?.id??'resident',label:character?.name??'小人',avatar:characterAvatar},...residents.map(r=>({id:r.id,label:r.label,avatar:r.id==='user'?userAvatar:r.avatar}))]);},[editor,character?.id,character?.name,characterAvatar,userAvatar,residents]);
+ useEffect(()=>{if(editor&&!suspended&&!entryTracked.current){entryTracked.current=true;trackHomeEntry(presentation);}},[editor,suspended,presentation]);
  const [bodyOverride,setBodyOverride]=useState<'blank'|'classic'>(),[mainReady,setMainReady]=useState(false);
  const {away,currentSchedule}=useHomeSchedule(editor,character,mainReady,suspended);
  useHomeCompanion(editor,character,user,api,mainReady,suspended);
  const [photoActive,setPhotoActive]=useState(false),[phoneOpen,setPhoneOpen]=useState(false),[phoneBusy,setPhoneBusy]=useState(false),[homeBusy,setHomeBusy]=useState(false);
  const [interactionTarget,setInteractionTarget]=useState<string>();
- const openLifePanel=(name:string|null,targetId?:string)=>{setInteractionTarget(name==='interact'?targetId:undefined);setLifePanel(name);};
+ const openLifePanel=(name:string|null,targetId?:string)=>{if(name&&name!==lifePanel)trackHomeFeature(name);setInteractionTarget(name==='interact'?targetId:undefined);setLifePanel(name);};
+ const openFigures=onFigures?()=>{trackHomeFeature('figures');onFigures();}:undefined;
  const [initiative,setInitiative]=useState<HomeInitiativeRequest>();
  const [lifePanel,setLifePanel]=useState<string|null>(homely?'chat':null);
  useEffect(()=>{if(homely)editor?.setPrimaryResidentId(character?.id??'resident',character?.name);},[editor,homely,character?.id,character?.name]);
@@ -75,10 +79,10 @@ export default function Home3DView({value,onChange,onBack,character,user,api,con
    {editor&&!suspended&&<>{(!homely||lifePanel!=='chat')&&<HomeSpeechBubble editor={editor}/>}<HomePresenceBubbles editor={editor} character={character} enabled={mainReady&&!lifePanel&&!phoneOpen} canInvite={!!api&&!!user} onInitiative={setInitiative}/></>}
    {away&&!editor?.getHomeScene().present&&<p className="home-away-note" role="status">{character?.name}现在不在家哦……</p>}
    {editor&&!suspended&&!homely&&<><HomeSocialPanel targetId={interactionTarget} externalOpen={lifePanel==='interact'} onClose={()=>setLifePanel(null)} editor={editor} primary={{id:character?.id??'resident',label:character?.name??'小人'}} options={residents.filter(r=>r.id!==character?.id)} body={residentHair.bodyShape??'classic'} onBody={value=>{setMainReady(false);setBodyOverride(value);}} mainReady={mainReady} hair={residentHair}/></>}
-   {editor&&<HomeLifePanel presentation={homely?'homely':'home'} onBusyChange={setHomeBusy} active={!suspended&&!photoActive} initiative={initiative} editor={editor} character={character} user={user} api={api} conversationContext={conversationContext} panel={suspended||homely&&phoneOpen?null:lifePanel} onPanel={openLifePanel} onDefinition={onDefinition} onFigures={onFigures}/>}
+   {editor&&<HomeLifePanel presentation={homely?'homely':'home'} onBusyChange={setHomeBusy} active={!suspended&&!photoActive} initiative={initiative} editor={editor} character={character} user={user} api={api} conversationContext={conversationContext} panel={suspended||homely&&phoneOpen?null:lifePanel} onPanel={openLifePanel} onDefinition={onDefinition} onFigures={openFigures}/>}
    {editor&&character&&!suspended&&<HomePhone onPhotoChange={setPhotoActive} editor={editor} characterId={character.id} onBusyChange={setPhoneBusy} onOpenChange={setPhoneOpen}/>}
    {character&&<HomeSecretsReveal key={character.id} charId={character.id} active={!suspended} ready={mainReady&&!phoneOpen}/>}
-   {editor&&homely&&!suspended&&!phoneOpen&&<HomelyHud editor={editor} name={character?.name||'TA'} schedule={currentSchedule} ready={mainReady} panel={lifePanel} onPanel={openLifePanel} onFigures={onFigures} music={<HomelyMusic editor={editor} active={!photoActive&&!homeBusy&&!phoneBusy}/>}/>}
+   {editor&&homely&&!suspended&&!phoneOpen&&<HomelyHud editor={editor} name={character?.name||'TA'} schedule={currentSchedule} ready={mainReady} panel={lifePanel} onPanel={openLifePanel} onFigures={openFigures} music={<HomelyMusic editor={editor} active={!photoActive&&!homeBusy&&!phoneBusy}/>}/>}
    {editor&&!suspended&&(!homely||lifePanel!=='chat')&&(homeBusy||phoneBusy)&&<div className="home-life-hint" role="status">{character?.name||'角色'}正在回应…</div>}
    {savedState&&<CreatorRollBridge request={creatorReady&&extraItems?1:0} savedState={savedState} extraItems={extraItems} onReady={()=>setCreatorReady(true)} onResult={result=>{setResidentAssets(selectedHairAssets(result.state));decodeParts(result,residentHair).then(setParts).catch(e=>setResidentError(String(e)));}} onError={setResidentError}/>}
    {(residentError||character&&!savedState)&&<p role="status" style={{position:'absolute',top:100,left:18,right:18,fontSize:12,pointerEvents:'none',color:'#665274'}}>{residentError||'先在手办柜捏好小小窝或彼方形象，小人就能住进来。'}</p>}

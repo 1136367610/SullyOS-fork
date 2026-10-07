@@ -1,4 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// This fixture expects the first slot; do not change results after 23:30 on CI.
+beforeEach(() => {vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date(2026,7,19,12));});
+afterEach(() => vi.useRealTimers());
 
 // 角色关掉「时间感知强化」后，日程块曾经照旧写着「当前时段：22:00 你正在睡觉」——
 // 精确钟点从这条缝里漏了出去，而挡住它正是那个开关存在的意义。

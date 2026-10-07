@@ -25,6 +25,7 @@ import { exportSignalLocal, importSignalLocal } from './vrWorld/signal';
 import { exportLuckinLocal, importLuckinLocal } from './luckinMcpClient';
 import { exportMcdLocal, importMcdLocal } from './mcdMcpClient';
 import { exportMcpLocal, importMcpLocal } from './mcpClient';
+import { exportHome3DLocal, importHome3DLocal, HOME3D_LOCAL_KEYS } from './home3DBackup';
 import { exportAmsg2GlobalConfig, importAmsg2GlobalConfig } from './activeMsgStore';
 import { exportWorldHomeLocal, importWorldHomeLocal } from './worldHome/localBackup';
 import { exportDesktopSkinLocal, importDesktopSkinLocal } from './desktopSkinBackup';
@@ -3574,12 +3575,10 @@ export const DB = {
           getAllFromStore(STORE_LIFE_SETTINGS),
       ]);
 
-      const userProfile = userProfiles.length > 0 ? {
-          name: userProfiles[0].name,
-          avatar: userProfiles[0].avatar,
-          bio: userProfiles[0].bio,
-          wardrobeOutfits: userProfiles[0].wardrobeOutfits,
-      } : undefined;
+      // Personal backups retain the whole profile, including Chibi/3D slots.
+      // Sharing-card privacy filtering must not be applied to a device backup.
+      const userProfile = userProfiles.length > 0 ? { ...userProfiles[0] } : undefined;
+      if (userProfile) delete userProfile.id;
 
       const mainState = bankData.find((d: any) => d.id === 'main_state');
       const dollhouseRecord = bankData.find((d: any) => d.id === 'dollhouse_state');
@@ -3621,6 +3620,7 @@ export const DB = {
           worldHomeLocal: exportWorldHomeLocal(), // 家园本机配置：全局 API + 文风收藏（存 localStorage）
           luckinLocal: exportLuckinLocal(),       // 瑞幸 token + 启用状态（存 localStorage）
           mcdLocal: exportMcdLocal(),             // 麦当劳 token + 启用状态（存 localStorage）
+          home3DLocal: exportHome3DLocal(),
           mcpLocal: exportMcpLocal(),             // 通用 MCP 服务器配置（存 localStorage）
           amsg2GlobalConfig: await exportAmsg2GlobalConfig(options), // 主动消息 2.0 全局配置（存独立的 ActiveMsg 库；后端连接默认不带走）
           beautyAuthorLocal: exportBeautyAuthorBackup(),
@@ -3770,6 +3770,7 @@ export const DB = {
           data.worlds !== undefined,
           data.worldEpisodes !== undefined,
           (data as any).worldHomeLocal !== undefined,
+          data.home3DLocal !== undefined,
           (data as any).luckinLocal !== undefined,
           (data as any).mcdLocal !== undefined,
           data.pixelHomeAssets !== undefined,
@@ -4096,6 +4097,19 @@ export const DB = {
           importMcdLocal((data as any).mcdLocal); // token + 启用状态
           (data as any).mcdLocal = undefined;
       }, 1);
+      await runSection('3D 家园本机偏好', data.home3DLocal !== undefined, async () => {
+          importHome3DLocal(data.home3DLocal);
+          // Imported assets may contain an older localStorage mirror. Do not let
+          // the next startup resurrect preferences explicitly reset by this backup.
+          const mirror = await DB.getAssetRaw('ls_mirror_v1');
+          if (mirror?.data && typeof mirror.data === 'object' && !Array.isArray(mirror.data)) {
+              const values = {...mirror.data};
+              for (const key of HOME3D_LOCAL_KEYS) delete values[key];
+              await DB.saveAssetRaw('ls_mirror_v1', {...mirror, data: {...values, ...exportHome3DLocal()}});
+          }
+          data.home3DLocal = undefined;
+      });
+
       await runSection('MCP 服务器配置', (data as any).mcpLocal !== undefined, async () => {
           importMcpLocal((data as any).mcpLocal); // 用户自配的 MCP 服务器列表
           (data as any).mcpLocal = undefined;

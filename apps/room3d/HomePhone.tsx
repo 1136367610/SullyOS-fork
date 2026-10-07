@@ -1,3 +1,4 @@
+import {trackHomeFeature} from '../../utils/homeAnalytics';
 import {AMSG_INSTANT_CHAT_PENDING_EVENT,AMSG_INSTANT_CHAT_PENDING_LS_KEY,getInstantChatPending} from '../../utils/amsgInstantChat';
 import HomePhotoMode from './HomePhotoMode';
 import {CHAT_GEN_EVENTS,registerEmbeddedChatView} from '../../utils/chatGenEvents';
@@ -21,7 +22,7 @@ export default function HomePhone({editor,characterId,onOpenChange,onBusyChange,
  const pageRef=useRef(page);pageRef.current=page;
  const photoBlob=useRef<Blob>(),photoRef=useRef(''),alive=useRef(true),captureVersion=useRef(0),trigger=useRef<HTMLButtonElement>(null);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;captureVersion.current++;if(photoRef.current)URL.revokeObjectURL(photoRef.current);};},[]);
- const change=(next:typeof page)=>{captureVersion.current++;setPage(next);if(next==='chat'&&!document.hidden)setUnread(false);onOpenChange(next!=='closed');onPhotoChange?.(next==='camera');if(next==='closed')trigger.current?.focus();};
+ const change=(next:typeof page)=>{if(next!==page){if(next==='home'&&page==='closed')trackHomeFeature('phone');else if(next==='chat')trackHomeFeature('phone-chat');else if(next==='camera')trackHomeFeature('camera');}captureVersion.current++;setPage(next);if(next==='chat'&&!document.hidden)setUnread(false);onOpenChange(next!=='closed');onPhotoChange?.(next==='camera');if(next==='closed')trigger.current?.focus();};
  useEffect(()=>{if(page==='closed'||page==='camera')return;const escape=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.stopPropagation();change('closed');}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[page]);
  useEffect(()=>{
   let stopTimer:ReturnType<typeof setTimeout>|undefined;let localBusy=false;

@@ -1,3 +1,4 @@
+import {trackHomeFeature} from '../../utils/homeAnalytics';
 import {loadMusicPlaybackSnapshot} from '../../context/MusicContext';
 import type {HomeConversationContext} from '../../utils/homeConversation';
 import {makeDebugLogger} from '../../utils/devDebug';
@@ -116,8 +117,8 @@ export default function HomeLifePanel({editor,character,user,api,conversationCon
     {!character||!homeEmotionEnabled(character)?<p className="home-life-empty">尚未开启情绪 buff，可在角色的情绪设置中开启。</p>:!character.activeBuffs?.length?<p className="home-life-empty">暂时没有情绪 buff，交谈后的情绪更新会显示在这里。</p>:character.activeBuffs.map(buff=><article key={buff.id} className="home-mood-item"><span className="home-mood-icon" aria-hidden="true">{buff.emoji||'💭'}</span><div><h3>{buff.label}</h3><span className="home-mood-strength" aria-label={`强度 ${buff.intensity}`}>{'●'.repeat(Math.max(1,Math.min(5,buff.intensity||1)))}</span>{buff.description&&<p>{buff.description}</p>}</div></article>)}
    </div>:panel==='more'?<div className="home-menu-grid island-menu-grid">
     {[
-     {label:'宠物',tone:'mint',note:'照顾伙伴、装扮与小记',Icon:PawPrint,run:()=>{onPanel(null);editor.openPets();}},
-     {label:'布置房间',tone:'butter',note:'家具与装修',Icon:PaintBrush,run:()=>{onPanel(null);editor.openPanel('decorate');}},
+     {label:'宠物',tone:'mint',note:'照顾伙伴、装扮与小记',Icon:PawPrint,run:()=>{onPanel(null);trackHomeFeature('pets');editor.openPets();}},
+     {label:'布置房间',tone:'butter',note:'家具与装修',Icon:PaintBrush,run:()=>{onPanel(null);trackHomeFeature('edit');editor.openPanel('decorate');}},
      ...(onFigures?[{label:'手办柜',tone:'rose',note:'双方形象',Icon:House,run:()=>{onPanel(null);onFigures();}}]:[]),
      ...(onDefinition?[{label:'家园设定',tone:'sky',note:'我们的共同空间',Icon:BookOpen,run:()=>{onPanel(null);onDefinition();}}]:[]),
      {label:'家园设置',tone:'peach',note:'配色与画面',Icon:SlidersHorizontal,run:()=>{onPanel(null);editor.openPanel('settings');}},

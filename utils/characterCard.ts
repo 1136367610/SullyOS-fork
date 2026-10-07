@@ -68,6 +68,7 @@ export const CARD_STRIPPED_FIELDS = [
   'chibiStudio',
   'home3D',
   'homeDefinition',
+  'homeContextBridgeVersion',
 ] as const;
 
 /**

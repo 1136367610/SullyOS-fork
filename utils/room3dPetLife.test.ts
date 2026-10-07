@@ -24,3 +24,17 @@ it('calls a pet from another room, then approaches the user without granting an 
  const p=life.adopt('pet_cat','团子');home.activeRoomId='other';life.interact(p.id,'approach');
  expect(p.roomId).toBe('other');expect(life.runtime.get(p.id)?.kind).toBe('approach');expect(p.relations.user).toBeUndefined();
 });
+
+
+it('full-home restore replaces live pets and pending actions; layout undo still preserves life',()=>{
+ const s=setup(),old=s.life.adopt('pet_cat','旧猫');s.life.interact(old.id,'feed');
+ const before=structuredClone(s.home),other=setup();const dog=other.life.adopt('pet_dog','备份的狗');dog.needs.food=21;dog.relations.user=9;
+ const imported=structuredClone(other.home),dataIdentity=s.life.data;
+ s.replace(imported);s.life.restore(imported.petLife);s.life.attach();s.life.reconcile();
+ expect(s.life.data).toBe(dataIdentity);expect(s.life.runtime.size).toBe(0);
+ expect(s.home.petLife.pets).toHaveLength(1);expect(s.home.petLife.pets[0]).toMatchObject({id:dog.id,needs:{food:21},relations:{user:9}});
+ const redo=structuredClone(s.home);s.replace(before);s.life.restore(before.petLife);s.life.attach();
+ expect(s.home.petLife.pets[0].id).toBe(old.id);
+ s.replace(redo);s.life.restore(redo.petLife);s.life.attach();expect(s.home.petLife.pets[0].id).toBe(dog.id);
+ const empty=createHome(catalog);s.replace(empty);s.life.restore(undefined);s.life.attach();expect(s.home.petLife.pets).toEqual([]);
+});

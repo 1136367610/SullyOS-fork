@@ -37,6 +37,11 @@ export function createPetLife({home,catalog,changed=()=>{},random=Math.random,ac
  function save(){home().petLife=data;changed();}
  function freeSpot(p,preferred=[p.x,p.z]){const map=mapFor(p);if(map.free(...preferred))return preferred;for(let ring=.4;ring<10;ring+=.4)for(let i=0;i<24;i++){const a=i*Math.PI/12,point=[preferred[0]+Math.sin(a)*ring,preferred[1]+Math.cos(a)*ring];if(map.free(...point))return point;}return null;}
  function attach(){for(const p of data.pets){if(!roomFor(p))p.roomId=home().activeRoomId;for(const r of home().rooms)r.items=r.items.filter(i=>i.id!==p.sourceFurnitureId||i.assetId!==p.assetId);}home().petLife=data;}
+ function restore(raw){
+  const next=normalizePetLife(raw,home(),catalog);
+  for(const key of Object.keys(data))delete data[key];
+  Object.assign(data,next);runtime.clear();maps.clear();sleepCooldown.clear();clock=0;lastSave=0;attach();
+ }
  function reconcile(){
   maps.clear();attach();for(const p of data.pets){if(!roomFor(p))p.roomId=home().activeRoomId;for(const r of home().rooms)r.items=r.items.filter(i=>i.id!==p.sourceFurnitureId||i.assetId!==p.assetId);if(runtime.get(p.id)?.external||runtime.get(p.id)?.sleepSpot)continue;const spot=freeSpot(p);if(spot&&(p.x!==spot[0]||p.z!==spot[1])){p.x=spot[0];p.z=spot[1];runtime.delete(p.id);}}
   home().petLife=data;
@@ -119,5 +124,5 @@ export function createPetLife({home,catalog,changed=()=>{},random=Math.random,ac
   if(clock-lastSave>15){lastSave=clock;save();}return moving;
  }
  reconcile();
- return {data,runtime,adopt,interact,wake,recordContact(id,text){const p=data.pets.find(p=>p.id===id);if(p){event(p,text);save();}},complete(id,r){const p=data.pets.find(p=>p.id===id);if(p&&runtime.get(id)===r){finish(p,r);runtime.delete(id);}},step,reconcile,attach,save,candidates,refill(id){if(!home().rooms.some(r=>r.items.some(i=>i.id===id&&i.assetId==='pet_bowls'&&!i.stored)))throw Error('食盆已不在房间');data.supplies[id]=5;onEvent({petName:'',text:'你补满了宠物食盆',source:'user',roomId:home().rooms.find(r=>r.items.some(i=>i.id===id)).id});save();},inspect:()=>({pets:copy(data.pets),actions:Object.fromEntries([...runtime].map(([id,r])=>[id,{kind:r.kind,moving:!!r.path.length,manual:!!r.manual,sleepStage:r.sleepStage||null,sleepSpot:r.sleepSpot||null,position:petSleepPose(data.pets.find(p=>p.id===id),r)}]))})};
+ return {data,runtime,restore,adopt,interact,wake,recordContact(id,text){const p=data.pets.find(p=>p.id===id);if(p){event(p,text);save();}},complete(id,r){const p=data.pets.find(p=>p.id===id);if(p&&runtime.get(id)===r){finish(p,r);runtime.delete(id);}},step,reconcile,attach,save,candidates,refill(id){if(!home().rooms.some(r=>r.items.some(i=>i.id===id&&i.assetId==='pet_bowls'&&!i.stored)))throw Error('食盆已不在房间');data.supplies[id]=5;onEvent({petName:'',text:'你补满了宠物食盆',source:'user',roomId:home().rooms.find(r=>r.items.some(i=>i.id===id)).id});save();},inspect:()=>({pets:copy(data.pets),actions:Object.fromEntries([...runtime].map(([id,r])=>[id,{kind:r.kind,moving:!!r.path.length,manual:!!r.manual,sleepStage:r.sleepStage||null,sleepSpot:r.sleepSpot||null,position:petSleepPose(data.pets.find(p=>p.id===id),r)}]))})};
 }
