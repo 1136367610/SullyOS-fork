@@ -296,14 +296,14 @@ const DateApp: React.FC = () => {
             const msgs = await loadCharacterContextMessages(c);
             const preparedMsgs = await materializeVisionDescriptions(msgs, apiConfig.visionApi);
             const emojis = await DB.getEmojis();
-            const { messages } = DatePrompts.buildPeekPayload({
+            const { messages } = (await DatePrompts.buildPeekPayload({
                 char: c,
                 userProfile,
                 allMsgs: preparedMsgs,
                 emojis,
                 useVisionDescriptions: apiConfig.visionApi?.enabled === true,
                 openingMode: selectedOpening,
-            });
+            }));
             const content = await callLLM(messages, resolveDialogueApi(apiConfig, c).temperature ?? 0.85, c);
             if (requestId === peekRequestRef.current) setPeekStatus(content);
 
@@ -480,14 +480,14 @@ const DateApp: React.FC = () => {
         // 新消息也不带 isOpening，阅读模式会从上一次见面的开场开始切片，表现为
         // 「新见面只有立绘模式是新剧情，阅读模式全是旧剧情」。
         if (lastMsg.metadata?.isOpening === true) {
-            const { messages } = DatePrompts.buildPeekPayload({
+            const { messages } = (await DatePrompts.buildPeekPayload({
                 char,
                 userProfile,
                 allMsgs: preparedValidMsgs,
                 openingMode: lastMsg.metadata?.dateOpeningMode === 'invite' ? 'invite' : 'approach',
                 emojis,
                 useVisionDescriptions: apiConfig.visionApi?.enabled === true,
-            });
+            }));
             const content = await callLLM(messages, Math.max(resolveDialogueApi(apiConfig, char).temperature ?? 0.85, 0.9));
             // 生成成功后才动库：先删旧开场、再带 isOpening 落新开场，请求失败时原剧情不丢
             await DB.deleteMessage(lastMsg.id);

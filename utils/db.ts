@@ -4,6 +4,8 @@ import {restoreDecorationMedia} from './decorationMediaBackup';
 import {exportBeautyPreferences,importBeautyPreferences} from './beautyPreferencesBackup';
 import {exportBeautyAuthorBackup,importBeautyAuthorBackup} from './beautyAuthorBackup';
 import { toMountedWorldbook } from './worldbook';
+import { persistCharacterWithHomeMessages } from './homeMessageBridge';
+
 import { orderWorldEpisodes } from './worldHome/episodeOrder';
 
 
@@ -35,8 +37,10 @@ const DB_NAME = 'AetherOS_Data';
 // v69：见面·剧情条目与糯米机原生预设。正文继续复用 messages 表，避免再造会话存储。
 // v70：剧场面具箱（原创人物面具）；角色面具仍只存 characterId，不复制神经链接资料。
 // v71：角色小红书伪主页；发帖归属与可删除的自由活动日志分离。
-// v72: 回执按角色与 deliveryId 查重，不在写事务中扫描整段聊天、阻塞资源读取。
-const DB_VERSION = 72;
+// v72: home projection reads only home-source rows, never scans private-chat history.
+// v73: direct home-turn lookups for incremental journal writes.
+// v74: merge master delivery lookup with both home indexes, including existing v73 databases.
+const DB_VERSION = 74;
 
 const STORE_CHARACTERS = 'characters';
 const STORE_CHAR_GROUPS = 'character_groups'; // 角色分组定义（角色通过 groupId 指向；与群聊 groups 无关）
@@ -279,6 +283,15 @@ export const openDB = (): Promise<IDBDatabase> => {
               msgStore.createIndex('charId_type', ['charId', 'type'], { unique: false });
           }
       } catch (e) { console.log('charId_type index migration skipped', e); }
+
+      const messageStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORE_MESSAGES);
+      if (!messageStore.indexNames.contains('charId_source')) {
+          messageStore.createIndex('charId_source', ['charId', 'metadata.source'], { unique: false });
+      }
+
+      if (!messageStore.indexNames.contains('charId_homeTurn')) {
+          messageStore.createIndex('charId_homeTurn', ['charId', 'metadata.homeTurnId'], { unique: false });
+      }
 
       const deliveryStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORE_MESSAGES);
       if (!deliveryStore.indexNames.contains('charId_deliveryId')) {
@@ -576,14 +589,17 @@ export const DB = {
 
   saveCharacter: async (character: CharacterProfile): Promise<void> => {
     const db = await openDB();
-    // 等事务真正提交再 resolve —— 否则调用方 await 后立刻重读 DB 会拿到旧值 (情绪 buff 落库竞态根因).
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_CHARACTERS, 'readwrite');
-      transaction.objectStore(STORE_CHARACTERS).put(character);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error || new Error('saveCharacter aborted'));
+    return persistCharacterWithHomeMessages(db, character, clearStaleMemoryMirror);
+  },
+
+  ensureHomeContextMessages: async (charId: string): Promise<void> => {
+    const db = await openDB();
+    const migrated = await new Promise<boolean>((resolve, reject) => {
+      const request = db.transaction(STORE_CHARACTERS, 'readonly').objectStore(STORE_CHARACTERS).get(charId);
+      request.onsuccess = () => resolve(!request.result || request.result.homeContextBridgeVersion === 3);
+      request.onerror = () => reject(request.error);
     });
+    if (!migrated) await persistCharacterWithHomeMessages(db, charId, clearStaleMemoryMirror);
   },
 
   deleteCharacter: async (id: string): Promise<void> => {
@@ -636,15 +652,24 @@ export const DB = {
    * @param includeProcessed 是否包含已被记忆宫殿处理的消息（默认 false，即自动过滤）。
    *                         记忆归档、批量总结等需要完整历史的场景应传 true。
    */
-  getMessagesByCharId: async (charId: string, includeProcessed: boolean = false): Promise<Message[]> => {
+  getMessagesByCharId: async (charId: string, includeProcessed: boolean = false, sealHomeActions: boolean = false): Promise<Message[]> => {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_MESSAGES, 'readonly');
+      const transaction = db.transaction(STORE_MESSAGES, sealHomeActions ? 'readwrite' : 'readonly');
       const store = transaction.objectStore(STORE_MESSAGES);
       const index = store.index('charId');
       const request = index.getAll(IDBKeyRange.only(charId));
+      let snapshot: Message[] = [];
       request.onsuccess = () => {
           let results = (request.result || []).filter((m: Message) => !m.groupId);
+          // A one-shot archive includes the tail. Freeze its home action segments
+          // in the same transaction as the snapshot, before any LLM/network wait.
+          if (sealHomeActions) for (const message of results) {
+              if (message.metadata?.source === 'home' && message.metadata?.homeContextKind === 'actions' && !message.metadata.homeContextSealed) {
+                  message.metadata = { ...message.metadata, homeContextSealed: true };
+                  store.put(message);
+              }
+          }
           // 记忆宫殿：过滤已处理的消息（高水位标记之前的），用向量记忆替代
           if (!includeProcessed) {
               try {
@@ -654,9 +679,12 @@ export const DB = {
                   }
               } catch {}
           }
-          resolve(results);
+          snapshot = results;
       };
       request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(snapshot);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('聊天历史快照未能完成'));
     });
   },
 
@@ -1859,8 +1887,22 @@ export const DB = {
 
   saveUserProfile: async (profile: UserProfile): Promise<void> => {
       const db = await openDB();
-      const transaction = db.transaction(STORE_USER, 'readwrite');
-      transaction.objectStore(STORE_USER).put({ ...profile, id: 'me' });
+      return new Promise((resolve,reject)=>{
+          const transaction=db.transaction(STORE_USER,'readwrite'),store=transaction.objectStore(STORE_USER),request=store.get('me');
+          request.onsuccess=()=>store.put({...profile,wardrobeOutfits:request.result?.wardrobeOutfits??profile.wardrobeOutfits,id:'me'});
+          transaction.oncomplete=()=>resolve();transaction.onerror=transaction.onabort=()=>reject(transaction.error);
+      });
+  },
+
+  /** Wardrobe is edited independently of profile forms; merge within one transaction. */
+  updateWardrobeOutfits: async (update:(items:NonNullable<UserProfile['wardrobeOutfits']>)=>NonNullable<UserProfile['wardrobeOutfits']>):Promise<NonNullable<UserProfile['wardrobeOutfits']>> => {
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+          const tx=db.transaction(STORE_USER,'readwrite'),store=tx.objectStore(STORE_USER),request=store.get('me');
+          let items:NonNullable<UserProfile['wardrobeOutfits']>=[],failure:unknown;
+          request.onsuccess=()=>{try{const profile=request.result??{id:'me',name:'我',avatar:'',bio:''};items=update(profile.wardrobeOutfits??[]);store.put({...profile,wardrobeOutfits:items});}catch(e){failure=e;tx.abort();}};
+          tx.oncomplete=()=>resolve(items);tx.onerror=tx.onabort=()=>reject(failure??tx.error);
+      });
   },
 
   getUserProfile: async (): Promise<UserProfile | null> => {
@@ -3535,7 +3577,8 @@ export const DB = {
       const userProfile = userProfiles.length > 0 ? {
           name: userProfiles[0].name,
           avatar: userProfiles[0].avatar,
-          bio: userProfiles[0].bio
+          bio: userProfiles[0].bio,
+          wardrobeOutfits: userProfiles[0].wardrobeOutfits,
       } : undefined;
 
       const mainState = bankData.find((d: any) => d.id === 'main_state');

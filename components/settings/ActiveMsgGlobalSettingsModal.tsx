@@ -141,6 +141,8 @@ const REQUIRED_WORKER_FEATURES = [
 // 不比版本的话，旧粘贴部署会被误判为最新，问题全在 worker 侧静默发生。
 //
 const REQUIRED_WORKER_VERSION = '2.6.0-next.33';
+// next.34 cloud-data management is optional and has its own capability gate.
+const WORKER_VERSION_LAG_ACK = '2.6.0-next.34';
 
 /** 装着打包好的 worker 代码的部署仓库：fork 它 → 在 Cloudflare 连上 → 以后点 Sync fork 更新。 */
 const WORKERS_REPO_URL = 'https://github.com/Tosd0/sullyos-workers';

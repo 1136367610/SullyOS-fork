@@ -621,6 +621,7 @@ const Character: React.FC = () => {
    *                        没提供则退回到当前 selectedPromptId
    */
   const handleForceArchiveDate = async (dateStr: string, overridePromptId?: string): Promise<void> => {
+
       if (!apiConfig.apiKey || !formData) { addToast('请先配置 API Key', 'error'); return; }
       const targetId = formData.id;
       try {
@@ -642,7 +643,6 @@ const Character: React.FC = () => {
           const effectivePromptId = overridePromptId || selectedPromptId;
           const templateObj = archivePrompts.find(p => p.id === effectivePromptId) || DEFAULT_ARCHIVE_PROMPTS[0];
           const characterContextInput = { char: formData, user: userProfile };
-
           let prompt = '' + '\n\n' + templateObj.content;
           const sarMemoryBoundary = buildSARMemoryBoundaryInstruction(rawLog);
           if (sarMemoryBoundary) prompt = `${sarMemoryBoundary}\n\n${prompt}`;
@@ -654,7 +654,7 @@ const Character: React.FC = () => {
           const data = await safeFetchJson(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify({ model: apiConfig.model, messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'user', content: prompt }]), temperature: 0.5, max_tokens: 8000, stream: false }),
+              body: JSON.stringify({ model: apiConfig.model, messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'user', content: prompt }])), temperature: 0.5, max_tokens: 8000, stream: false }),
           }, 0);
           let summary = extractContent(data).replace(/^["']|["']$/g, '');
           if (!summary) throw new Error('空响应');
@@ -781,6 +781,7 @@ const Character: React.FC = () => {
   };
   
   const handleBatchSummarize = async () => {
+
         if (!apiConfig.apiKey || !formData) return;
         
         const targetId = formData.id; // LOCK ID
@@ -813,7 +814,6 @@ const Character: React.FC = () => {
             await injectMemoryPalace(formData);
             const characterContextInput = { char: formData, user: userProfile };
 
-
             for (let i = 0; i < dates.length; i++) {
                 const date = dates[i];
                 setBatchProgress(`Processing ${date} (${i+1}/${dates.length})`);
@@ -841,7 +841,7 @@ const Character: React.FC = () => {
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                         body: JSON.stringify({
                             model: apiConfig.model,
-                            messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }]),
+                            messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }])),
                             max_tokens: 8000,
                             temperature: 0.5
                         })
@@ -904,6 +904,7 @@ const Character: React.FC = () => {
     };
 
   const handleGenerateImpression = async (type: 'initial' | 'update') => {
+
       if (!formData || !apiConfig.apiKey) {
           addToast('请先配置 API Key', 'error');
           return;
@@ -1027,7 +1028,7 @@ ${isInitialGeneration ? `
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
               body: JSON.stringify({
                   model: apiConfig.model,
-                  messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }]),
+                  messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }])),
                   max_tokens: 8000,
                   temperature: 0.5,
                   // 与「设置 → API → 流式输出」保持一致，不在印象功能里强制覆盖用户选择。

@@ -15,6 +15,7 @@ import { CANTONESE_VOICE_SUPPORT_NOTE, VOICE_LANGUAGE_OPTIONS } from '../../util
 import { chatMessageFuzzyMatchesKeyword } from '../../utils/chatMessageSearch';
 
 interface ChatModalsProps {
+    compactHome?: boolean;
     modalType: string;
     setModalType: (v: any) => void;
     // Data Props
@@ -240,7 +241,7 @@ const TranslationLanguagePicker: React.FC<TranslationLanguagePickerProps> = ({
 };
 
 const ChatModals: React.FC<ChatModalsProps> = ({
-    modalType, setModalType,
+    modalType, setModalType, compactHome=false,
     transferAmt, setTransferAmt,
     transferNote, setTransferNote,
     emojiImportText, setEmojiImportText,
@@ -969,7 +970,7 @@ const ChatModals: React.FC<ChatModalsProps> = ({
             </Modal>
 
             <Modal isOpen={modalType === 'message-options'} title="消息操作" onClose={() => setModalType('none')}>
-                <div className="space-y-3">
+                <div className="space-y-3">{compactHome?<button className="w-full py-3 rounded-2xl bg-amber-50 text-amber-800" onClick={()=>{onToggleMessageFavorite?.();setModalType('none');}}>{messageFavorited?'取消收藏':'收藏这条消息'}</button>:<>
                     <button onClick={onEnterSelectionMode} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
                         多选 / 批量删除
                     </button>
@@ -1015,7 +1016,7 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                     <button onClick={onDeleteMessage} className="w-full py-3 bg-red-50 text-red-500 font-medium rounded-2xl active:bg-red-100 transition-colors flex items-center justify-center gap-2">
                         删除消息
                     </button>
-                </div>
+                </>}</div>
             </Modal>
             
              <Modal

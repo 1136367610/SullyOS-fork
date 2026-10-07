@@ -641,6 +641,7 @@ For each chapter, provide a title, a brief summary of what it covers, and a diff
     // [MODIFIED]: buildStudyContext Removed. We now use ContextBuilder directly in handleTeach.
 
     const handleTeach = async (course: StudyCourse, chapterIdx: number, forceRegenerate: boolean = false) => {
+
         if (!selectedChar || !effectiveApi.apiKey) return;
         
         const chapter = course.chapters[chapterIdx];
@@ -694,7 +695,7 @@ Explain this chapter's key concepts to the user based strictly on the Source Mat
                 body: JSON.stringify({
                     model: effectiveApi.model,
                     messages: isFallback ? [{ role: "user", content: prompt }]
-                        : ContextBuilder.buildCharacterRequest({ char: selectedChar, user: userProfile }, [{ role: "user", content: prompt }]),
+                        : (await ContextBuilder.buildCharacterRequest({ char: selectedChar, user: userProfile }, [{ role: "user", content: prompt }])),
                     temperature: 0.7,
                     max_tokens: 8000, 
                     safetySettings: [
@@ -783,6 +784,7 @@ You are now acting as a private tutor for ${userProfile.name}.
     };
 
     const handleAskQuestion = async () => {
+
         if (!userQuestion.trim() || !activeCourse || !selectedChar) return;
         
         const question = userQuestion;
@@ -823,7 +825,7 @@ Answer the question based on the source material. Be helpful and encouraging (in
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
                 body: JSON.stringify({
                     model: effectiveApi.model,
-                    messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'system', content: studyInstructions }, { role: "user", content: prompt }]),
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: 'system', content: studyInstructions }, { role: "user", content: prompt }])),
                     temperature: 0.7,
                     max_tokens: 8000
                 })
@@ -1057,6 +1059,7 @@ ${chunkText.substring(0, 10000)}
     };
 
     const submitQuiz = async () => {
+
         if (!quizSession || !selectedChar || !effectiveApi.apiKey) return;
         trackEvent('交卷让老师批改');
         setQuizLoading('正在批改试卷...');
@@ -1121,7 +1124,7 @@ ${resultsText}
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
                 body: JSON.stringify({
                     model: effectiveApi.model,
-                    messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: reviewPrompt }]),
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: reviewPrompt }])),
                     temperature: 0.8,
                     max_tokens: 8000
                 })
@@ -1191,6 +1194,7 @@ ${resultsText}
 
     // Follow-up Q&A on a specific question
     const handleFollowUp = async (questionId: string) => {
+
         if (!followUpInput.trim() || !selectedChar || !effectiveApi.apiKey || !quizSession) return;
         const question = quizSession.questions.find(q => q.id === questionId);
         if (!question) return;
@@ -1225,7 +1229,7 @@ Answer in character. Be helpful and clear. If they're confused about a concept, 
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveApi.apiKey}` },
                 body: JSON.stringify({
                     model: effectiveApi.model,
-                    messages: ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }]),
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, [{ role: "user", content: prompt }])),
                     temperature: 0.7,
                     max_tokens: 4000
                 })

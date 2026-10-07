@@ -814,7 +814,7 @@ push endpoint）留在 toast 和 console 里，一个字都不进上报。
 
 **小小窝**
 
-- 切换小小窝分区
+- 切换小小窝分区（tab 固定枚举：room / worldHome / home3D；原 pixelHome 入口已移到记忆宫殿）
 - 切换生活碎片面板
 - 复制选中的家具
 - 套用内置样板房

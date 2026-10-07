@@ -37,6 +37,18 @@ const baseInput = (): BuildChatPayloadInput => ({
 const joinMessages = (messages: Array<{ content: any }>): string =>
     messages.map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
 
+it.each([false,true])('adds home phone background only to this request (worker=%s) and retains normal chat history', async timelyByWorker => {
+    const input={...baseInput(),timelyByWorker};
+    const background='【家园手机聊天】你们在客厅里用手机聊天。';
+    const phone=await buildChatRequestPayload({...input,homePhoneContext:background});
+    expect(joinMessages(phone.fullMessages)).toContain(background);
+    expect(phone.systemPrompt).toContain(background);
+    expect(phone.cleanedApiMessages.some(m=>m.role==='user'&&String(m.content).includes('在吗'))).toBe(true);
+    const normal=await buildChatRequestPayload(input);
+    expect(joinMessages(normal.fullMessages)).not.toContain(background);
+    expect(input.char).not.toHaveProperty('homePhoneContext');
+});
+
 it('本地仅节假日感知可独立注入一句，云端生成不烤进本地提醒', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 27, 12));
     const input = baseInput();

@@ -132,6 +132,7 @@ const ScheduleApp: React.FC = () => {
     // --- AI Logic ---
 
     const generateTaskReward = async (task: Task) => {
+
         const supervisor = characters.find(c => c.id === task.supervisorId);
         if (!supervisor || !apiConfig.apiKey) {
             addToast('任务已完成', 'success');
@@ -177,7 +178,7 @@ const ScheduleApp: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                 body: JSON.stringify({
                     model: apiConfig.model,
-                    messages: ContextBuilder.buildCharacterRequest(characterContextInput, messages),
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, messages)),
                     temperature: 0.9, 
                     max_tokens: 8000 
                 })
@@ -219,6 +220,7 @@ const ScheduleApp: React.FC = () => {
     };
 
     const generateAnniversaryThought = async (anni: Anniversary) => {
+
         const char = characters.find(c => c.id === anni.charId);
         if (!char || !apiConfig.apiKey) return;
 
@@ -262,7 +264,7 @@ const ScheduleApp: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                 body: JSON.stringify({
                     model: apiConfig.model,
-                    messages: ContextBuilder.buildCharacterRequest(characterContextInput, messages),
+                    messages: (await ContextBuilder.buildCharacterRequest(characterContextInput, messages)),
                     temperature: 0.8,
                     max_tokens: 8000
                 })

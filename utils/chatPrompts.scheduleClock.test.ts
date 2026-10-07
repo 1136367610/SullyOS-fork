@@ -57,3 +57,18 @@ describe('日程块的钟点跟着「时间感知」开关走', () => {
         expect(volatile).not.toContain('CHANGE_SCHEDULE');
     });
 });
+import {getDailyScheduleForChar} from './dailySchedule';
+it('one read per request, with fresh data next request',async()=>{
+ const load=vi.mocked(getDailyScheduleForChar);load.mockClear();
+ load.mockResolvedValueOnce({slots:[{startTime:'00:00',activity:'第一轮安排'}]} as any);
+ expect(await buildVolatile(undefined)).toContain('第一轮安排');
+ expect(load).toHaveBeenCalledTimes(1);
+ load.mockResolvedValueOnce({slots:[{startTime:'00:00',activity:'第二轮安排'}]} as any);
+ const second=await buildVolatile(undefined);
+ expect(second).toContain('第二轮安排');expect(second).not.toContain('第一轮安排');
+ expect(load).toHaveBeenCalledTimes(2);
+});
+it('shares a missing schedule without rereading',async()=>{
+ const load=vi.mocked(getDailyScheduleForChar);load.mockClear();load.mockResolvedValueOnce(null);
+ await buildVolatile(undefined);expect(load).toHaveBeenCalledTimes(1);
+});

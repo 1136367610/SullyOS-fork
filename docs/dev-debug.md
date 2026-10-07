@@ -131,6 +131,7 @@ sullyos.devDebug.log.v1.<branch>        ← 分类捕获日志（各类混存，
 |------|------|------|--------|
 | `skipPromptBuild` | 行为 | 只发聊天历史，不注入 system prompt | 双语 / MCD / HTML / thinking 等增强全部关掉 |
 | `skipEmotionEval` | 行为 | 主回复照常，但不跑情绪副评估（本地和即时对话都算） | 关掉后情绪不更新 |
+| `forceHomeSecretRoll` | 行为 | 「秘密必定命中」：跳过秘密任务的 20% 抽签，本地和即时对话共用 | 默认关；仍需情绪评估开启、有 3D 小屋和已完成对话，同一片段不重复；没有宠物仍不生成宠物事件。调试不可用时不生效，测试后关闭恢复 20% |
 | `mergeSystemMessages` | 行为 | 把聊天请求的多条 `role:system`（稳定前缀 / 易变尾段 / 双语·MCP 提醒条）合并成开头一条再发送（`utils/systemMessageMerge.ts`）。用途：A/B 对照中转适配层对多 system 请求的计量——同一段聊天开关各发一条，对比中转记的 prompt_tokens；合并后骤降 = 中转把「历史后的 system」重复拼接了 | 易变尾段失去 recency 位置、稳定前缀缓存失效；只作临时排障，测完关掉 |
 | `captureEnabled`<br>（记录日志·总开关） | 行为 | 日志录制总闸：关掉时所有捕获类都不抓 | 默认关；关掉只是停录，**不清**已抓日志 |
 | 捕获类 `api` | 捕获 | 抓所有走 `safeFetchJson`（`safeApi`）的 chat completions 请求 + 响应：普通聊天直发，外加 Character 里的记忆精炼/强制归档/导入清洗/批量总结/印象生成。每条带 `durationMs`（最后一次 attempt 从发起到成功/报错的耗时）和 `requestChars`（请求体字符数，messages 折叠后靠它看体积） | 取消勾选只停此后抓取，**不清**已有日志 |
@@ -446,3 +447,10 @@ Resource Timing: responseStatus=429, transferSize=0 → 对方其实回了 HTTP 
 ## SAR 剧情与表情校对
 
 扳手内仅在 `pnpm dev` 显示此开关，默认关闭；开启后临时开放名册全部 84 段原稿及逐句表情编辑、分支返回和 JSON 导出。关闭立即恢复真实收藏锁定，未解锁预览退出；不修改星级、奖励或收藏记录，既有校对草稿保留。正式构建即使手动解锁扳手也不能启用。开关按分支随调试标志保存，细节见 [SAR 个人线](./sar-personal-lines.md)。
+
+## 家园自主行为观察（2026-10-04）
+扳手面板顶部的 HomeCompanionDebug 读取 utils/homeCompanionDebug.ts 的会话内快照。useHomeCompanion 在原有三秒决策周期发布当前阻塞条件、坐姿、距离、冷却、判断/尝试/启动/失败次数及最近八次尝试；editor 返回实际寻路失败或降级原因。面板一秒刷新倒计时，不主动调用引擎，不触发 LLM。仅在 isDevDebugAvailable 门禁内可读写，不持久化，不收录聊天/门牌文本；不属于 capture 日志，无须打开记录日志。家园退出/挂起标记已停止，重新挂载重置计数；启动数不是完成数。日程家具动作的并行槽限制另行提示，不能把这份陪伴统计当作全部日程执行记录。
+
+### 3D 素材的正常取消
+
+`Home3DView` 将实际编辑器初始化推迟到微任务，跳过 StrictMode 已清理的首次 effect，不发出废弃的素材请求。卸载时由 signal 通知编辑器清理，取消原因标记为 `Home3D disposed`。全局 fetch 日志只对 room3d 路径、信号确已取消且原因为该标记的 AbortError 不生成网络故障日志；仍把异常交回调用方。未标记取消、超时、HTTP 失败和真实联网失败保持原有诊断。回归：homeEditorLifecycle / homeAssetCancellation / networkFailureDiagnosis。
