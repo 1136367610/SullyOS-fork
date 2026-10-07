@@ -14,6 +14,7 @@ import type { createCameraGpuEffects } from '../../utils/cameraGpuEffects';
 import { CAMERA_FRAMES as FRAMES, cameraFrameLayout, drawCameraFrame } from '../../utils/cameraFrames';
 import { CameraStickerGesture, type StickerTransform } from '../../utils/cameraStickerGesture';
 import { cameraCaptureLayout, cameraIsPortrait } from '../../utils/cameraCapture';
+import { createCameraPreview } from '../../utils/cameraPreview';
 
 const Live2DAvatarCanvas = lazy(() => import('../call/Live2DAvatarCanvas'));
 
@@ -31,6 +32,7 @@ export default function ChatCamera({ onClose, onGallery, onCapture, character }:
     const [retry, setRetry] = useState(0);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState('');
+    const [cameraStatus, setCameraStatus] = useState('正在打开相机…');
     const [photo, setPhoto] = useState<HTMLCanvasElement | null>(null);
     const [frame, setFrame] = useState(0);
     const [tool, setTool] = useState<'stickers' | 'frames' | 'filters'>('stickers');
@@ -61,7 +63,14 @@ export default function ChatCamera({ onClose, onGallery, onCapture, character }:
     const view = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     const composite = useRef<HTMLCanvasElement | null>(null);
-    const stream = useRef<MediaStream | null>(null);
+    const preview = useMemo(() => createCameraPreview({
+        video: () => video.current,
+        getUserMedia: constraints => {
+            if (!navigator.mediaDevices?.getUserMedia) return Promise.reject(new Error('当前环境无法使用站内相机，请使用 HTTPS 浏览器打开。'));
+            return navigator.mediaDevices.getUserMedia(constraints);
+        },
+        ready: setReady, error: setError, status: setCameraStatus,
+    }), []);
     const nextId = useRef(0);
     const drag = useRef<CameraStickerGesture | null>(null);
     const dragFrame = useRef<number | null>(null);
@@ -87,7 +96,7 @@ export default function ChatCamera({ onClose, onGallery, onCapture, character }:
             return { ...preset, preview: thumb.toDataURL('image/jpeg', 0.8) };
         });
     }, [photo]);
-    const stop = () => { stream.current?.getTracks().forEach(t => t.stop()); stream.current = null; };
+    const stop = () => preview.stop();
 
     useEffect(() => {
         const update = () => setPortrait(cameraIsPortrait());
@@ -138,38 +147,20 @@ export default function ChatCamera({ onClose, onGallery, onCapture, character }:
 
     useEffect(() => {
         if (mode !== 'camera' || photo) return;
-        let cancelled = false;
-        setReady(false); setError('');
-        const start = async () => {
-            try {
-                if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前环境无法使用站内相机，请使用 HTTPS 浏览器打开。');
-                const media = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-                    facingMode: { ideal: facing }, aspectRatio: { ideal: portrait ? 3 / 4 : 4 / 3 },
-                    width: { ideal: portrait ? 1440 : 1920 }, height: { ideal: portrait ? 1920 : 1440 },
-                } });
-                if (cancelled) { media.getTracks().forEach(t => t.stop()); return; }
-                stream.current = media;
-                media.getVideoTracks().forEach(t => t.addEventListener('ended', () => {
-                    if (!cancelled) { setReady(false); setError('摄像头已断开，请重试。'); }
-                }));
-                if (video.current) { video.current.srcObject = media; await video.current.play(); }
-            } catch (e) {
-                if (cancelled) return;
-                stop();
-                const name = e instanceof Error ? e.name : '';
-                setError(name === 'NotAllowedError' ? '未获得相机权限，请在浏览器设置中允许访问相机后重试。'
-                    : name === 'NotFoundError' ? '没有找到可用摄像头。'
-                    : name === 'NotReadableError' ? '摄像头暂时不可用，可能正被其他应用占用。'
-                    : e instanceof Error ? e.message : '无法打开相机，请重试。');
-            }
+        let suspended = false;
+        const pause = () => { suspended = true; preview.stop(); setError(''); setCameraStatus('相机已暂停，返回后恢复'); };
+        const resume = () => { if (!document.hidden && suspended) { suspended = false; preview.start(facing); } };
+        const visibility = () => {
+            if (document.hidden) pause(); else resume();
         };
-        void start();
-        const hide = () => {
-            if (document.hidden) { cancelled = true; stop(); setReady(false); setError('相机已暂停，请重试。'); }
+        if (document.hidden) pause(); else preview.start(facing);
+        document.addEventListener('visibilitychange', visibility);
+        window.addEventListener('pagehide', pause); window.addEventListener('pageshow', resume);
+        return () => {
+            preview.stop(); document.removeEventListener('visibilitychange', visibility);
+            window.removeEventListener('pagehide', pause); window.removeEventListener('pageshow', resume);
         };
-        document.addEventListener('visibilitychange', hide);
-        return () => { cancelled = true; stop(); document.removeEventListener('visibilitychange', hide); };
-    }, [mode, facing, retry, photo, portrait]);
+    }, [mode, facing, retry, photo, preview]);
 
     const renderPhoto = async (display: HTMLCanvasElement, fullSize: boolean, cancelled: () => boolean) => {
         if (!photo || !previewPhoto) return;
@@ -372,11 +363,11 @@ export default function ChatCamera({ onClose, onGallery, onCapture, character }:
                         e.preventDefault(); pendingDrag.current = { id: moving.id, ...next };
                         if (dragFrame.current === null) dragFrame.current = requestAnimationFrame(flushDrag);
                     }} onPointerUp={finishDrag} onPointerCancel={finishDrag} onLostPointerCapture={finishDrag} />
-                        : <video ref={video} autoPlay muted playsInline onLoadedData={() => { if (stream.current?.active) setReady(true); }} style={{
+                        : <video ref={video} autoPlay muted playsInline style={{
                             width: viewfinder.width, height: viewfinder.height, objectFit: 'cover', objectPosition: 'center',
                             transform: facing === 'user' ? 'scaleX(-1)' : undefined,
                         }} />}
-                    {!photo && !ready && !error && <p className="chat-camera-status" role="status">正在打开相机…</p>}
+                    {!photo && !ready && !error && <p className="chat-camera-status" role="status">{cameraStatus}</p>}
                 </div>
                 {error && <div className="chat-camera-error" role="alert">{error}{photo ? <button type="button" onClick={() => setError('')}>知道了</button> : <><button type="button" onClick={() => setRetry(n => n + 1)}>重试</button><button type="button" onClick={openGallery}>从相册选择</button></>}</div>}
                 {photo && <fieldset className="chat-camera-editor" disabled={busy}>
