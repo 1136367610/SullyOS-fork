@@ -15,6 +15,7 @@ export function mountPetSystem({host,scene,home,catalog,templates,actors,contact
  let contactHudMarkup='';const contactHud=document.createElement('div');contactHud.className='pet-contact-hud';contactHud.hidden=true;host.append(contactHud);
  contactHud.onclick=e=>{try{if(e.target.closest('[data-drop]'))contact.drop();else if(e.target.closest('[data-cancel]'))contact.cancel();}catch(err){error=err.message;open(contact.inspect()?.petId);error=err.message;render();}invalidate();};
  let selected=null,sourceId=null,previousFocus=null,error='',disposed=false,shadowDirty=true,tab='pets',detailTab='care',pending=null,feedback=null,wakeContact=null;
+ let removeConfirm=null;
  const asset=id=>catalog.find(a=>a.id===id);
  function clearModels(){for(const root of models.values())root.traverse(o=>{if(o.isMesh)for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();});models.clear();layer.clear();}
  function sync(){
@@ -59,12 +60,12 @@ export function mountPetSystem({host,scene,home,catalog,templates,actors,contact
   const care=PET_CARE.map(([kind,label,,icon])=>({action:'pet-interact',id,kind,label:kind==='carry'&&held?'放下来':label,icon,reason:(r?.manual||contact.busy)&&!(held&&kind==='carry')?'等当前互动结束，或先把小伙伴放下':''}));
   return [{action:'pet-panel',id,label:'宠物面板',icon:'book'},care[0],care[5],care[1],care[2],care[3],care[4]];
  }
- function close(){overlay.hidden=true;previousFocus?.focus?.();}
- function open(id=null,source=null){beforeOpen?.();previousFocus=document.activeElement;selected=id;sourceId=source;error='';tab='pets';detailTab='care';overlay.hidden=false;render();overlay.querySelector('button')?.focus();}
+ function close(){removeConfirm=null;overlay.hidden=true;previousFocus?.focus?.();}
+ function open(id=null,source=null){removeConfirm=null;beforeOpen?.();previousFocus=document.activeElement;selected=id;sourceId=source;error='';tab='pets';detailTab='care';overlay.hidden=false;render();overlay.querySelector('button')?.focus();}
  function render(){
   const hadFocus=overlay.contains(document.activeElement),scroll=overlay.querySelector('.h3-pets-body')?.scrollTop||0;
   const adoptionOpen=overlay.querySelector('.pet-adoption')?.open;
-  overlay.innerHTML=petPanelMarkup({life,home:home(),catalog,selected,sourceId,tab,detailTab,error,context:context(),portrait:p=>portraits.get(JSON.stringify([p.id,p.color,p.materialColors]),models.get(p.id)?.userData.visual)});
+  overlay.innerHTML=petPanelMarkup({life,home:home(),catalog,selected,sourceId,tab,detailTab,error,removeConfirm,context:context(),portrait:p=>portraits.get(JSON.stringify([p.id,p.color,p.materialColors]),models.get(p.id)?.userData.visual)});
   if(adoptionOpen&&overlay.querySelector('.pet-adoption'))overlay.querySelector('.pet-adoption').open=true;
   overlay.querySelector('.h3-pets-body').scrollTop=scroll;
   refresh();if(hadFocus)overlay.querySelector('button')?.focus({preventScroll:true});
@@ -72,6 +73,24 @@ export function mountPetSystem({host,scene,home,catalog,templates,actors,contact
  function navigate(){render();overlay.querySelector('.h3-pets-body').scrollTop=0;}
  overlay.addEventListener('click',e=>{
   if(e.target===overlay){close();return;}const b=e.target.closest('button');if(!b)return;const action=b.dataset.petAction,p=life.data.pets.find(p=>p.id===selected);
+  if(action==='remove'&&p){removeConfirm=p.id;error='';navigate();overlay.querySelector('[data-pet-action="cancel-remove"]')?.focus();return;}
+  if(action==='cancel-remove'){removeConfirm=null;navigate();return;}
+  if(action==='confirm-remove'){
+   if(!p||removeConfirm!==p.id)return;
+   try{
+    if(contact.inspect()?.petId===p.id)contact.cancel();
+    if(wakeContact?.id===p.id)wakeContact=null;
+    if(pending?.id===p.id)pending=null;
+    if(feedback?.id===p.id)feedback=null;
+    life.remove(p.id);selected=null;sourceId=null;removeConfirm=null;tab='pets';error='';
+    sync();changed(true);navigate();overlay.querySelector('[data-pet-action="undo-remove"]')?.focus();
+   }catch(err){error=err.message;render();}invalidate();return;
+  }
+  if(action==='undo-remove'){
+   try{const pet=life.undoRemove();selected=pet.id;sourceId=null;removeConfirm=null;detailTab='care';error='';sync();changed(true);navigate();}
+   catch(err){error=err.message;render();}invalidate();return;
+  }
+  if(['close','select','back','tab','detail-tab'].includes(action))removeConfirm=null;
   try{error='';if(action==='close')return close();if(action==='select'){selected=b.dataset.id;detailTab='care';navigate();}if(action==='back'){selected=null;sourceId=null;navigate();}if(action==='tab'){tab=b.dataset.tab;navigate();}if(action==='detail-tab'){detailTab=b.dataset.tab;navigate();}if(action==='interact'){interact(selected,b.dataset.kind);render();}if(action==='refill'){life.refill(b.dataset.id);render();}
    if(p&&b.dataset.action==='color-preset'){applyFurnitureColorPreset(p,asset(p.assetId),b.dataset.value);life.save();sync();render();}
    if(p&&b.dataset.action==='color'){setFurniturePrimaryColor(p,asset(p.assetId),b.dataset.value||null);life.save();sync();render();}
@@ -80,7 +99,7 @@ export function mountPetSystem({host,scene,home,catalog,templates,actors,contact
  });
  overlay.addEventListener('change',e=>{const input=e.target,p=life.data.pets.find(p=>p.id===selected);if(input.matches('[data-pet-autonomy]')){life.data.autonomy=input.checked;if(!input.checked)for(const [id,r] of life.runtime)if(!r.manual)life.runtime.delete(id);life.save();}if(p){if(input.matches('[data-pet-name]'))p.name=input.value.trim().slice(0,24)||p.name;if(input.matches('[data-furniture-color]'))setFurniturePrimaryColor(p,asset(p.assetId),input.value);if(input.matches('[data-material-color]'))(p.materialColors??={})[input.dataset.materialColor]=input.value;life.save();sync();render();invalidate();}});
  overlay.addEventListener('submit',e=>{e.preventDefault();try{const form=new FormData(e.target),traits=form.getAll('trait');if(traits.length>2)throw Error('性格最多选两种');const p=life.adopt(form.get('asset'),form.get('name'),traits,sourceId);selected=p.id;sourceId=null;sync();changed(true);error='';render();invalidate();}catch(err){error=err.message;render();}});
- overlay.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){const nodes=[...overlay.querySelectorAll('button,input,select,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
+ overlay.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();if(removeConfirm){removeConfirm=null;navigate();}else close();}if(e.key==='Tab'){const nodes=[...overlay.querySelectorAll('button,input,select,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
  function refresh(){
   if(pending&&life.runtime.get(pending.id)!==pending.runtime){
    const result=pending.runtime.result,completed=!!result;
