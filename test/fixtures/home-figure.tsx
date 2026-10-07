@@ -8,6 +8,8 @@ import {testCharacter} from './room3d-test-character';
 import {DB} from '../../utils/db';
 import builtinParts from '../../public/like520/parts/manifest.json';
 const customQA=new URLSearchParams(location.search).has('custom');
+const mirrorQA=new URLSearchParams(location.search).has('mirror');
+const mirrorSeed={...testCharacter.state,selected:{...testCharacter.state.selected,facemark:['facemark_04','facemark_07']},flipped:{fronthair:true,facemark_04:true},tintColor:{...testCharacter.state.tintColor,eyes:{L:{color:'#ff0000',hueIdx:1,sat:50,light:0},R:{color:'#0000ff',hueIdx:1,sat:50,light:0},linked:false}}};
 const customRows=customQA?['fronthair','earhair','back1','back2','eyes','mouth','facemark','decor','skin','outfit','outer'].flatMap(categoryKey=>{
  const source=builtinParts.find(p=>p.categoryKey===categoryKey);
  return source?[{...source,id:`qa-custom-${categoryKey}`,name:`自绘验收 ${categoryKey}`,src:new URL(`/like520/${source.src}`,location.href).href,createdAt:1}]:[];
@@ -25,7 +27,7 @@ if(new URLSearchParams(location.search).has('closet')){
 function App() {
     const [figure, setFigure] = useState<HomeFigureSlot | undefined>(()=>new URLSearchParams(location.search).has('stress')?{state:testCharacter.state,img:'',updatedAt:0,hair:{layers:{},extras:[],bodyShape:'blank',wardrobe:{top:'sailor-long',outer:'slouch-cardigan',bottom:'sailor-skirt',socks:'school-socks',shoes:'school-loafers'},wardrobeLayering:true}}:undefined);
     const [open, setOpen] = useState(true);
-    return open ? <HomeFigureEditor name={new URLSearchParams(location.search).has('sully') ? 'Sully' : '验收角色'} ownerId="qa-home-figure" seedState={customSeed??(new URLSearchParams(location.search).has('fresh') ? undefined : testCharacter.state)} value={figure} onClose={() => setOpen(false)} onSave={value => {setFigure(value); setOpen(false);}} /> : <main><p>形象{figure ? '已保存到本页测试状态' : '未保存'}</p><button onClick={() => setOpen(true)}>重新编辑</button>{customQA&&<output aria-label="测试存档">{JSON.stringify(figure?.state)}</output>}</main>;
+    return open ? <HomeFigureEditor name={new URLSearchParams(location.search).has('sully') ? 'Sully' : '验收角色'} ownerId="qa-home-figure" seedState={mirrorQA?mirrorSeed:customSeed??(new URLSearchParams(location.search).has('fresh') ? undefined : testCharacter.state)} value={figure} onClose={() => setOpen(false)} onSave={value => {setFigure(value); setOpen(false);}} /> : <main><p>形象{figure ? '已保存到本页测试状态' : '未保存'}</p><button onClick={() => setOpen(true)}>重新编辑</button>{(customQA||mirrorQA)&&<output aria-label="测试存档">{JSON.stringify({state:figure?.state,hair:figure?.hair})}</output>}</main>;
 }
 // Real source chooser and lazy editor, with saves confined to this fixture.
 function SourceApp() {

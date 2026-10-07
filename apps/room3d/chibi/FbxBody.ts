@@ -1,4 +1,5 @@
 import {tintAppearancePart,validAppearanceColor,type PartSurface} from './appearanceColors';
+import {colorBaseEyes} from './baseEyeColors';
 import {actionExpression,actionMouthFrame} from './actionExpression';
 import {bindBlankBody} from './blankRig';
 import {createBlankMotion} from './blankMotion';
@@ -67,7 +68,7 @@ export function buildBody(source: T.Group, sourceParts: Parts, appearance: 'skin
         if(fill){ctx.fillStyle=fill;ctx.fillRect(0,0,472,472);}
         const splitFace=faceSettings?.enabled&&faceImages?composeFace(mouth==='base'?faceSettings:{...faceSettings,mouth:faceSettings.mouths?.[mouth]??faceSettings.mouth},faceImages,eyes==='sleep'?'closed':eyes==='squeeze'?'happy':faceSettings.eyeState):undefined;
         keys.forEach(k=>{
-            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace&&!faceSettings?.useBaseEyes?splitFace.eyes:k==='mouth'&&splitFace&&(!faceSettings?.useBaseMouth||mouth!=='base')?splitFace.mouth:k==='eyes'&&faceSettings?.useBaseEyes&&validAppearanceColor(faceSettings.baseIrisColor)&&parts[k]?tintAppearancePart(parts[k],faceSettings.baseIrisColor!):parts[k];
+            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace&&!faceSettings?.useBaseEyes?splitFace.eyes:k==='mouth'&&splitFace&&(!faceSettings?.useBaseMouth||mouth!=='base')?splitFace.mouth:k==='eyes'&&faceSettings?.useBaseEyes&&parts[k]?colorBaseEyes(parts[k],parts['eyes-raw'],faceSettings):parts[k];
             if(!drawable&&!(k==='mouth'&&mouth!=='base'))return;
             ctx.save();
             if(k==='eyes'||k==='mouth')ctx.translate(facePlacement[k].x,-facePlacement[k].y);
@@ -311,7 +312,14 @@ export function buildBody(source: T.Group, sourceParts: Parts, appearance: 'skin
             ringHalf([key],rear,{...settings,mode:hairMode(hair,key),distance:settings.distance+index*.002});
         }
         for(const layer of hair?.extras??[]){
-            if(parts[layer.source])ringHalf([layer.source],layer.mode==='project',layer,true);
+            if(!parts[layer.source])continue;
+            let key=layer.source;
+            if(layer.mirrored){
+                key=`extra-mirror:${layer.id}`;
+                const c=document.createElement('canvas');c.width=c.height=472;
+                const ctx=c.getContext('2d')!;ctx.translate(472,0);ctx.scale(-1,1);ctx.drawImage(parts[layer.source],0,0,472,472);parts[key]=c;
+            }
+            ringHalf([key],layer.mode==='project',layer,true);
         }
         // Continue the adjacent painted colors, not the average of the entire
         // hairstyle. Vertex colors carry only a soft color field, never stretched

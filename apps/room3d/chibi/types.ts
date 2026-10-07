@@ -2,7 +2,7 @@ export type Parts = Record<string, HTMLImageElement>;
 export type HairMode='wrap'|'project';
 // `puff` keeps its stored key for compatibility; it now controls curved-sheet depth.
 export interface HairLayer { length:number; width:number; offsetY:number; distance:number; mode?:HairMode; offsetX?:number; offsetZ?:number; puff?:number; rotation?:number; }
-export interface ExtraHair extends HairLayer { id:string; source:string; src?:string; }
+export interface ExtraHair extends HairLayer { id:string; source:string; src?:string; mirrored?:boolean; }
 export interface BodyProportions { headSize?:number; bodyHeight?:number; }
 export interface HairSettings extends BodyProportions { skinColor?:string; hairColor?:string; hairTipColor?:string; layers:Record<string,HairLayer>; extras:ExtraHair[]; assetModes?:Record<string,HairMode>; assets?:Record<string,string>; face?:import('./faceAppearance').FaceSettings; bodyShape?:'classic'|'blank'; wardrobeStyle?:'cute'|'boy'|'normal'|keyof typeof import('./wardrobeMotionCatalog.json'); wardrobe?:import('./approvedWardrobe').ApprovedWardrobe; wardrobeFits?:import('./garmentFit').WardrobeFits; wardrobeColors?:import('./wardrobeColors').WardrobeColors; wardrobeLayering?:boolean; }
 export function bodyProportions(value?:BodyProportions){

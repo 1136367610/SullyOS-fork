@@ -1,3 +1,4 @@
+import {PartMirrorControls,type PartMirrorProps} from './PartMirrorControls';
 import {createLocalId} from '../../utils/localId.js';
 import {FigureSlider} from './FigureSlider';
 import {AppearanceColorControl} from './AppearanceColorControl';
@@ -19,7 +20,7 @@ import './figure-theme.css';
 import {CustomPartChoices} from './CustomPartChoices';
 import {sullyHairParts} from '../../utils/sullyCreatorParts';
 import type {CustomCreatorPart} from '../../types';
-export function HairEditor({deferredPreview=false,allowSully=false,parts,hair,previewHair,assets,onChange,onUndo,onRedo,onReset,canUndo,canRedo,onBegin,onEnd,onEditAppearance,appearanceImage,bodyNotice,onSullyEyes,customParts=[],selectedParts={},onCustomPart}:{deferredPreview?:boolean;allowSully?:boolean;customParts?:CustomCreatorPart[];selectedParts?:Record<string,string|string[]|null>;onCustomPart?:(part:CustomCreatorPart)=>void;bodyNotice?:string;onSullyEyes?:()=>void;onEditAppearance?:()=>void;appearanceImage?:string;parts:Parts;hair:HairSettings;previewHair:HairSettings;assets:Record<string,string>;onChange:(v:HairSettings)=>void;onUndo:()=>void;onRedo:()=>void;onReset:()=>void;canUndo:boolean;canRedo:boolean;onBegin:()=>void;onEnd:()=>void}){
+export function HairEditor({deferredPreview=false,allowSully=false,parts,hair,previewHair,assets,onChange,onUndo,onRedo,onReset,canUndo,canRedo,onBegin,onEnd,onEditAppearance,appearanceImage,bodyNotice,onSullyEyes,customParts=[],selectedParts={},onCustomPart,flipped,onFlipPart,sourceEyeColors}:PartMirrorProps&{sourceEyeColors?:{L:string;R:string};deferredPreview?:boolean;allowSully?:boolean;customParts?:CustomCreatorPart[];selectedParts?:Record<string,string|string[]|null>;onCustomPart?:(part:CustomCreatorPart)=>void;bodyNotice?:string;onSullyEyes?:()=>void;onEditAppearance?:()=>void;appearanceImage?:string;parts:Parts;hair:HairSettings;previewHair:HairSettings;assets:Record<string,string>;onChange:(v:HairSettings)=>void;onUndo:()=>void;onRedo:()=>void;onReset:()=>void;canUndo:boolean;canRedo:boolean;onBegin:()=>void;onEnd:()=>void}){
  const [category,setCategory]=useState<'base'|'face'|'clothes'|'body'>('base');
  const [faceSection,setFaceSection]=useState<'hair'|'eyes'|'brows'|'mouth'|'accessories'>('eyes');
  const [mouthUse,setMouthUse]=useState<MouthUse>('closed');
@@ -76,7 +77,7 @@ export function HairEditor({deferredPreview=false,allowSully=false,parts,hair,pr
 
     <button className="creator-primary" onClick={()=>{onChange({...hair,face:{...f,enabled:true,mouth:f.mouths!.closed}});setCategory('face');}}>下一步 · 捏脸 →</button>
    </section>}
-   {category==='face'&&<><nav className="face-mainnav" aria-label="脸部分组">{([['hair','头发'],['eyes','眼睛'],['brows','眉毛'],['mouth','嘴巴'],['accessories','面饰']] as const).map(([key,label])=><button key={key} aria-pressed={faceSection===key} onClick={()=>setFaceSection(key)}>{label}</button>)}</nav>{faceSection==='accessories'&&<FaceAccessoryControls hair={hair} items={customParts} selected={selectedParts} onSelect={onCustomPart} onChange={onChange} onBegin={onBegin} onEnd={onEnd}/>}{faceSection!=='hair'&&faceSection!=='accessories'&&<FaceControls allowSully={allowSully} customParts={customParts} selectedParts={selectedParts} onCustomPart={onCustomPart} section={faceSection} hair={hair} onChange={onChange} onBegin={onBegin} onEnd={onEnd} mouthUse={mouthUse} onMouthUse={setMouthUse}/>}</>}
+   {category==='face'&&<><nav className="face-mainnav" aria-label="脸部分组">{([['hair','头发'],['eyes','眼睛'],['brows','眉毛'],['mouth','嘴巴'],['accessories','面饰']] as const).map(([key,label])=><button key={key} aria-pressed={faceSection===key} onClick={()=>setFaceSection(key)}>{label}</button>)}</nav>{faceSection==='accessories'&&<FaceAccessoryControls flipped={flipped} onFlipPart={onFlipPart} hair={hair} items={customParts} selected={selectedParts} onSelect={onCustomPart} onChange={onChange} onBegin={onBegin} onEnd={onEnd}/>}{faceSection!=='hair'&&faceSection!=='accessories'&&<FaceControls sourceEyeColors={sourceEyeColors} allowSully={allowSully} customParts={customParts} selectedParts={selectedParts} onCustomPart={onCustomPart} section={faceSection} hair={hair} onChange={onChange} onBegin={onBegin} onEnd={onEnd} mouthUse={mouthUse} onMouthUse={setMouthUse}/>}</>}
 
    {category==='clothes'&&hair.bodyShape==='blank'&&<WardrobePicker parts={parts} hair={hair} layeringReport={bare?undefined:layeringReport} previewBare={bare||hair.bodyShape!=='blank'} onBegin={onBegin} onEnd={onEnd} onChange={next=>{setBare(false);onChange(next);}}/>}
    {category==='face'&&faceSection==='hair'&&<>
@@ -85,6 +86,8 @@ export function HairEditor({deferredPreview=false,allowSully=false,parts,hair,pr
     <AppearanceColorControl label={hair.hairTipColor?'发根':'发色'} value={hair.hairColor} colors={['#302b35','#73513b','#c89861','#ece3cf','#bd7796','#7f92b1']} onChange={hairColor=>onChange({...hair,hairColor,...(!hairColor?{hairTipColor:undefined}:{})})} onBegin={onBegin} onEnd={onEnd}/>
     {hair.hairTipColor&&<AppearanceColorControl label="发梢" value={hair.hairTipColor} colors={['#ecc5d5','#b7c8e1','#b8d4c5','#eee2c6','#ac8dc0']} onChange={hairTipColor=>onChange({...hair,hairTipColor})} onBegin={onBegin} onEnd={onEnd}/>}
     {onCustomPart&&<CustomPartChoices items={allowSully?[...sullyHairParts,...customParts.filter(p=>!sullyHairParts.some(s=>s.id===p.id))]:customParts} selected={selectedParts} onSelect={onCustomPart} categories={[selected]}/>}
+    <PartMirrorControls category={selected} selected={selectedParts} flipped={flipped} onFlipPart={onFlipPart}/>
+    {extra&&<div className="hair-buttons"><button aria-label="发片镜像" aria-pressed={!!extra.mirrored} onClick={()=>onChange({...hair,extras:hair.extras.map(e=>e.id===selected?{...e,mirrored:!e.mirrored}:e)})}>发片 · {extra.mirrored?'已镜像':'镜像'}</button></div>}
     <details className="creator-refinement"><summary>发型微调</summary>
 
     <label className="creator-select">发型走向<select aria-label="素材分类" value={extra?.mode??hairMode({...hair,assets},selected)} onChange={e=>{const mode=e.target.value as 'wrap'|'project';if(extra||!assets[selected])update({mode});else onChange({...hair,assetModes:{...hair.assetModes,[assets[selected]]:mode}});}}><option value="wrap">贴头包裹</option><option value="project">向外伸出</option></select></label>
