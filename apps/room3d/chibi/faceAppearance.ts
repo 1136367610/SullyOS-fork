@@ -2,12 +2,12 @@ import manifest from './faceAssets.json';
 import originals from './faceOriginals.json';
 import highlights from './faceHighlights.json';
 import {cleanAdjustment,transformFaceSide,cleanMouthChoices,type FaceAdjustments,type FaceAdjustment,type MouthChoices} from './faceAdjustments';
-import {scleraContour,browExpressionRotation,detailBounds,type FaceSide} from './faceLandmarks';
+import {scleraContour,browExpressionRotation,detailBounds,measureFaceLandmarks,type FaceSide} from './faceLandmarks';
 import {tintIrisPixels} from './faceTint';
 
 export type EyeState='open'|'half'|'closed'|'happy';
 export interface FaceSettings {
- eyeArtwork?:'sully';
+ eyeArtwork?:'sully'; baseIrisColor?:string;
  enabled:boolean; useBaseEyes?:boolean; useBaseMouth?:boolean; upper:string; eye:string; lower:string; brow:string; highlight:string;
  eyeState:EyeState; emotion:'neutral'|'angry'|'sad'; mouth:string;
  eyeOffsetY:number; browOffsetY:number; irisColor:string; blink:boolean;
@@ -26,7 +26,7 @@ export function cleanFace(value?:Partial<FaceSettings>):FaceSettings {
  if(v.eyeArtwork!=='sully')v.eyeArtwork=undefined;
  const choose=(value:string,choices:string[],fallback:string)=>choices.includes(value)?value:fallback;
  v.upper=choose(v.upper,upperStyles,'01');v.eye=choose(v.eye,eyeStyles,'01');
- v.lower=choose(v.lower,['none',...eyeStyles],'01');v.brow=choose(v.brow,['original','none','01','02','03','04'],'original');
+ v.lower=choose(v.lower,['none',...eyeStyles],'01');v.brow=choose(v.brow,['original','sully','none','01','02','03','04'],'original');
  v.highlight=choose(v.highlight,['original','none',...highlightStyles,'01','02','03','04','05','06','07'],'original');
  v.mouth=choose(v.mouth,mouthStyles,'closed-04');
  v.mouths=cleanMouthChoices(v.mouths,v.mouth,mouthStyles);
@@ -58,15 +58,22 @@ export async function loadFaceImages(settings:FaceSettings){
  const ids=new Set<string>();
  for(const state of ['open','half','closed','happy'] as EyeState[]){const layers=faceLayerIds(settings,state);ids.add(layers.upper);ids.add(layers.iris);ids.add(layers.white);}
  ids.add(`original-${settings.upper}`);ids.add(`brow-original-${settings.upper}`);
- for(const [kind,style] of [['lower',settings.lower],['brow',settings.brow],['highlight',settings.highlight]])if(style!=='none')ids.add(`${kind}-${style==='original'?`original-${settings.upper}`:style}`);
+ for(const [kind,style] of [['lower',settings.lower],['brow',settings.brow],['highlight',settings.highlight]])if(style!=='none'&&style!=='sully')ids.add(`${kind}-${style==='original'?`original-${settings.upper}`:style}`);
  for(const mouth of [settings.mouth,...Object.values(settings.mouths??{})])ids.add(`mouth-${mouth}`);
  const result:Record<string,HTMLImageElement>=Object.fromEntries(await Promise.all([...ids].map(async id=>[id,await loadImage(`${import.meta.env.BASE_URL}${faceAssets[id].src}`)])));
  for(const key of ['pupilSrc','highlightSrc'] as const)if(settings[key])result[key]=await loadImage(settings[key]!);
- if(settings.eyeArtwork==='sully')result.sully=await loadImage(`${import.meta.env.BASE_URL}like520/sully/eyes.png`);
+ if(settings.eyeArtwork==='sully')result.sully=await loadImage(`${import.meta.env.BASE_URL}like520/sully/eyes-base.png`);
+ if(settings.eyeArtwork==='sully'||settings.brow==='sully')result['brow-sully']=await loadImage(`${import.meta.env.BASE_URL}like520/sully/brows.png`);
  return result;
 }
 function canvas(){const c=document.createElement('canvas');c.width=c.height=472;return c;}
 const highlightBounds=new WeakMap<HTMLImageElement,ReturnType<typeof detailBounds>[]>();
+const browLandmarks=new WeakMap<HTMLImageElement,FaceSide[]>();
+function artworkBrowSides(image:HTMLImageElement){
+ let sides=browLandmarks.get(image);
+ if(!sides){const c=canvas(),ctx=c.getContext('2d')!;ctx.drawImage(image,0,0,472,472);sides=measureFaceLandmarks(472,472,ctx.getImageData(0,0,472,472).data);browLandmarks.set(image,sides);}
+ return sides;
+}
 function placeHighlight(ctx:CanvasRenderingContext2D,image:HTMLImageElement,adjustment:FaceAdjustment){
  let bounds=highlightBounds.get(image);
  if(!bounds){const source=canvas(),s=source.getContext('2d')!;s.drawImage(image,0,0,472,472);const pixels=s.getImageData(0,0,472,472).data;bounds=[0,1].map(side=>detailBounds(472,472,pixels,side));highlightBounds.set(image,bounds);}
@@ -148,16 +155,18 @@ export function composeFace(settings:FaceSettings,images:Record<string,HTMLImage
   }
  }
  if(!originalPreset)drawPair(ctx,layers.upper,upper.sides!,upperAdjust);
- if(settings.eyeArtwork==='sully'&&(state==='open'||state==='half')&&images.sully){ctx.clearRect(0,0,472,472);ctx.drawImage(images.sully,0,0,472,472);}
+ if(settings.eyeArtwork==='sully'&&(state==='open'||state==='half')&&images.sully){ctx.clearRect(0,0,472,472);ctx.drawImage(images.sully,0,0,472,472);if(settings.baseIrisColor&&/^#[\da-f]{6}$/i.test(settings.baseIrisColor)){const pixels=ctx.getImageData(0,0,472,472);tintIrisPixels(pixels.data,settings.baseIrisColor);ctx.putImageData(pixels,0,0);}}
  // Group controls move the complete eye assembly, including its mask, together.
  const grouped=canvas(),g=grouped.getContext('2d')!,whole=adjust('eyes');
  for(const [i,cx] of [178,297].entries()){g.save();g.beginPath();g.rect(i?236:0,0,236,472);g.clip();g.translate(cx+(i?1:-1)*whole.spacing,272+whole.y);g.scale(whole.size*whole.width,whole.size);g.translate(-cx,-272);g.drawImage(eyes,0,0);g.restore();}
  ctx.clearRect(0,0,472,472);ctx.drawImage(grouped,0,0);
- if(settings.brow!=='none'&&settings.eyeArtwork!=='sully'){
-  const browId=`brow-${settings.brow==='original'?`original-${settings.upper}`:settings.brow}`,brows=faceAssets[browId].sides!;
+ if(settings.brow!=='none'){
+  const nativeSully=settings.brow==='sully'||(settings.brow==='original'&&settings.eyeArtwork==='sully');
+  const browId=nativeSully?'brow-sully':`brow-${settings.brow==='original'?`original-${settings.upper}`:settings.brow}`;
+  const brows=nativeSully?artworkBrowSides(images[browId]):faceAssets[browId].sides!;
   const baseline=faceAssets[settings.upper==='04'?'upper-04-closed':`upper-${settings.upper}-open`].sides!;
   const descent=lash.reduce((n,l,i)=>n+l.anchor-baseline[i].anchor,0)/2;
-  const dy=settings.browOffsetY+(settings.brow==='original'?0:Math.max(-5,Math.min(5,descent*.3)));
+  const dy=settings.browOffsetY+(settings.brow==='original'||nativeSully?0:Math.max(-5,Math.min(5,descent*.3)));
   brows.forEach((b,i)=>{
    const cy=(b.inner[1]+b.outer[1])/2;
    ctx.save();ctx.beginPath();ctx.rect(i?236:0,0,236,472);ctx.clip();

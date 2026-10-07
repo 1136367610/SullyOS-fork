@@ -124,7 +124,11 @@ export interface OSTheme {
   /** 桌面整体皮肤。'animalcrossing' = 动森风格（NookPhone 彩色圆角图标 + 暖色界面）；
    *  'mobilegame' = 二次元手游首页风格（角色卡 + 等级经验条 + 货币栏 + 网格卡 + 罗盘 dock）；
    *  'tamagotchi' = 电子宠物养成机（桌面即角色的小屋舞台 + 四颗糖果实体键）。默认 'default'。 */
-  skin?: 'default' | 'animalcrossing' | 'mobilegame' | 'tamagotchi' | 'companion';
+  skin?: 'default' | 'animalcrossing' | 'mobilegame' | 'tamagotchi' | 'companion' | 'homely';
+  /** 居家桌面配色；旧存档默认奶油杏橙，随主题保存。 */
+  homelyPalette?: 'apricot' | 'blue' | 'rose' | 'lilac' | 'oat';
+  /** 锁定居家陪伴对象；不跟随其他 App 的当前聊天角色切换。 */
+  homelyLockedCharacterId?: string;
   /** 默认桌面的视觉版本：纸感是现行默认，nostalgia 是用户主动选择的最初粉绿白玻璃界面。 */
   desktopVariant?: 'paper' | 'nostalgia';
   desktopClockStyle?: 'serif' | 'bold' | 'system';
@@ -2948,7 +2952,7 @@ export interface CharacterProfile {
   /** 模块化 3D 小屋，独立于原有 2D 房间；随完整备份保存。 */
   home3D?: import('./apps/room3d/types').Home3DState;
   /** Local journal → shared message history migration marker. */
-  homeContextBridgeVersion?: 1 | 2;
+  homeContextBridgeVersion?: 1 | 2 | 3;
   homeDefinition?: import('./apps/room3d/homeDefinition').HomeDefinition;
   roomConfig?: {
       bgImage?: string;

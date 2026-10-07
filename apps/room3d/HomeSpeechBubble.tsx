@@ -1,3 +1,4 @@
+import {homeBubblePosition} from './homelyView';
 import React,{useEffect,useRef,useState} from 'react';
 import type {HomeEditor} from './editor.js';
 import {speechPages,speechPageDuration} from '../../utils/homeCompanion';
@@ -13,7 +14,7 @@ export function HomeSpeechBubble({editor}:{editor:HomeEditor}){
     let age=now-bubble.at;const reaction=bubble.kind==='reaction',pages=speechPages(bubble.text);let index=0;
     while(index<pages.length&&age>=(reaction?2600:speechPageDuration(pages[index]))){age-=reaction?2600:speechPageDuration(pages[index]);index++;}
     const anchor=index<pages.length&&age>=0?editor.getResidentAnchor?.(bubble.id):null;
-    if(anchor&&anchor.x>=0&&anchor.x<=anchor.width&&anchor.y>=0&&anchor.y<=anchor.height)next={text:pages[index],x:Math.max(105,Math.min(anchor.width-105,anchor.x)),y:Math.max(120,anchor.y-45),reaction,key:bubble.id+':'+bubble.at+':'+index,id:bubble.id};
+    if(anchor&&anchor.x>=0&&anchor.x<=anchor.width&&anchor.y>=0&&anchor.y<=anchor.height)next={text:pages[index],...homeBubblePosition(anchor,'speech'),reaction,key:bubble.id+':'+bubble.at+':'+index,id:bubble.id};
    }
    if(document.hidden||!bubble){history.current=[];lastKey='';}
    else if(next){

@@ -23,6 +23,8 @@ export function GarmentColors({parts,id,hair,onChange,onBegin,onEnd}:{parts?:imp
  const commit=()=>{const color=normalizeGarmentColor(draft);if(color)update(color);setDraft(color??value);onEnd?.();};
  const matchHair=()=>{
   try{
+   const explicit=normalizeGarmentColor(hair.hairColor??'');
+   if(explicit){onChange({...hair,wardrobeColors:{...colors,[id]:{...saved,fur:explicit}}});setColorError('');return;}
    const image=['fronthair','earhair','back1','back2'].map(k=>parts?.[k]).find(i=>i?.naturalWidth);
    if(!image)throw Error('头发还没准备好，请稍后再试');
    const canvas=document.createElement('canvas');canvas.width=canvas.height=96;

@@ -10,7 +10,7 @@ import {NEW_BODY_HOME_PERCENT} from '../../apps/room3d/chibi/visitor';
 import type {HairSettings,Parts,Motion} from '../../apps/room3d/chibi/types';
 import type {LayeringReport} from '../../apps/room3d/chibi/garmentLayering';
 export type {Parts,Motion};
-export function Puppet({view,parts,yaw,motion,wire,playing,appearance='outfit',hair,focus='body',wardrobeStyle,wardrobeReplay=0,onLayeringReport,onPerformancePause}:{view?:{x:number;y:number;zoom:number};onPerformancePause?:()=>void;onLayeringReport?:(report:LayeringReport|undefined)=>void;focus?:'body'|'head';wardrobeStyle?:HairSettings['wardrobeStyle'];wardrobeReplay?:number;hair?:HairSettings;parts:Parts;yaw:number;motion:Motion;wire:boolean;playing:boolean;appearance?:'skin'|'hair'|'outfit'}){
+export const Puppet=React.memo(function Puppet({view,parts,yaw,motion,wire,playing,appearance='outfit',hair,focus='body',wardrobeStyle,wardrobeReplay=0,onLayeringReport,onPerformancePause}:{view?:{x:number;y:number;zoom:number};onPerformancePause?:()=>void;onLayeringReport?:(report:LayeringReport|undefined)=>void;focus?:'body'|'head';wardrobeStyle?:HairSettings['wardrobeStyle'];wardrobeReplay?:number;hair?:HairSettings;parts:Parts;yaw:number;motion:Motion;wire:boolean;playing:boolean;appearance?:'skin'|'hair'|'outfit'}){
  const host=useRef<HTMLDivElement>(null),rig=useRef<ReturnType<typeof buildBody>>(),wake=useRef(()=>{});
  type Outfit={attach():void;dispose():void;updatePose?():void;updateColors?:(value:HairSettings['wardrobeColors'])=>void;layeringReport?:LayeringReport};
  const outfitRef=useRef<Outfit>();
@@ -105,7 +105,7 @@ export function Puppet({view,parts,yaw,motion,wire,playing,appearance='outfit',h
    const previous=equipped.current,next=outfitSettings.wardrobe;
    // Trigger only after a successful clothing equip, not loading a character,
    // taking clothes off, recoloring them or adjusting their fit.
-   if(previous?.root===body.root&&next&&Object.entries(next).some(([slot,id])=>id&&id!==(previous.wardrobe as Record<string,unknown>|undefined)?.[slot]))equipPose.current={root:body.root};
+   if(!wardrobeStyle&&previous?.root===body.root&&next&&Object.entries(next).some(([slot,id])=>id&&id!==(previous.wardrobe as Record<string,unknown>|undefined)?.[slot]))equipPose.current={root:body.root};
    equipped.current={root:body.root,wardrobe:next};
    reportRef.current?.(outfit.layeringReport);setDressing(false);wake.current();
   })().catch(e=>{if(!cancelled){setError(String(e));setDressing(false);}});
@@ -116,4 +116,4 @@ export function Puppet({view,parts,yaw,motion,wire,playing,appearance='outfit',h
  useEffect(()=>{if(playing)expensivePose.current=false;wake.current();},[playing]);
  useEffect(()=>{wake.current();},[yaw,motion,wire,focus]);
  return <div ref={host} className="puppet" aria-busy={dressing}>{error&&<p role="alert">{error}</p>}{!source&&!error&&<p>正在加载小人…</p>}{source&&dressing&&!outfitRef.current&&!error&&<p role="status">正在换装…</p>}</div>;
-}
+});

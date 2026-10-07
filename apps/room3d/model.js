@@ -1,3 +1,4 @@
+import {createLocalId} from '../../utils/localId.js';
 import {normalizePetLife} from './petState.js';
 import {furnitureGroup,dockCandidates,dockSlots,isDockChair,isDockTable} from './furnitureDock.js';
 import {validateFinishes} from './finishes.js';
@@ -9,7 +10,7 @@ export const clone=value=>JSON.parse(JSON.stringify(value));
 export const STEP=.2;
 export const DIRECTIONS={left:[-1,0,0],right:[1,0,0],front:[0,1,0],back:[0,-1,0],up:[0,0,1],down:[0,0,-1]};
 export const PALETTE=['#A99BE8','#F2B8D5','#91C9F4','#A5B99A','#E8BD8F','#FFF2E3'];
-export const uid=()=>globalThis.crypto.randomUUID();
+export const uid=createLocalId;
 export function createHome(catalog){
  const starter=catalog.filter(a=>['table','rug'].includes(a.id));
  const room={id:uid(),name:'水母小屋',x:0,z:0,level:0,wall:'#FFF2E3',items:starter.map(a=>({id:uid(),assetId:a.id,x:a.default[0],y:a.default[1],z:a.default[2],rotation:0,color:null,stored:false}))};

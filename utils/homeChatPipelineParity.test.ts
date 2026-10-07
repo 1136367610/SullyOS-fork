@@ -122,3 +122,18 @@ it('home retains SAR module state while using its own JSON output protocol',asyn
  expect(ContextBuilder.buildSARModuleContext(char,sarUser,'chat')).toContain(state.trim());
  expect(JSON.stringify(home)).toContain('SAR 临时模块');expect(JSON.stringify(home)).not.toContain('<SAR_MODULE_OUTPUT>');
 });
+
+it.each([-1,0])('retains ChatApp music context when the active lyric index is %s',async activeLyricIdx=>{
+ const id='home-music-parity-'+activeLyricIdx;
+ const records:any[]=[{id:'input',at:Date.now(),actor:'user',kind:'message',source:'user',text:'一起听歌',roomId:'r',roomName:'客厅'}];
+ const char:any={id,name:'C',home3D:{records}};
+ await DB.saveCharacter(char);
+ const musicSnapshot:any={current:{id:1,name:'前奏中的歌曲',artists:'歌手'},playing:true,lyric:[{time:10,text:'第一句歌词'}],activeLyricIdx,listeningTogetherWith:[id],cfg:{}};
+ const range=await loadCharacterContextRange(char);
+ // Reference the existing ChatApp behavior, including the intro before the first lyric.
+ const chat=await buildChatRequestPayload({char,userProfile:user,groups:[],emojis:[],categories:[],historyMsgs:range.messages,contextLimit:range.messages.length,recallEntryPoint:'chat_app',
+  userListeningContext:{songName:musicSnapshot.current.name,artists:'歌手',lyricWindow:activeLyricIdx<0?[]:['第一句歌词'],activeIdx:activeLyricIdx},isListeningTogether:true,musicCfg:musicSnapshot.cfg});
+ const home=await buildHomeConversationPayload({char,user,api:{} as any,scene,records,signal:new AbortController().signal,context:{musicSnapshot}});
+ expect(home.at(-1)!.content.replace(buildHomeScenePrompt(user,scene),'')).toBe(chat.fullMessages.at(-1)!.content.replace(`\n${ContextBuilder.buildMusicActionGuide(true)}\n`,''));
+ expect(JSON.stringify(home)).toContain('前奏中的歌曲');
+});

@@ -1,4 +1,5 @@
 import { getMemoryPalaceHighWaterMarkForContext, selectCharacterContextMessages } from './chatContextRange';
+import { expandHomeContextHistory } from './homeContextSegments';
 /**
  * 聊天请求载荷统一构造器
  *
@@ -179,7 +180,8 @@ function deriveListeningFromSnapshot(
                 activeIdx,
             };
         }
-    } else if (current && playing) {
+    }
+    if (!userListeningContext && current && playing) {
         userListeningContext = {
             songName: current.name,
             artists: current.artists,
@@ -187,7 +189,7 @@ function deriveListeningFromSnapshot(
             activeIdx: -1,
         };
     }
-    const isListeningTogether = !!(userListeningContext && listeningTogetherWith.includes(charId));
+    const isListeningTogether = !!(current && playing && listeningTogetherWith.includes(charId));
     return { userListeningContext, isListeningTogether, musicCfg: cfg };
 }
 
@@ -271,6 +273,12 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         recentMsgsHint = rawRecentMsgsHint.map(message => preparedById.get(message.id) || message);
     }
 
+    // Range/vision processing must retain database IDs. Only after those steps may
+    // legacy home rows expand into their actual speakers and chronological events.
+    // Recall and live context must see the same timeline as buildMessageHistory.
+    recentMsgsHint = expandHomeContextHistory(recentMsgsHint);
+    const chronologicalHistory = expandHomeContextHistory(historyMsgsForPrompt);
+
     if (isPromptBuildSkipped()) {
         const { apiMessages } = ChatPrompts.buildMessageHistory(
             historyMsgsForPrompt,
@@ -336,7 +344,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     // UI 为了不把通话/见面/剧情正文画进 ChatApp，会把这些 source 从 React state 过滤掉；
     // 但主 API 的 historyMsgsForPrompt 来自完整 DB，仍然会看到它们。模式切换必须以 API
     // 真正要发送的历史为准，否则模型会收到特殊模式正文，却收不到「切回聊天格式」的提示。
-    const returningFromMode = detectChatModeTransition(historyMsgsForPrompt);
+    const returningFromMode = detectChatModeTransition(chronologicalHistory);
     // 在公共上下文管线之前准备实际历史，世界书触发和摆放共用这一份消息。
     const { apiMessages } = ChatPrompts.buildMessageHistory(
         historyMsgsForPrompt,
@@ -486,7 +494,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         if (char.chatCollaborationEnabled) {
             volatileTail += await loadCollaborationFileCabinetBlock(
                 char.id,
-                historyMsgsForPrompt,
+                chronologicalHistory,
                 userProfile?.name || '用户',
             );
         }

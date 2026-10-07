@@ -1,12 +1,12 @@
+import {OutfitPreview} from './OutfitPreview';
 import React,{useEffect,useRef,useState} from 'react';
 import {Plus,DownloadSimple,UploadSimple,PencilSimple,Trash,TShirt} from '@phosphor-icons/react';
 import {DB} from '../../utils/db';
-import {approvedGarments} from '../../apps/room3d/chibi/approvedWardrobe';
 import {makeOutfit,applyOutfit,exportOutfit,importOutfit,OUTFIT_LIMIT,type SavedOutfit} from '../../apps/room3d/chibi/outfitLibrary';
-import type {HairSettings} from '../../apps/room3d/chibi/types';
+import type {HairSettings,Parts} from '../../apps/room3d/chibi/types';
 import './my-wardrobe.css';
 
-export function MyWardrobe({hair,onChange}:{hair:HairSettings;onChange:(hair:HairSettings)=>void}){
+export function MyWardrobe({parts,hair,onChange}:{parts?:Parts;hair:HairSettings;onChange:(hair:HairSettings)=>void}){
  const [items,setItems]=useState<SavedOutfit[]>([]),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
  const [form,setForm]=useState<{id?:string;name:string}|null>(null),[deleting,setDeleting]=useState<string|null>(null);
  const upload=useRef<HTMLInputElement>(null),saving=useRef(false);
@@ -25,7 +25,7 @@ export function MyWardrobe({hair,onChange}:{hair:HairSettings;onChange:(hair:Hai
   {!ready&&!message&&<p>正在打开衣柜…</p>}
   {ready&&!items.length&&<div className="my-wardrobe-empty"><TShirt size={36}/><p>喜欢这身搭配？把它收进衣柜。</p><small>衣服、配饰、配色与版型一起保存</small></div>}
   <div className="my-outfit-grid">{items.map(item=><article key={item.id}>
-   <button className="my-outfit-wear" aria-label={`穿上${item.name}`} onClick={()=>{onChange(applyOutfit(hair,item));setMessage(`已穿上「${item.name}」`);}}><span className="outfit-preview">{Object.values(item.clothes.wardrobe).map(id=>{const g=approvedGarments.find(g=>g.id===id);return g?<img key={id} src={`${import.meta.env.BASE_URL}room3d/wardrobe/thumbnails/${id}.png?v=${g.revision??'standing-pose-1'}`} alt={g.label} loading="lazy"/>:null;})}{!Object.keys(item.clothes.wardrobe).length&&<TShirt size={36}/>}</span><strong>{item.name}</strong></button>
+   <button className="my-outfit-wear" aria-label={`穿上${item.name}`} onClick={()=>{onChange(applyOutfit(hair,item));setMessage(`已穿上「${item.name}」`);}}><OutfitPreview name={item.name} parts={parts} hair={applyOutfit(hair,item)}/><strong>{item.name}</strong></button>
    <div className="my-outfit-actions"><button aria-label={`重命名${item.name}`} disabled={busy} onClick={()=>setForm({id:item.id,name:item.name})}><PencilSimple size={17}/></button><button aria-label={`导出${item.name}`} onClick={()=>download(item)}><DownloadSimple size={17}/></button><button aria-label={`删除${item.name}`} disabled={busy} onClick={()=>setDeleting(item.id)}><Trash size={17}/></button></div>
    {deleting===item.id&&<div className="my-outfit-confirm"><span>删除这套搭配？</span><button disabled={busy} onClick={()=>void update(old=>old.filter(o=>o.id!==item.id),'搭配已删除')}>删除</button><button onClick={()=>setDeleting(null)}>取消</button></div>}
   </article>)}</div>

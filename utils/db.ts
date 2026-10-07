@@ -596,7 +596,7 @@ export const DB = {
     const db = await openDB();
     const migrated = await new Promise<boolean>((resolve, reject) => {
       const request = db.transaction(STORE_CHARACTERS, 'readonly').objectStore(STORE_CHARACTERS).get(charId);
-      request.onsuccess = () => resolve(!request.result || request.result.homeContextBridgeVersion === 2);
+      request.onsuccess = () => resolve(!request.result || request.result.homeContextBridgeVersion === 3);
       request.onerror = () => reject(request.error);
     });
     if (!migrated) await persistCharacterWithHomeMessages(db, charId, clearStaleMemoryMirror);
@@ -652,15 +652,24 @@ export const DB = {
    * @param includeProcessed 是否包含已被记忆宫殿处理的消息（默认 false，即自动过滤）。
    *                         记忆归档、批量总结等需要完整历史的场景应传 true。
    */
-  getMessagesByCharId: async (charId: string, includeProcessed: boolean = false): Promise<Message[]> => {
+  getMessagesByCharId: async (charId: string, includeProcessed: boolean = false, sealHomeActions: boolean = false): Promise<Message[]> => {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_MESSAGES, 'readonly');
+      const transaction = db.transaction(STORE_MESSAGES, sealHomeActions ? 'readwrite' : 'readonly');
       const store = transaction.objectStore(STORE_MESSAGES);
       const index = store.index('charId');
       const request = index.getAll(IDBKeyRange.only(charId));
+      let snapshot: Message[] = [];
       request.onsuccess = () => {
           let results = (request.result || []).filter((m: Message) => !m.groupId);
+          // A one-shot archive includes the tail. Freeze its home action segments
+          // in the same transaction as the snapshot, before any LLM/network wait.
+          if (sealHomeActions) for (const message of results) {
+              if (message.metadata?.source === 'home' && message.metadata?.homeContextKind === 'actions' && !message.metadata.homeContextSealed) {
+                  message.metadata = { ...message.metadata, homeContextSealed: true };
+                  store.put(message);
+              }
+          }
           // 记忆宫殿：过滤已处理的消息（高水位标记之前的），用向量记忆替代
           if (!includeProcessed) {
               try {
@@ -670,9 +679,12 @@ export const DB = {
                   }
               } catch {}
           }
-          resolve(results);
+          snapshot = results;
       };
       request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(snapshot);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('聊天历史快照未能完成'));
     });
   },
 

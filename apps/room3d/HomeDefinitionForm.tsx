@@ -2,8 +2,9 @@ import React, {useState} from 'react';
 import {HOME_DEFINITIONS, type HomeDefinition, type HomeDefinitionKind} from './homeDefinition';
 import './homeDefinition.css';
 import {House,Intersect,Robot} from '@phosphor-icons/react';
+import HomeScheduleTip from './HomeScheduleTip';
 
-export default function HomeDefinitionForm({value, onSave, onBack}: {value?: HomeDefinition; onSave: (value: HomeDefinition) => void; onBack: () => void}) {
+export default function HomeDefinitionForm({value, onSave, onBack, recommendSchedule=false}: {value?: HomeDefinition; onSave: (value: HomeDefinition) => void; onBack: () => void; recommendSchedule?: boolean}) {
   const [kind, setKind] = useState<HomeDefinitionKind | undefined>(value?.kind);
   const [notes, setNotes] = useState(value?.notes ?? '');
   const selected = HOME_DEFINITIONS.find(option => option.kind === kind);
@@ -24,6 +25,7 @@ export default function HomeDefinitionForm({value, onSave, onBack}: {value?: Hom
         <details className="home-definition-extra"><summary>补充设定 · 选填</summary>{selected && <p className="home-definition-detail">{selected.detail}</p>}<label className="home-definition-notes">你们自己的解释
           <textarea value={notes} onChange={event => setNotes(event.target.value)} rows={3} maxLength={2000} placeholder="比如：我们各自生活，闲暇时会来这里见面。" />
         </label></details>
+        {!value&&recommendSchedule&&<HomeScheduleTip/>}
         <button className="home-definition-submit" type="submit" disabled={!kind}>{value ? '保存设定' : '下一步'}</button>
         <p className="home-onboarding-footnote">以后可以在「我的家」中修改</p>
       </form>

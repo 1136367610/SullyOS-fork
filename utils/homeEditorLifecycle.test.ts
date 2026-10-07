@@ -9,7 +9,7 @@ vi.mock('../utils/blobRef',async original=>({...await original<typeof import('./
 vi.mock('../apps/room3d/HomeSocialPanel',()=>({HomeSocialPanel:()=>null}));
 vi.mock('../apps/room3d/HomeLifePanel',()=>({default:()=>null}));
 vi.mock('../apps/room3d/HomeSpeechBubble',()=>({HomeSpeechBubble:()=>null}));
-vi.mock('../apps/room3d/useHomeSchedule',()=>({useHomeSchedule:()=>false}));
+vi.mock('../apps/room3d/useHomeSchedule',()=>({useHomeSchedule:()=>({away:false,currentSchedule:null})}));
 vi.mock('../apps/room3d/useHomeCompanion',()=>({useHomeCompanion:()=>{}}));
 vi.mock('../apps/room3d/chibi/visitor',()=>({createVisitor:vi.fn(),decodeParts:vi.fn()}));
 vi.mock('../apps/room3d/chibi/CreatorRollBridge',()=>({CreatorRollBridge:()=>null}));

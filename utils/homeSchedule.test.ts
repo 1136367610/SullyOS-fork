@@ -31,7 +31,8 @@ describe('home schedule positions', () => {
         const result = await generateDailyScheduleForChar({...char, scheduleStyle}, {name: 'U'} as UserProfile, config, true);
         expect(hasHomeSchedulePositions(result, char)).toBe(true);
         expect(save).toHaveBeenCalledOnce();
-        expect(JSON.parse(fetch.mock.calls[0][1].body).messages[0].content).toContain('每个 slots 项必须额外包含 homePosition');
+        const messages=JSON.parse(fetch.mock.calls[0][1].body).messages;
+        expect(messages.filter((message:{content:string})=>message.content.includes('每个 slots 项必须额外包含 homePosition'))).toHaveLength(1);
     });
     it('preserves the old schedule when generation omits positions', async () => {
         vi.spyOn(DB, 'getScheduleCoverImage').mockResolvedValue(undefined as any);

@@ -51,8 +51,6 @@
 .hair-options .face-choice-grid,.hair-options .wardrobe-items,.hair-options .custom-part-grid{margin:10px 0 16px;gap:8px;grid-template-columns:repeat(3,minmax(0,1fr))}
 .hair-options .face-choice-grid button,.hair-options .custom-part-grid button{border-radius:12px;position:relative;transition:transform .15s,border-color .15s}
 .hair-options .face-choice-grid button[aria-pressed=true]:after,.hair-options .custom-part-grid button[aria-pressed=true]:after{content:'✓';position:absolute;top:5px;right:5px;width:17px;height:17px;border-radius:50%;background:#79678a;color:white;font-size:11px;line-height:17px;text-align:center}
-.sully-hair-preview{position:relative;display:block;width:100%;height:80px}
-.sully-hair-preview img{position:absolute;inset:0}
 .preview-tools button{display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:50%;background:#fffdf5cc}
 .preview-caption .motion-audition{min-width:0;position:relative;margin:0}
 .motion-audition summary{display:grid;place-items:center;width:38px;height:38px;background:#fffdf5dd;border-radius:50%;padding:0;list-style:none}
@@ -65,3 +63,21 @@
 @media(prefers-reduced-motion:reduce){.hair-options .face-choice-grid button,.hair-options .custom-part-grid button{transition:none}}
 
 .hair-preview canvas{touch-action:none}.hair-angle{justify-content:center;pointer-events:none}.hair-preview .puppet{inset:4px 0 28px}
+.creator-edit-tools{display:flex;gap:8px;flex-shrink:0;padding:4px 20px;border-bottom:1px solid #e9e3df;background:#fffcf9}
+.creator-edit-tools button{display:flex;align-items:center;gap:6px;min-height:40px;padding:0 10px;border:0;background:transparent;font-size:12px;color:#655a6b}
+.creator-edit-tools button:disabled{opacity:.3}
+.appearance-colors{border:0;margin:4px 0 20px;padding:0;min-width:0}
+.appearance-colors legend{font-size:12px;font-weight:600;padding:0;margin-bottom:10px}
+.appearance-colors>div{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.hair-options .appearance-colors button{min-height:32px;height:32px;padding:0 8px;font-size:10px}
+.hair-options .appearance-colors .appearance-swatch{width:30px;min-width:30px;padding:0;border:2px solid #ffffff;border-radius:50%;box-shadow:0 0 0 1px #ded7d2}
+.hair-options .appearance-colors button[aria-pressed=true]{outline:2px solid #79678a;outline-offset:2px}
+.appearance-custom{display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer}
+.appearance-custom input[type=color]{width:30px;height:32px;padding:0;border:0;background:transparent;cursor:pointer}
+.hair-options .outfit-worn-preview,.my-wardrobe .outfit-worn-preview{display:grid;grid-template-columns:1fr;aspect-ratio:4/5;padding:0;place-items:center;background:#f2eee9;overflow:hidden}
+.wardrobe-items .garment-tile .outfit-worn-preview img,.my-wardrobe .outfit-worn-preview img{display:block;width:100%;height:100%;max-height:none;aspect-ratio:4/5;object-fit:contain}
+.outfit-worn-preview>span{font-size:10px;color:#8b7d88;text-align:center;padding:10px}
+.my-wardrobe .my-outfit-wear .outfit-worn-preview{height:auto;grid-template-columns:1fr}
+.outfit-worn-preview img{mix-blend-mode:normal}
+.hair-options .identity-setup .creator-primary{background:#79678a}
+@media(max-width:799px){.creator-edit-tools{padding:0 12px}.creator-edit-tools button{min-height:36px}.hair-options .outfit-grid,.my-outfit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

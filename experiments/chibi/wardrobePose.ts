@@ -9,6 +9,7 @@ import {constrainForearmTwist} from './forearmTwist';
 import catalog from '../../apps/room3d/chibi/wardrobeMotionCatalog.json';
 import approvedMotions from '../../apps/room3d/chibi/approvedWardrobeMotions.json';
 
+export const DEFAULT_FITTING_MOTION = 'mmd-breath' as const;
 export type WardrobeStyle='normal'|keyof typeof catalog;
 export const wardrobeMotionChoices=[{id:'normal',label:'普通站姿',group:'普通站姿'},...Object.entries(approvedMotions).map(([id,m])=>({id,label:`${m.number} · ${catalog[id as keyof typeof catalog].label}`,group:'已选动作'}))] as {id:WardrobeStyle;label:string;group:string}[];
 const allMotions={...motions,...vrmaMotions,...mmdMotions,...overteMotions};

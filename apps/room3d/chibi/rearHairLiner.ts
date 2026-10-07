@@ -19,7 +19,7 @@ export function simplifyLinerContours(contours:T.Vector2[][]){
 }
 
 /** Original-canvas wisps on a thin sheet tucked inside the rear wrap. */
-export function createRearHairLiner(settings:HairLayer,headDepth:number,surface?:T.BufferGeometry){
+export function createRearHairLiner(settings:HairLayer,headDepth:number,surface?:T.BufferGeometry,compactCrown=false){
  const geometry=surface??new T.PlaneGeometry(1,1,32,40),p=geometry.getAttribute('position'),uv=geometry.getAttribute('uv');
  for(let i=0;i<p.count;i++){
   let x=surface?p.getX(i):(uv.getX(i)*472-237)/325*1.875,y=surface?p.getY(i):(424-(1-uv.getY(i))*472)/336*2;
@@ -28,7 +28,15 @@ export function createRearHairLiner(settings:HairLayer,headDepth:number,surface?
   // The original upper silhouette keeps its height differences (ahoge/wisps).
   const tuck=T.MathUtils.smoothstep(y,1.62,1.96);
   const crownWisp=T.MathUtils.smoothstep(y,2.12,2.24);
+  // The Sully curl is a small detail anchored at the crown, not a raised cap.
+  // Compress the exposed silhouette as a whole so the hook keeps its opening.
+  const sourceY=y;
   y-=.14*tuck;
+  if(compactCrown){
+   const detail=T.MathUtils.smoothstep(sourceY,2.23,2.28);
+   y=T.MathUtils.lerp(y,2.14+(sourceY-2.14)*.65,detail);
+   x*=1-.18*detail;
+  }
   const crown=Math.sqrt(Math.max(0,1-Math.max(0,(Math.min(2.2,y)-1.25)/.95)**2));
   x=T.MathUtils.lerp(x,T.MathUtils.clamp(x,-.88*crown,.88*crown),tuck*(1-crownWisp));
   // Rear wrap reaches -.86 * headDepth. Stay near the head's center plane:

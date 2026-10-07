@@ -210,6 +210,7 @@ const DevDebugPanel: React.FC = () => {
     const activeCount = useMemo(
         () => (flags.skipPromptBuild ? 1 : 0)
             + (flags.skipEmotionEval ? 1 : 0)
+            + (flags.forceHomeSecretRoll ? 1 : 0)
             + (flags.mergeSystemMessages ? 1 : 0)
             // 「在录」= 总开关开 且 至少勾了一类——否则浮球红点会骗人「在录」其实 isCaptureEnabled
             // 任何类别都返 false。
@@ -427,6 +428,13 @@ const DevDebugPanel: React.FC = () => {
                             detail="主回复仍照常发送，但不启动情绪副评估（本地和即时对话都不跑）。"
                             checked={flags.skipEmotionEval}
                             onChange={(checked) => updateFlag('skipEmotionEval', checked)}
+                        />
+                        <div className="h-px bg-white/10" />
+                        <ToggleRow
+                            title="秘密必定命中"
+                            detail="仍需开启情绪评估、有小屋及已完成的对话；同一段不重复生成。"
+                            checked={flags.forceHomeSecretRoll}
+                            onChange={(checked) => updateFlag('forceHomeSecretRoll', checked)}
                         />
                         <div className="h-px bg-white/10" />
                         <ToggleRow

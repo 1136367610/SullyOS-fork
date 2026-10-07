@@ -1,7 +1,18 @@
 import {describe,it,expect} from 'vitest';
 import {createRearHairLiner} from '../apps/room3d/chibi/rearHairLiner';
 import {defaultHairLayer} from '../apps/room3d/chibi/types';
+import {BufferGeometry,Float32BufferAttribute} from 'three';
 describe('rear hair inner cloth',()=>{
+ it('keeps the authored curl tip above the crown while hiding its cap root',()=>{
+  // Sully back1: curl tip around source row 42, main cap around row 49.
+  const rows=[35,42,49],surface=new BufferGeometry();
+  surface.setAttribute('position',new Float32BufferAttribute(rows.flatMap(y=>[.1,(424-y)/168,0]),3));
+  const g=createRearHairLiner(defaultHairLayer,.82,surface,true),p=g.getAttribute('position');
+  expect(p.getY(0)).toBeGreaterThan(2.2);
+  expect(p.getY(1)).toBeGreaterThan(2.2);
+  expect(p.getY(2)).toBeLessThan(2.2);
+  g.dispose();
+ });
  it('tucks the cap root while preserving top and side wisps',()=>{
   const g=createRearHairLiner(defaultHairLayer,.82),p=g.getAttribute('position'),uv=g.getAttribute('uv');
   for(let i=0;i<p.count;i++){

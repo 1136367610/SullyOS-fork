@@ -1,3 +1,4 @@
+import {tintAppearancePart,validAppearanceColor,type PartSurface} from './appearanceColors';
 import {actionExpression,actionMouthFrame} from './actionExpression';
 import {bindBlankBody} from './blankRig';
 import {createBlankMotion} from './blankMotion';
@@ -17,24 +18,27 @@ import {createHairSeam} from './hairSeam';
 import {createRearHairLiner,simplifyLinerContours} from './rearHairLiner';
 import {cleanFace,loadFaceImages,composeFace,type FaceSettings} from './faceAppearance';
 
-const contourCache=new WeakMap<HTMLImageElement,ReturnType<typeof hairContours>>();
-const hairColorCache=new WeakMap<HTMLImageElement,WeakMap<HTMLImageElement,(x:number,y:number)=>T.Color>>();
+const contourCache=new WeakMap<PartSurface,ReturnType<typeof hairContours>>();
+const hairColorCache=new WeakMap<PartSurface,WeakMap<PartSurface,(x:number,y:number)=>T.Color>>();
 
 export async function loadBody() { return new FBXLoader().loadAsync(referenceUrl); }
 
-export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'hair' | 'outfit', hair?:HairSettings) {
+export function buildBody(source: T.Group, sourceParts: Parts, appearance: 'skin' | 'hair' | 'outfit', hair?:HairSettings) {
+    const parts:Record<string,PartSurface>={...sourceParts};
+    const hairColor=validAppearanceColor(hair?.hairColor);
+    if(hairColor) for(const key of new Set(['fronthair','earhair','back1','back2',...(hair?.extras??[]).map(e=>e.source)])) if(parts[key])parts[key]=tintAppearancePart(parts[key],hairColor,hair?.hairTipColor);
     const blank=hair?.bodyShape==='blank';
     const headDepth=.82;
     const resources: Array<{ dispose(): void }> = [];
     const keep = <V extends { dispose(): void }>(v: V): V => { resources.push(v); return v; };
-    const average = (img: HTMLImageElement) => {
+    const average = (img: PartSurface) => {
         const c = document.createElement('canvas'); c.width = c.height = 32;
         const ctx = c.getContext('2d')!; ctx.drawImage(img, 0, 0, 32, 32);
         const d = ctx.getImageData(0, 0, 32, 32).data; let r=0,g=0,b=0,n=0;
         for(let i=0;i<d.length;i+=4) if(d[i+3]>180){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
         return n ? `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})` : '#b6a9aa';
     };
-    const skin=average(parts.skin);
+    const skin=validAppearanceColor(hair?.skinColor)??average(parts.skin);
     const garment=composeGarments(parts,{outfit:hair?.layers.outfit?.length??1,outer:hair?.layers.outer?.length??1});
     const frontScalp=keep(new T.MeshStandardMaterial({color:average(parts.fronthair),roughness:1}));
     const rearScalp=keep(new T.MeshStandardMaterial({color:average(parts.back1||parts.back2||parts.fronthair),roughness:1}));
@@ -63,7 +67,7 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
         if(fill){ctx.fillStyle=fill;ctx.fillRect(0,0,472,472);}
         const splitFace=faceSettings?.enabled&&faceImages?composeFace(mouth==='base'?faceSettings:{...faceSettings,mouth:faceSettings.mouths?.[mouth]??faceSettings.mouth},faceImages,eyes==='sleep'?'closed':eyes==='squeeze'?'happy':faceSettings.eyeState):undefined;
         keys.forEach(k=>{
-            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace&&!faceSettings?.useBaseEyes?splitFace.eyes:k==='mouth'&&splitFace&&(!faceSettings?.useBaseMouth||mouth!=='base')?splitFace.mouth:parts[k];
+            const drawable=k==='faceDecor'?faceDecor:k==='outfit'?garment:k==='eyes'&&splitFace&&!faceSettings?.useBaseEyes?splitFace.eyes:k==='mouth'&&splitFace&&(!faceSettings?.useBaseMouth||mouth!=='base')?splitFace.mouth:k==='eyes'&&faceSettings?.useBaseEyes&&validAppearanceColor(faceSettings.baseIrisColor)&&parts[k]?tintAppearancePart(parts[k],faceSettings.baseIrisColor!):parts[k];
             if(!drawable&&!(k==='mouth'&&mouth!=='base'))return;
             ctx.save();
             if(k==='eyes'||k==='mouth')ctx.translate(facePlacement[k].x,-facePlacement[k].y);
@@ -240,7 +244,7 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
     if(appearance!=='skin'){
         // Front and rear are two halves of one shared, zero-thickness surface.
         // Both use identical seam positions at +/- PI/2; only their texture differs.
-        const contoursFor=(image:HTMLImageElement)=>{
+        const contoursFor=(image:PartSurface)=>{
             let contours=contourCache.get(image);
             if(!contours){
                 const canvas=document.createElement('canvas');canvas.width=canvas.height=192;
@@ -295,9 +299,10 @@ export function buildBody(source: T.Group, parts: Parts, appearance: 'skin' | 'h
             if(solidRear&&!full){
                 const contours=parts[keys[0]]?contoursFor(parts[keys[0]]):[];
                 if(!contours.length)return;
-                const surface=createHairShell(simplifyLinerContours(contours),.022,.1);
+                const compactCrown=hair?.assets?.[keys[0]]==='back1_99';
+                const surface=createHairShell(simplifyLinerContours(contours),compactCrown?.008:.022,compactCrown?.04:.1);
                 const linerMaterial=keep(new T.MeshStandardMaterial({color:rearShade,side:T.DoubleSide,roughness:1}));
-                const liner=new T.Mesh(keep(createRearHairLiner(settings,headDepth,surface)),linerMaterial);
+                const liner=new T.Mesh(keep(createRearHairLiner(settings,headDepth,surface,compactCrown)),linerMaterial);
                 liner.name='rear-hair-wisp-liner';liner.position.copy(sheet.position);hairPivot.add(liner);
             }
         };

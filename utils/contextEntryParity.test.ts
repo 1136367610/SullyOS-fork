@@ -8,7 +8,8 @@ import { DatePrompts } from './datePrompts';
 import * as palace from './memoryPalace/pipeline';
 
 const userProfile = { name: '用户' } as UserProfile;
-const markerNumbers = (messages: unknown): number[] => [...JSON.stringify(messages).matchAll(/原文标记(\d+)结束/g)].map(match => Number(match[1]));
+// Compare actual dialogue bodies, not internal event copies in projection metadata.
+const markerNumbers = (messages: unknown): number[] => [...JSON.stringify(Array.isArray(messages)?messages.map(message=>message.content):messages).matchAll(/原文标记(\d+)结束/g)].map(match => Number(match[1]));
 
 describe('以 ChatApp 实际发送链路为基准核对上下文', () => {
     beforeEach(() => localStorage.clear());

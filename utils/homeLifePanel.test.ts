@@ -15,10 +15,41 @@ const editor={playUserSpeech:vi.fn(),playHomeResponse:vi.fn(()=>true),beginHomeC
 async function render(panel='chat',initiative?:any){root=createRoot(host);await act(async()=>root.render(React.createElement(HomeLifePanel,{initiative,editor:editor as any,character:{id:'c',name:'Sully'} as any,user:{name:'用户'} as any,api:{baseUrl:'test',model:'test'} as any,panel,onPanel:()=>{}})));}
 async function click(text:string){await act(async()=>{const b=[...host.querySelectorAll('button')].find(e=>e.textContent===text||e.getAttribute('aria-label')===text);expect(b).toBeTruthy();b!.click();});}
 async function input(text:string){await act(async()=>{const el=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(el,text);el.dispatchEvent(new Event('input',{bubbles:true}));});}
-afterEach(()=>{act(()=>root.unmount());records=[];manualRevision=0;vi.clearAllMocks();});
+afterEach(()=>{act(()=>root.unmount());records=[];manualRevision=0;vi.clearAllMocks();vi.restoreAllMocks();});
+it('opens and reopens at the latest record before paint, retaining the reading anchor when loading older records',async()=>{
+ vi.spyOn(HTMLElement.prototype,'scrollHeight','get').mockImplementation(function(this:HTMLElement){return this.classList.contains('home-record-list')?this.querySelectorAll('.home-record').length*100:0;});
+ vi.spyOn(HTMLElement.prototype,'clientHeight','get').mockReturnValue(500);
+ records=Array.from({length:80},(_,i)=>({id:String(i),at:i,kind:'message',source:'model',actor:'character',text:`记录 ${i}`,roomId:'r',roomName:'客厅'}));
+ root=createRoot(host);
+ let beforePaint=0;
+ function Harness({panel,characterId='c'}:{panel:string|null;characterId?:string}){
+  React.useLayoutEffect(()=>{beforePaint=host.querySelector<HTMLDivElement>('.home-record-list')?.scrollTop??0;});
+  return React.createElement(HomeLifePanel,{editor:editor as any,character:{id:characterId,name:'Sully'} as any,panel,onPanel:()=>{}});
+ }
+ const show=async(panel:string|null,characterId='c')=>{await act(async()=>root.render(React.createElement(Harness,{panel,characterId})));};
+ const page=()=>host.querySelector<HTMLDivElement>('.home-record-list')!;
+ const scroll=async(top:number)=>{await act(async()=>{page().scrollTop=top;page().dispatchEvent(new Event('scroll'));});};
+ await show('journal');expect(beforePaint).toBe(4000);
+ await scroll(40);await click('更早的日常');expect(page().scrollTop).toBe(4040);
+ records=[...records,{...records[0],id:'new',at:81,text:'新回复'}];
+ await show('journal');expect(page().scrollTop).toBe(4040);
+ await show(null);await show('journal');expect(beforePaint).toBe(8000);
+ await show('chat');expect(beforePaint).toBe(3000);
+ await scroll(40);await show('chat','other');expect(beforePaint).toBe(3000);
+ expect(page().style.scrollBehavior).toBe('auto');
+});
 it('shows daily records oldest first with the latest at the bottom',async()=>{
  records=[{id:'a',at:1,kind:'action',source:'user',actor:'user',text:'你对 Sully 开始拥抱',roomId:'r',roomName:'客厅'},{id:'b',at:2,kind:'message',source:'model',actor:'character',text:'最新一句',roomId:'r',roomName:'客厅'}];
  await render('journal');expect([...host.querySelectorAll('.home-record>p')].map(e=>e.textContent)).toEqual(['你对 Sully 开始拥抱','最新一句']);
+});
+it('homely chat is nonmodal, preserves drafts across collapse, and uses the same reply pipeline',async()=>{
+ root=createRoot(host);let panel:string|null='chat';
+ const props={presentation:'homely' as const,editor:editor as any,character:{id:'c',name:'Sully'} as any,user:{name:'用户'} as any,api:{baseUrl:'test',model:'test'} as any,onPanel:(value:string|null)=>{panel=value;root.render(React.createElement(HomeLifePanel,{...props,panel}));}};
+ await act(async()=>root.render(React.createElement(HomeLifePanel,{...props,panel})));
+ expect(host.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBeNull();
+ await input('回家啦');await click('收起家园聊天');expect(host.querySelector('textarea')).toBeNull();
+ await act(async()=>props.onPanel('chat'));expect(host.querySelector('textarea')?.value).toBe('回家啦');
+ mocks.reply.mockResolvedValue({text:'欢迎回家'});await click('发送');expect(records.map(r=>r.text)).toEqual(['回家啦','欢迎回家']);
 });
 it('sends, records a real reply and performs a valid action only once',async()=>{
  mocks.reply.mockResolvedValue({text:'坐下来聊聊',actionId:'sit'});await render();await input('好呀');await click('发送');

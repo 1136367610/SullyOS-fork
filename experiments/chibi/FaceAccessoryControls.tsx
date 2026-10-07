@@ -1,4 +1,5 @@
 import React,{useState} from 'react';
+import {FigureSlider} from './FigureSlider';
 import {CustomPartChoices} from './CustomPartChoices';
 import {defaultHairLayer,type HairSettings} from '../../apps/room3d/chibi/types';
 import type {CustomCreatorPart} from '../../types';
@@ -13,7 +14,8 @@ export function FaceAccessoryControls({hair,items,selected,onSelect,onChange,onB
    <p>可多选，点已选款式取下。下方调整对这一组生效。</p>
    {([['offsetY','高低',-80,80,1],['offsetX','左右',-80,80,1],['width','大小',.5,1.5,.01],['rotation','旋转',-45,45,1]] as const).map(([field,title,min,max,step])=>{
     const value=(layer as unknown as Record<string,number>)[field]??(field==='width'?1:0);
-    return <label className="creator-slider" key={field}><span>{title}</span><input aria-label={label+title} type="range" min={min} max={max} step={step} value={value} onPointerDown={onBegin} onPointerUp={onEnd} onPointerCancel={onEnd} onBlur={onEnd} onChange={e=>update(field,Number(e.target.value))}/><output>{field==='width'?Math.round(value*100)+'%':value}</output></label>;
+    const factor=field==='width'?100:1;
+    return <FigureSlider key={field} label={title} ariaLabel={label+title} min={min*factor} max={max*factor} step={step*factor} value={Number((value*factor).toFixed(2))} unit={field==='width'?'%':''} onBegin={onBegin} onEnd={onEnd} onChange={value=>update(field,value/factor)}/>;
    })}
    <button onClick={()=>onChange({...hair,layers:{...hair.layers,[key]:{...defaultHairLayer}}})}>重置{label}位置</button>
   </section>;

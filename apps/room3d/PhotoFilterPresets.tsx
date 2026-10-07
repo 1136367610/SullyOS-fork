@@ -1,3 +1,4 @@
+import {createLocalId} from '../../utils/localId.js';
 import React,{useState} from 'react';
 import type {PhotoLook} from './photoEffects';
 import {readPhotoLooks,writePhotoLooks,samePhotoLook,type SavedPhotoLook} from './photoLookStorage';
@@ -5,7 +6,7 @@ import {readPhotoLooks,writePhotoLooks,samePhotoLook,type SavedPhotoLook} from '
 export default function PhotoLookLibrary({look,onApply}:{look:PhotoLook;onApply:(look:PhotoLook)=>void}){
  const [items,setItems]=useState(readPhotoLooks),[name,setName]=useState(''),[error,setError]=useState(''),[removed,setRemoved]=useState<SavedPhotoLook>();
  const commit=(next:SavedPhotoLook[])=>{try{writePhotoLooks(next);setItems(next);setError('');return true;}catch{setError('预设保存失败，本地存储可能已满。');return false;}};
- const save=()=>{const title=name.trim();if(!title)return;if(items.length>=60){setError('最多保存 60 组预设，请先移除不需要的预设。');return;}if(commit([...items,{id:crypto.randomUUID(),name:title,look:{...look}}]))setName('');};
+ const save=()=>{const title=name.trim();if(!title)return;if(items.length>=60){setError('最多保存 60 组预设，请先移除不需要的预设。');return;}if(commit([...items,{id:createLocalId(),name:title,look:{...look}}]))setName('');};
  return <details className="photo-look-library"><summary>我的滤镜库 <span>{items.length} 组</span></summary>
   <p>保存当前色调和四项参数，下次拍照也能用。</p>
   <form onSubmit={e=>{e.preventDefault();save();}}><input aria-label="滤镜预设名称" placeholder="给这组滤镜起个名字" maxLength={24} value={name} onChange={e=>setName(e.target.value)}/><button disabled={!name.trim()} type="submit">保存当前</button></form>

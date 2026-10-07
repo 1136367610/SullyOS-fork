@@ -21,21 +21,21 @@ it('a late model reply/action stays in its original turn after the user starts a
  const rows=homeTurnMessages('c',records);expect(rows).toHaveLength(2);
  expect(rows[0].content).toContain('我在睡觉');expect(rows[0].content).toContain('C走到U身边');expect(rows[1].metadata.homeRecordIds).toEqual(['e7']);
 });
-it('stored reply and actual action extend the same message id',async()=>{
+it('stored replies and action segments get new IDs while earlier messages retain theirs',async()=>{
  const char=character();char.home3D!.records=example.slice(0,4);await DB.saveCharacter(char);const before=await loadCharacterContextMessages(char);
  char.home3D!.records=example;await DB.saveCharacter(char);const after=await loadCharacterContextMessages(char);
- expect(after).toHaveLength(1);expect(after[0].id).toBe(before[0].id);expect(after[0].content).toContain('C走到U身边');
- char.home3D!.records=[...example,event('e7','U去拿水')];await DB.saveCharacter(char);expect(await loadCharacterContextMessages(char)).toHaveLength(2);
+ expect(after).toHaveLength(4);expect(after.slice(0,2).map(r=>r.id)).toEqual(before.map(r=>r.id));expect(after[2].role).toBe('assistant');expect(after[3].content).toContain('C走到U身边');
+ char.home3D!.records=[...example,event('e7','U去拿水')];await DB.saveCharacter(char);expect(await loadCharacterContextMessages(char)).toHaveLength(4);
 });
-it('migrates old per-event messages into one turn and preserves the first id',async()=>{
+it('preserves old per-event messages and IDs when upgrading the bridge',async()=>{
  const char=character(),db=await openDB();
  await new Promise<void>((resolve,reject)=>{const tx=db.transaction('characters','readwrite');tx.objectStore('characters').put({...char,homeContextBridgeVersion:1});tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});
  let first=0;for(const e of example){const id=await DB.saveMessage({charId:char.id,role:'user',type:'text',content:e.text,timestamp:e.at,metadata:{source:'home',homeRecordId:e.id}});first||=id;}
- const rows=await loadCharacterContextMessages(char);expect(rows).toHaveLength(1);expect(rows[0].id).toBe(first);expect(rows[0].content).toContain('我在睡觉');
+ const rows=await loadCharacterContextMessages(char);expect(rows).toHaveLength(6);expect(rows[0].id).toBe(first);expect(rows[4].content).toContain('我在睡觉');expect(rows[4].role).toBe('assistant');
 });
 it('home requests use all shared sources once, no parallel home summary, and regeneration excludes later turns',async()=>{
  const char=character();char.home3D!.records=[];await DB.saveCharacter(char);
- for(const source of ['chat','date','call'])await DB.saveMessage({charId:char.id,role:'user',type:'text',content:source+'共同历史',metadata:{source}});
+ for(const source of ['chat','date','call'])await DB.saveMessage({charId:char.id,role:'user',type:'text',timestamp:500,content:source+'共同历史',metadata:{source}});
  char.home3D!.records=example;await DB.saveCharacter(char);
  const args={char,user,api,scene,records:example.slice(0,4),signal:new AbortController().signal};
  const messages=await buildHomeConversationPayload(args),text=JSON.stringify(messages);

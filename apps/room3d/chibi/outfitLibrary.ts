@@ -1,3 +1,4 @@
+import {createLocalId} from '../../../utils/localId.js';
 import {approvedGarments,approvedPresets,cleanApprovedWardrobe} from './approvedWardrobe';
 import {cleanGarmentFit,scopeLegacyHemFits} from './garmentFit';
 import {cleanWardrobeColors} from './wardrobeColors';
@@ -18,7 +19,7 @@ export function applyOutfit(hair:HairSettings,outfit:SavedOutfit):HairSettings{
 }
 export function makeOutfit(name:string,hair:HairSettings):SavedOutfit{
  const clean=name.trim().slice(0,40);if(!clean)throw Error('给这套搭配起个名字吧');
- return {id:crypto.randomUUID(),name:clean,clothes:outfitClothes(hair)};
+ return {id:createLocalId(),name:clean,clothes:outfitClothes(hair)};
 }
 export function exportOutfit(outfit:SavedOutfit){return JSON.stringify({format:'sully-3d-outfit',version:1,name:outfit.name,clothes:outfitClothes(outfit.clothes)},null,2);}
 export function importOutfit(text:string):SavedOutfit{

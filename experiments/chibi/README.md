@@ -1,5 +1,7 @@
 # Chibi acrylic stand experiment
 
+Sully `back1_99` keeps its authored curl as a compact crown detail: the liner uses a thinner rim and a compressed exposed contour with the opening above the scalp. This is scoped to the asset ID; other back-hair liners retain their original tuck. The editor offers the four Sully hair layers separately, without a whole-hairstyle shortcut.
+
 2026-09-16 — Wrapped back1 additionally has a thin inner wisp layer (`rearHairLiner.ts`): source side/top wisps project outward while the cap root is tucked inside the scalp. It shares the layer transforms and solid color; top details retain their shape instead of being height-clamped. A shallow .022 half-depth curved shell adds subtle roundness and closes the rim. The automatic liner is not a saved extra layer and is absent for projected back1/full extra wraps. Back2 retains its original artwork.
 
 2026-09-16 — Active outward hair now uses paired curved sheets (`apps/room3d/chibi/hairShell.ts`). Both faces reuse the same source artwork and source-canvas UVs. Elliptical cross-sections follow each disconnected tuft's centerline; a rounded, untextured hair-colored rim joins front and rear. Subpixel contours preserve holes and thin tips. This replaces the old silhouette-distance padding. The existing saved `puff` value now controls curved-sheet depth and is labelled 发片厚度. Ordinary scalp-wrap hair is unchanged. Nine hair geometry/classification/seam tests and front/side/rear browser checks passed.

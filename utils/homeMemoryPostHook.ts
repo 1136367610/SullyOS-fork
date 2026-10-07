@@ -1,7 +1,7 @@
 import type {CharacterProfile, APIConfig} from '../types';
 import {DB} from './db';
 import {homeRecords} from './homeRecords';
-import {homeTurnMessages} from './homeTurns';
+import {homeSegmentMessages as homeTurnMessages} from './homeContextSegments';
 import {processNewMessagesWithAutoArchive} from './memoryPalace/autoArchive';
 import {incrementDigestRound,runCognitiveDigestion} from './memoryPalace/digestion';
 import type {EmbeddingConfig} from './memoryPalace/types';

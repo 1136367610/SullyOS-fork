@@ -8,7 +8,7 @@ import {homeEmotionEnabled} from '../../utils/homeEmotion';
 import type {HomeInitiativeRequest} from './HomePresenceBubbles';
 
 import {Button,Switch} from './islandComponents';
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ArrowUp,BookOpen,ChatCircle,DotsThree,House,PawPrint,PaintBrush,Users,SlidersHorizontal,X,ArrowCounterClockwise,PencilSimple,Trash,Check} from '@phosphor-icons/react';
 import type {APIConfig,CharacterProfile,UserProfile} from '../../types';
 import type {HomeEditor} from './editor.js';
@@ -16,8 +16,10 @@ import type {HomeRecord} from './types';
 import {homeRecords,makeHomeRecord,editHomeRecord} from '../../utils/homeRecords';
 import {generateHomeReply} from '../../utils/homeConversation';
 import './homeLife.css';
+import {isScheduleFeatureOn} from '../../utils/scheduleFeature';
+import HomeScheduleTip from './HomeScheduleTip';
 
-export default function HomeLifePanel({editor,character,user,api,conversationContext,panel,onPanel,onDefinition,onFigures,initiative,active=true,onBusyChange}:{onBusyChange?:(busy:boolean)=>void;active?:boolean;initiative?:HomeInitiativeRequest;editor:HomeEditor;character?:CharacterProfile;user?:UserProfile;api?:APIConfig;conversationContext?:HomeConversationContext;panel:string|null;onPanel:(name:string|null)=>void;onDefinition?:()=>void;onFigures?:()=>void}){
+export default function HomeLifePanel({editor,character,user,api,conversationContext,panel,onPanel,onDefinition,onFigures,initiative,active=true,onBusyChange,presentation='home'}:{presentation?:'home'|'homely';onBusyChange?:(busy:boolean)=>void;active?:boolean;initiative?:HomeInitiativeRequest;editor:HomeEditor;character?:CharacterProfile;user?:UserProfile;api?:APIConfig;conversationContext?:HomeConversationContext;panel:string|null;onPanel:(name:string|null)=>void;onDefinition?:()=>void;onFigures?:()=>void}){
  const [inner,setInner]=useState<{charId?:string;text:string}>({charId:character?.id,text:character?getLastInnerState(character.id):''});
  useEffect(()=>{
   const id=character?.id;
@@ -38,9 +40,25 @@ export default function HomeLifePanel({editor,character,user,api,conversationCon
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort(new DOMException('已离开家园或家园界面重新加载','AbortError'));conversationEnd.current?.();};},[]);
  useEffect(()=>{const stop=()=>{if((!active||document.hidden)&&automaticRequest.current)controller.current?.abort(new DOMException('已离开家园，停止自动开口','AbortError'));};stop();document.addEventListener('visibilitychange',stop);return()=>document.removeEventListener('visibilitychange',stop);},[active]);
  useEffect(()=>{if(!panel)return;refresh(n=>n+1);const timer=setInterval(()=>refresh(n=>n+1),1500);return()=>clearInterval(timer);},[panel]);
- useEffect(()=>{if(panel&&panel!=='interact')sheet.current?.querySelector<HTMLButtonElement>('button')?.focus();},[panel]);
+ useEffect(()=>{if(panel&&panel!=='interact'&&!(presentation==='homely'&&panel==='chat'))sheet.current?.querySelector<HTMLButtonElement>('button')?.focus();},[panel,presentation]);
  const home=editor.getState?.(),records=homeRecords(home),scene=editor.getHomeScene();
- useEffect(()=>{if(panel==='chat'||panel==='journal')list.current?.scrollTo?.({top:list.current.scrollHeight,behavior:'smooth'});},[panel,records.length,busy]);
+ const entries=panel==='chat'?records.filter(e=>e.kind==='message'||e.kind==='action').slice(-30):records.filter(e=>filter==='all'||filter==='conversation'&&e.kind==='message'||filter===e.source).slice(-limit);
+ const scrollPosition=useRef({view:'',limit:0,count:0,height:0,top:0,nearBottom:true});
+ const rememberScroll=()=>{
+  const element=list.current;if(!element)return;
+  Object.assign(scrollPosition.current,{height:element.scrollHeight,top:element.scrollTop,nearBottom:element.scrollHeight-element.clientHeight-element.scrollTop<100});
+ };
+ // Like Chat: position before paint, never animate through the entire history.
+ // Preserve the reading anchor when older records are prepended or new replies arrive above a reader.
+ useLayoutEffect(()=>{
+  const element=list.current,previous=scrollPosition.current;
+  if(!element||(panel!=='chat'&&panel!=='journal')){previous.view='';return;}
+  const view=JSON.stringify([character?.id,panel,panel==='journal'?filter:'']);
+  if(previous.view!==view||!previous.count)element.scrollTop=element.scrollHeight;
+  else if(panel==='journal'&&limit>previous.limit)element.scrollTop=previous.top+element.scrollHeight-previous.height;
+  else if(previous.nearBottom)element.scrollTop=element.scrollHeight;
+  Object.assign(previous,{view,limit,count:entries.length});rememberScroll();
+ });
  const update=(next:HomeRecord[])=>{editor.updateRecords(next);refresh(n=>n+1);};
  const current=()=>homeRecords(editor.getState?.());
  const reply=async(userId:string,replyId?:string)=>{
@@ -86,13 +104,13 @@ export default function HomeLifePanel({editor,character,user,api,conversationCon
  };
  const remove=(record:HomeRecord)=>{controller.current?.abort(new DOMException('家园记录已修改，取消旧回复','AbortError'));const all=current();setRemoved({record,index:all.findIndex(e=>e.id===record.id)});update(all.filter(e=>e.id!==record.id));};
  const restore=()=>{if(!removed)return;const all=current();all.splice(Math.min(removed.index,all.length),0,removed.record);update(all);setRemoved(undefined);};
- const entries=panel==='chat'?records.filter(e=>e.kind==='message'||e.kind==='action').slice(-30):records.filter(e=>filter==='all'||filter==='conversation'&&e.kind==='message'||filter===e.source).slice(-limit);
  const sourceName={user:'手动',local:'自主',model:'模型'};
  const title=panel==='mood'?`${character?.name||'TA'}的心情`:panel==='chat'?`和${character?.name||'TA'}聊聊`:panel==='journal'?'家里的日常':'我的家';
  if(!panel||panel==='interact')return null;
- return <div className="home-life-overlay" onPointerDown={e=>{if(e.target===e.currentTarget)onPanel(null);}}>
-  <section ref={sheet} className={`home-life-sheet home-life-${panel}`} aria-label={title} role="dialog" aria-modal="true" onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();onPanel(null);}if(e.key==='Tab'){const items=[...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),textarea:not(:disabled),input:not(:disabled),summary')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}}>
-   <header><div><small>{scene.roomName}</small><h2>{title}</h2></div><button className="home-icon" aria-label="关闭面板" onClick={()=>onPanel(null)}><X size={22}/></button></header>
+ const docked=presentation==='homely'&&panel==='chat';
+ return <div className={`home-life-overlay ${docked?'homely-chat':''}`} onPointerDown={e=>{if(!docked&&e.target===e.currentTarget)onPanel(null);}}>
+  <section ref={sheet} className={`home-life-sheet home-life-${panel}`} aria-label={title} role="dialog" aria-modal={docked?undefined:true} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();onPanel(null);}if(e.key==='Tab'&&!docked){const items=[...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),textarea:not(:disabled),input:not(:disabled),summary')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}}>
+   <header><div><small>{scene.roomName}</small><h2>{title}</h2></div><button className="home-icon" aria-label={docked?'收起家园聊天':'关闭面板'} onClick={()=>onPanel(null)}>{docked?<span aria-hidden="true">›</span>:<X size={22}/>}</button></header>
    {panel==='mood'?<div className="home-mood-detail">
     {character&&homeEmotionEnabled(character)&&<section className="home-inner-state" aria-label="内心想法"><h3>内心想法</h3><p>{inner.charId===character.id&&inner.text?inner.text:'还没有内心想法，情绪评估完成后会显示在这里。'}</p></section>}
     {!character||!homeEmotionEnabled(character)?<p className="home-life-empty">尚未开启情绪 buff，可在角色的情绪设置中开启。</p>:!character.activeBuffs?.length?<p className="home-life-empty">暂时没有情绪 buff，交谈后的情绪更新会显示在这里。</p>:character.activeBuffs.map(buff=><article key={buff.id} className="home-mood-item"><span className="home-mood-icon" aria-hidden="true">{buff.emoji||'💭'}</span><div><h3>{buff.label}</h3><span className="home-mood-strength" aria-label={`强度 ${buff.intensity}`}>{'●'.repeat(Math.max(1,Math.min(5,buff.intensity||1)))}</span>{buff.description&&<p>{buff.description}</p>}</div></article>)}
@@ -109,9 +127,10 @@ export default function HomeLifePanel({editor,character,user,api,conversationCon
     <div className="home-frequency" role="group" aria-label="本地活动频率">{[['quiet','安静'],['normal','日常'],['lively','活跃']].map(([value,label])=><button key={value} aria-pressed={(home?.activityFrequency||'normal')===value} onClick={()=>{editor.setCompanionPreference('activityFrequency',value);refresh(n=>n+1);}}>{label}</button>)}</div>
     <div className="home-autonomy island-autonomy"><Switch aria-label="角色自动开口" checked={home?.directSpeech===true} onChange={checked=>{editor.setCompanionPreference('directSpeech',checked);refresh(n=>n+1);}}/><div>角色自动开口<small>你在家园且同处一室时主动聊天 · 调用 API</small></div></div>
     <p className="home-auto-note">至少 3 次有效自主行为、90 秒后才可能开口；两次主动开口至少间隔 3 分钟。离开家园或切换 App 后不再自动调用。</p>
+    {character&&!isScheduleFeatureOn(character)&&<HomeScheduleTip/>}
    </div>:<>
     {panel==='journal'&&<div className="home-record-filters" role="group" aria-label="记录筛选">{[['all','全部'],['conversation','对话'],['user','手动'],['local','自主'],['model','模型']].map(([id,label])=><button key={id} aria-pressed={filter===id} onClick={()=>{setFilter(id);setLimit(40);}}>{label}</button>)}</div>}
-    <div className="home-record-list" ref={list}>
+    <div className="home-record-list" ref={list} onScroll={rememberScroll} style={{scrollBehavior:'auto',overflowAnchor:'none'}}>
      {panel==='journal'&&records.length>limit&&<button className="home-load-more" onClick={()=>setLimit(n=>n+40)}>更早的日常</button>}
      {!entries.length&&<div className="home-life-empty"><ChatCircle size={36}/><p>{panel==='chat'?'聊点什么，让这里有你们的声音。':'一起做过的事，会慢慢留在这里。'}</p></div>}
      {entries.map(e=><article key={e.id} className={`home-record home-record-${e.kind} home-record-${e.actor}`}>
@@ -129,7 +148,7 @@ export default function HomeLifePanel({editor,character,user,api,conversationCon
     </div>
     {removed&&<div className="home-life-notice">已移除一条记录<button onClick={restore}>撤销</button></div>}
     {error&&<div role="alert" className="home-life-notice">{error}{retry&&<button disabled={busy} onClick={()=>void reply(retry.userId,retry.replyId)}>重试</button>}</div>}
-    {panel==='chat'&&<form className="home-chat-compose" onSubmit={e=>{e.preventDefault();send();}}><textarea aria-label="在家园说句话" placeholder={scene.present?'说句话…':'TA 不在这个房间，先去找 TA 吧'} rows={1} maxLength={4000} disabled={!scene.present} value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send();}}}/><button type="submit" aria-label="发送" disabled={busy||!scene.present||!draft.trim()}><ArrowUp size={22}/></button></form>}
+    {panel==='chat'&&<form className="home-chat-compose" onSubmit={e=>{e.preventDefault();send();}}><textarea aria-label="在家园说句话" placeholder={scene.present?'说句话…':docked?'TA 外出了，晚点再聊':'TA 不在这个房间，先去找 TA 吧'} rows={1} maxLength={4000} disabled={!scene.present} value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send();}}}/><button type="submit" aria-label="发送" disabled={busy||!scene.present||!draft.trim()}><ArrowUp size={22}/></button></form>}
    </>}
   </section>
  </div>;

@@ -20,7 +20,7 @@ it('offers image tiles for every outfit and applies its complete items',()=>{
  expect(grid.querySelectorAll('button')).toHaveLength(Object.keys(approvedPresets).length);
  for(const [id,p] of Object.entries(approvedPresets)){
   const tile=grid.querySelector<HTMLButtonElement>(`[aria-label="${p.label}"]`)!;
-  expect(tile.querySelectorAll('img')).toHaveLength(Object.keys(p.items).length);
+  expect(tile.querySelector(`[aria-label="${p.label}整套穿着预览"]`)).not.toBeNull();
   act(()=>tile.click());expect(change.mock.lastCall![0].wardrobe).toEqual(p.items);
  }
 });

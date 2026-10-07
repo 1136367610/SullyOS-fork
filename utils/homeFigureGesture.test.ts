@@ -3,7 +3,7 @@ import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach, expect, it, vi} from 'vitest';
 import {HairEditor} from '../experiments/chibi/HairEditor';
-vi.mock('../experiments/chibi/Puppet', () => ({Puppet: () => React.createElement('canvas')}));
+vi.mock('../experiments/chibi/Puppet', () => ({Puppet: (props:any) => React.createElement('canvas',{'data-motion':props.wardrobeStyle})}));
 vi.mock('../experiments/chibi/BodyControls', () => ({BodyControls: () => null}));
 vi.mock('../experiments/chibi/FaceTuning', () => ({FaceTuning: () => null}));
 vi.mock('../experiments/chibi/FaceControls', () => ({FaceControls: () => null}));
@@ -49,4 +49,8 @@ it('zooms and pans with two touches, then resets the view',()=>{
  act(()=>host.querySelector<HTMLButtonElement>('[aria-label="回到正面"]')!.click());
  expect(Number(preview.dataset.zoom)).toBe(1);expect(preview.dataset.pan).toBe('0,0');
  expect(host.querySelector('[aria-label="3D 预览转角"]')).toBeNull();
+});
+
+it('uses motion 12 and keeps history visible without an audition menu',()=>{
+ render();expect(host.querySelector('canvas')!.dataset.motion).toBe('mmd-breath');expect(host.querySelector('[aria-label="试衣站姿"]')).toBeNull();expect(host.querySelector('[aria-label="编辑历史"] [aria-label="撤回"]')).not.toBeNull();expect(host.querySelector('[aria-label="编辑历史"] [aria-label="重做"]')).not.toBeNull();
 });

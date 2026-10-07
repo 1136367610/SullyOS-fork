@@ -15,6 +15,7 @@ import {UserCircle,CheckCircle} from '@phosphor-icons/react';
 export default function Home3DSetupEntry(props: React.ComponentProps<typeof Home3DEntry>) {
     const {userProfile, apiConfig, groups, realtimeConfig} = useOS();
     const char = props.character;
+    const homely = props.presentation === 'homely';
     const [figureOwner, setFigureOwner] = useState<'user' | 'char' | 'choose' | null>(null);
     const [needsSchedule, setNeedsSchedule] = useState<boolean | null>(null);
     const [skipSchedule, setSkipSchedule] = useState(false);
@@ -57,8 +58,8 @@ export default function Home3DSetupEntry(props: React.ComponentProps<typeof Home
         finally {if (alive.current) setBusy(false);}
     };
     if (!char) return <Home3DEntry {...props} />;
-    const charReady = !!char.chibiStudio?.home3D?.state, userReady = !!userProfile.chibiStudio?.home3D?.state;
-    const residents = [
+    const charReady = !!char.chibiStudio?.home3D?.state, userReady = homely || !!userProfile.chibiStudio?.home3D?.state;
+    const residents = homely ? [] : [
         ...(userReady ? [{id: 'user', label: userProfile.name || '你', state: userProfile.chibiStudio!.home3D!.state, hair: userProfile.chibiStudio!.home3D!.hair}] : []),
         ...(props.residents ?? []).filter(resident => resident.id !== 'user'),
     ];
@@ -69,8 +70,8 @@ export default function Home3DSetupEntry(props: React.ComponentProps<typeof Home
             <button className="home-definition-back" disabled={busy} onClick={props.onBack}>返回</button>
             <p className="home-definition-eyebrow">入住 · {!charReady || !userReady?'认识住客':'安排日常'}</p>
             <h1>{!charReady || !userReady ? '谁住在这里？' : '让日程找到房间'}</h1>
-            {!charReady || !userReady ? <><p className="home-definition-intro">各选一份形象，也可以沿用手办柜里的自己。</p>
-                <div className="home-resident-choices">{[{id:'char' as const,name:char.name,ready:charReady,img:char.chibiStudio?.home3D?.img??char.sprites?.chibi},{id:'user' as const,name:userProfile.name||'你',ready:userReady,img:userProfile.chibiStudio?.home3D?.img??userProfile.vrState?.chibi?.img}].map(owner=><button key={owner.id} onClick={()=>setFigureOwner(owner.id)} aria-label={`${owner.id==='char'?char.name:'你'}的形象 · ${owner.ready?'已准备好，可修改':'去捏人'}`}><span className="home-resident-preview">{owner.img?<TokenImg value={owner.img}/>:<UserCircle size={76} weight="thin"/>}</span><strong>{owner.name}</strong><span>{owner.ready?<><CheckCircle/>准备好了</>:'选择形象'}</span></button>)}</div><p className="home-onboarding-footnote">保存一位，就接着准备另一位。</p></> : !hasRooms || needsSchedule === null ? <p>正在读取房间与日程…</p> : <>
+            {!charReady || !userReady ? <><p className="home-definition-intro">{homely?'为角色准备一份家园形象，就可以面对面相处。':'各选一份形象，也可以沿用手办柜里的自己。'}</p>
+                <div className="home-resident-choices">{[{id:'char' as const,name:char.name,ready:charReady,img:char.chibiStudio?.home3D?.img??char.sprites?.chibi},{id:'user' as const,name:userProfile.name||'你',ready:userReady,img:userProfile.chibiStudio?.home3D?.img??userProfile.vrState?.chibi?.img}].filter(owner=>!homely||owner.id==='char').map(owner=><button key={owner.id} onClick={()=>setFigureOwner(owner.id)} aria-label={`${owner.id==='char'?char.name:'你'}的形象 · ${owner.ready?'已准备好，可修改':'去捏人'}`}><span className="home-resident-preview">{owner.img?<TokenImg value={owner.img}/>:<UserCircle size={76} weight="thin"/>}</span><strong>{owner.name}</strong><span>{owner.ready?<><CheckCircle/>准备好了</>:'选择形象'}</span></button>)}</div><p className="home-onboarding-footnote">{homely?'你就是镜头另一边的人。':'保存一位，就接着准备另一位。'}</p></> : !hasRooms || needsSchedule === null ? <p>正在读取房间与日程…</p> : <>
                 <p className="home-definition-intro">{char.name}的旧日程还没标房间。补全后，在家和外出都会同步到这里。</p>
                 <p className="home-onboarding-footnote">调用一次 API；成功后替换今天的日程。</p>
                 <button className="home-definition-submit" disabled={busy} onClick={() => void regenerate()}>{busy ? '正在生成日程…' : '重新生成并补全位置'}</button>
@@ -79,7 +80,7 @@ export default function Home3DSetupEntry(props: React.ComponentProps<typeof Home
         </div></section>;
     }
     if(!hasRooms&&charReady&&userReady)gate=<section className="home-definition"><div className="home-definition-content"><button className="home-definition-back" onClick={props.onBack}>返回</button><HomePalettePicker busy={busy} onChoose={id=>void choosePalette(id)}/>{error&&<p role="alert">{error}</p>}</div></section>;
-    return <><Home3DEntry {...props} suspended={props.suspended||figureOwner!==null} user={userProfile} api={apiConfig} conversationContext={{groups,realtimeConfig}} residents={residents} beforeEnter={gate} onFigures={() => setFigureOwner('choose')} />
+    return <><Home3DEntry {...props} suspended={props.suspended||figureOwner!==null} user={userProfile} api={apiConfig} conversationContext={{groups,realtimeConfig}} residents={residents} beforeEnter={gate} onFigures={() => setFigureOwner(homely?'char':'choose')} />
         {figureOwner==='choose'?<div className="home-cabinet-choose" role="dialog" aria-label="双方手办柜"><button className="home-definition-back" onClick={()=>setFigureOwner(null)}>返回家园</button><h2>打开谁的手办柜？</h2><div className="home-resident-choices"><button onClick={()=>setFigureOwner('char')}><UserCircle size={52}/><strong>{char.name}</strong></button><button onClick={()=>setFigureOwner('user')}><UserCircle size={52}/><strong>{userProfile.name||'你'}</strong></button></div></div>:figureOwner&&<HomeFigureStudio key={figureOwner} charId={figureOwner === 'char' ? char.id : undefined} onClose={() => setFigureOwner(null)} startEditing={figureOwner === 'char' ? !charReady : !userReady} />}
     </>;
 }

@@ -1,3 +1,4 @@
+import type {PartSurface} from './appearanceColors';
 import * as T from 'three';
 
 /** A closed, curved extrusion for one transparent creator part. */
@@ -56,9 +57,9 @@ export function clothingCanvas(image:HTMLImageElement|HTMLCanvasElement, skin:st
     return canvas;
 }
 
-const garmentTops=new WeakMap<HTMLImageElement,number>();
+const garmentTops=new WeakMap<PartSurface,number>();
 /** Lengthen each original garment from its own upper edge before layering. */
-export function composeGarments(parts:Record<string,HTMLImageElement>,lengths:Record<string,number>){
+export function composeGarments(parts:Record<string,PartSurface>,lengths:Record<string,number>){
     const canvas=document.createElement('canvas');canvas.width=canvas.height=472;
     const ctx=canvas.getContext('2d')!;
     for(const key of ['outfit','outer']){

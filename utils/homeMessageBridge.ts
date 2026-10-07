@@ -1,5 +1,6 @@
 import type {CharacterProfile, Message} from '../types';
-import {assignHomeTurns,homeTurnMessages} from './homeTurns';
+import {assignHomeTurns} from './homeTurns';
+import {assignHomeContextSegments,homeSegmentMessages as homeTurnMessages} from './homeContextSegments';
 import {homeRecords} from './homeRecords';
 
 /** Persist the room journal and its shared-history projection atomically, as DateApp does for messages.
@@ -14,16 +15,19 @@ export function persistCharacterWithHomeMessages(db:IDBDatabase,input:CharacterP
   const request=characters.get(id);
   request.onsuccess=()=>{
    const previous=request.result as CharacterProfile|undefined;
-   if(typeof input==='string'&&(!previous||previous.homeContextBridgeVersion===2))return;
+   if(typeof input==='string'&&(!previous||previous.homeContextBridgeVersion===3))return;
    const character=typeof input==='string'?previous!:input;
-   const records=assignHomeTurns(homeRecords(character.home3D));
-   const unchanged=previous?.homeContextBridgeVersion===2&&JSON.stringify(homeRecords(previous.home3D))===JSON.stringify(records);
-   characters.put({...character,...(character.home3D?{home3D:{...character.home3D,records}}:{}),homeContextBridgeVersion:2});
-   if(unchanged||(!records.length&&!homeRecords(previous?.home3D).length))return;
+   const oldRecords=homeRecords(previous?.home3D),inputRecords=homeRecords(character.home3D);
+   if(!oldRecords.length&&!inputRecords.length){characters.put({...character,homeContextBridgeVersion:3});return;}
+   const persist=(last:Message|undefined,hwm:number,legacy:Message[])=>{
+   const records=assignHomeContextSegments(oldRecords,inputRecords,last,hwm,legacy);
+   const unchanged=previous?.homeContextBridgeVersion===3&&JSON.stringify(oldRecords)===JSON.stringify(records);
+   characters.put({...character,...(character.home3D?{home3D:{...character.home3D,records}}:{}),homeContextBridgeVersion:3});
+   if(unchanged)return;
    const turns=homeTurnMessages(id,records);
    const pending=new Map(turns.map(turn=>[turn.metadata.homeTurnId as string,turn]));
    const insert=(turn:typeof turns[number])=>{const add=messages.add(turn);add.onsuccess=()=>{const key=add.result as number;firstInserted=Math.min(firstInserted,key);onInsert(tx,id,key);};};
-   if(previous?.homeContextBridgeVersion===2){
+   if(previous?.homeContextBridgeVersion===3){
     // Normal writes touch only changed turns. No history scan on each local action.
     const before=new Map(homeTurnMessages(id,assignHomeTurns(homeRecords(previous.home3D))).map(turn=>[turn.metadata.homeTurnId as string,turn]));
     for(const key of new Set([...before.keys(),...pending.keys()])){
@@ -36,18 +40,33 @@ export function persistCharacterWithHomeMessages(db:IDBDatabase,input:CharacterP
     }
     return;
    }
-   // One-time legacy migration only; source index excludes private chat and date history.
-   const cursorRequest=messages.index('charId_source').openCursor(IDBKeyRange.only([id,'home']));
-   cursorRequest.onsuccess=()=>{
-    const cursor=cursorRequest.result;
-    if(cursor){
-     const row=cursor.value as Message,key=row.metadata.homeTurnId||row.metadata.homeRecordId;
+   // Preserve legacy IDs/watermarks. Requests expand attached events only after
+   // shared range selection. Unmatched old history remains untouched.
+   for(const row of legacy){
+     const key=row.metadata.homeTurnId||row.metadata.homeRecordId;
      const projected=pending.get(key);
-     if(projected)cursor.update({...row,...projected,metadata:{...row.metadata,...projected.metadata}});
-     else cursor.delete();
-     pending.delete(key);cursor.continue();return;
-    }
-    for(const turn of [...pending.values()].sort((a,b)=>a.timestamp-b.timestamp))insert(turn);
+     const ids:string[]=row.metadata.homeRecordIds||[row.metadata.homeRecordId].filter(Boolean);
+     if(projected&&ids.every(recordId=>projected.metadata.homeRecordIds.includes(recordId)))
+      messages.put({...row,...projected,metadata:{...row.metadata,...projected.metadata,homeLegacy:true}});
+     pending.delete(key);
+   }
+   for(const turn of [...pending.values()].sort((a,b)=>a.timestamp-b.timestamp))insert(turn);
+   };
+   // IndexedDB request callbacks keep the transaction active; no async waits.
+   const latest=messages.index('charId').openCursor(IDBKeyRange.only(id),'prev');
+   latest.onsuccess=()=>{
+    const cursor=latest.result;
+    if(cursor?.value.groupId){cursor.continue();return;}
+    const last=cursor?.value as Message|undefined;
+    const mirror=tx.objectStore('assets').get(`mp_hwm_v1_${id}`);
+    mirror.onsuccess=()=>{
+     let hwm=Number(typeof mirror.result?.data==='number'?mirror.result.data:mirror.result?.data?.msgId)||0;
+     try{hwm=Math.max(hwm,Number(localStorage.getItem(`mp_lastMsgId_${id}`))||0);}catch{/* Use mirror. */}
+     if(previous?.homeContextBridgeVersion===3){persist(last,hwm,[]);return;}
+     const legacy:Message[]=[];
+     const scan=messages.index('charId_source').openCursor(IDBKeyRange.only([id,'home']));
+     scan.onsuccess=()=>{const item=scan.result;if(item){legacy.push(item.value);item.continue();}else persist(last,hwm,legacy);};
+    };
    };
   };
   tx.oncomplete=()=>{

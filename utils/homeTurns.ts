@@ -21,6 +21,8 @@ export function assignHomeTurns(records:HomeRecord[]):HomeRecord[]{
  });
 }
 
+/** Legacy v2 projection retained for compatibility. New persistence and requests
+ * use homeContextSegments so replies never extend these whole-turn messages. */
 export function homeTurnMessages(charId:string,records:HomeRecord[]):Omit<Message,'id'>[]{
  const groups=new Map<string,HomeRecord[]>();
  for(const record of assignHomeTurns(records)){

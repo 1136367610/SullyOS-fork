@@ -7,7 +7,14 @@ import {createBlankBody} from '../apps/room3d/chibi/blankBody';
 import {bindBlankBody} from '../apps/room3d/chibi/blankRig';
 import {dressApprovedWardrobe} from '../apps/room3d/chibi/approvedClothing';
 import {DB} from './db';
-afterEach(()=>vi.restoreAllMocks());
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
+it('creates and imports outfits on LAN HTTP without randomUUID',()=>{
+ const native=globalThis.crypto;
+ vi.stubGlobal('crypto',{getRandomValues:native.getRandomValues.bind(native)});
+ const outfit=makeOutfit('手机搭配',{layers:{},extras:[]});
+ const imported=importOutfit(exportOutfit(outfit));
+ expect(imported.id).not.toBe(outfit.id);expect(imported.clothes).toEqual(outfit.clothes);
+});
 it('round trips outfits including independent ears/tails, colors, fitting and layering without face/profile data',()=>{
  const hair={layers:{},extras:[],wardrobe:{top:'sailor-long',ears:'fox-ears',tail:'fox-tail',headwear:'bow-headband'},wardrobeColors:{'fox-tail':{fur:'#abc'}},wardrobeFits:{'fox-tail':{scale:125,offsetZ:-12}},wardrobeLayering:true};
  const original=makeOutfit('狐狸出门',hair),restored=importOutfit(exportOutfit(original));

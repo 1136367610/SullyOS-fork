@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import type {CharacterProfile} from '../../types';
+import type {CharacterProfile,ScheduleSlot} from '../../types';
 import type {HomeEditor} from './editor.js';
 import {getDailyScheduleForChar} from '../../utils/dailySchedule';
 import {homePresence} from '../../utils/homePresence';
@@ -9,20 +9,23 @@ import {chooseHomeAction} from '../../utils/homeAutonomy';
 
 export function useHomeSchedule(editor:HomeEditor|undefined,character:CharacterProfile|undefined,ready:boolean,suspended:boolean){
  const [away,setAway]=useState(false),[plan,setPlan]=useState<{key:string;roomId:string;activity:string}>();
+ const [currentSchedule,setCurrentSchedule]=useState<Pick<ScheduleSlot,'startTime'|'activity'>|null>(null);
  const latest=useRef(character);latest.current=character;
  const attempted=useRef(new Set<string>());
  useEffect(()=>()=>{editor?.finishAutonomousAction?.();},[editor,plan?.key]);
  useEffect(()=>{
   if(!editor||!character||suspended)return;
+  setCurrentSchedule(null);
   let cancelled=false,first=true;
   const refresh=async()=>{
    const char=latest.current!;
-   if(!isScheduleFeatureOn(char)){editor.setResidentRoom(undefined,first);first=false;editor.setScheduleLabel('');setAway(false);setPlan(undefined);return;}
+   if(!isScheduleFeatureOn(char)){editor.setResidentRoom(undefined,first);first=false;editor.setScheduleLabel('');setCurrentSchedule(null);setAway(false);setPlan(undefined);return;}
    try{
     const now=new Date(),schedule=await getDailyScheduleForChar(char,now);if(cancelled)return;
     const position=homePresence(schedule,char,now),slot=schedule?.slots[getCurrentScheduleSlotIndex(schedule.slots,char,now)];
     editor.setResidentRoom(position?.kind==='home'?position.roomId:position?.kind==='away'?null:undefined,first);first=false;
     editor.setScheduleLabel(slot?char.name+' · '+slot.startTime+' '+slot.activity:'');
+    setCurrentSchedule(slot?{startTime:slot.startTime,activity:slot.activity}:null);
     setAway(position?.kind==='away');
     setPlan(position?.kind==='home'&&slot?{key:`${schedule!.date}:${slot.startTime}:${position.roomId}:${slot.activity}`,roomId:position.roomId,activity:slot.activity}:undefined);
    }catch{/* A transient DB failure must not invent presence. */}
@@ -43,5 +46,5 @@ export function useHomeSchedule(editor:HomeEditor|undefined,character:CharacterP
   };
   run();const timer=setInterval(run,15000);return()=>clearInterval(timer);
  },[editor,ready,suspended,plan?.key]);
- return away;
+ return {away,currentSchedule};
 }
