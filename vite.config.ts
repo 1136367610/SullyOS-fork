@@ -165,6 +165,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // This SDK core is dependency-free. Keep its initialized constants
+            // outside vendor-react: memory-palace initializes a store at module
+            // scope and can run before that cyclic vendor chunk's var defaults.
+            if (/[\\/]@rei-standard[\\/]blob-store[\\/]dist[\\/]index\.mjs$/.test(id)) {
+              return 'vendor-blob-store';
+            }
             // Only load the image renderer when exporting a beauty preview.
             if (id.includes('html2canvas')) return 'beauty-preview-renderer';
             // Local camera emotion calibration is opt-in. Keep MediaPipe out of
