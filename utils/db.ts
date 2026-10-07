@@ -1,4 +1,5 @@
 import { readLocalCursor } from './localRead';
+import { reportDatabaseFailure } from './databaseHealth';
 import {migrateLegacyWhiteboxPresets} from './legacyWhiteboxPresets';
 import {restoreDecorationMedia} from './decorationMediaBackup';
 import {exportBeautyPreferences,importBeautyPreferences} from './beautyPreferencesBackup';
@@ -529,6 +530,8 @@ export const openDB = (): Promise<IDBDatabase> => {
   });
 
   dbPromise = promise;
+  // Notify the app guard even when a background caller catches the rejection.
+  void promise.catch(reportDatabaseFailure);
   return promise;
 };
 
