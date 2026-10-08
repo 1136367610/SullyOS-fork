@@ -23,10 +23,10 @@ if (import.meta.env.VITE_AMSG_NATIVE_PUSH === 'true' && Capacitor.isNativePlatfo
   }
 }
 
-// Register the keep-alive Service Worker early so it's ready before any AI calls
-KeepAlive.init().then(async () => {
-  // Do not resume background work with an unreadable local archive.
-  await checkDatabaseReadable(openDB);
+// Finish opening/upgrading the archive before our SW registration starts update
+// inspection, offline-shell preparation or cache cleanup. DatabaseGuard gates AI callers too.
+checkDatabaseReadable(openDB).then(async () => {
+  await KeepAlive.init();
   // Resume any active proactive schedule after SW is ready
   ProactiveChat.resume();
   // Resume 「彼方」 autonomous-login schedules

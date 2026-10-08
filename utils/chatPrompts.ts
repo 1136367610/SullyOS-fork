@@ -1,3 +1,4 @@
+import {secretNoteContext} from './secretNote';
 import { buildCharacterResponsePrinciples } from './characterResponsePrinciples';
 import { expandHomeContextHistory } from './homeContextSegments';
 import { sarPublicContext } from './vrWorld/kanataPublicContext';
@@ -1113,6 +1114,7 @@ ${voiceActingGuide()}`;
 
         return {
             apiMessages: historySlice.map((m, index) => {
+                if (m.type === 'secret_note') return {role: m.role, content: secretNoteContext(m.content)};
                 let content: any = m.content;
                 const timeStr = timeAwarenessOn ? `[${ChatPrompts.formatDate(m.timestamp, charTz)}]` : '';
                 const sourceTag = (() => {

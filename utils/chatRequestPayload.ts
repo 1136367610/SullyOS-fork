@@ -55,6 +55,8 @@ export interface UserListeningContext {
 
 export interface BuildChatPayloadInput {
     signal?: AbortSignal;
+    /** Local phase timings only; no request content or telemetry. */
+    onPreparationStage?: (event:ChatPreparationEvent)=>void;
     /** Replace ChatApp output/tool rules, retaining the same context pipeline and ordering. */
     appPrompt?: { rules: string; scene: string };
     /** Present only while ChatApp is embedded in the home phone; never persisted. */
@@ -121,6 +123,9 @@ export interface BuildChatPayloadInput {
      */
     timelyByWorker?: boolean;
 }
+
+export type ChatPreparationStage='vision'|'memory'|'prompt'|'collaboration'|'tasks';
+export type ChatPreparationEvent={stage:ChatPreparationStage;status:'start'}|{stage:ChatPreparationStage;status:'end';ms:number};
 
 export interface BuildChatPayloadResult {
     /** Shared task receipts actually included for a home reply; acknowledge only after success. */
@@ -232,6 +237,10 @@ export function deriveRecentTrackSwitchForChar(
  * 信息与主 API 完全一致，仅易变段的位置不同（主 API 在历史后，eval 拼在 system 文本里）。
  */
 export async function buildChatRequestPayload(input: BuildChatPayloadInput): Promise<BuildChatPayloadResult> {
+    const prepare=async<T>(stage:ChatPreparationStage,work:()=>Promise<T>)=>{
+        const started=performance.now();input.onPreparationStage?.({stage,status:'start'});
+        try{return await work();}finally{input.onPreparationStage?.({stage,status:'end',ms:Math.round(performance.now()-started)});}
+    };
     const char = { ...input.char, memoryPalaceInjection: '', roomPlatesInjection: '' };
     const {
         userProfile, groups, historyMsgs, contextLimit,
@@ -264,10 +273,10 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         const uniqueMessages = new Map<number, Message>();
         for (const message of rawRecentMsgsHint) uniqueMessages.set(message.id, message);
         for (const message of selectedHistory) uniqueMessages.set(message.id, message);
-        const prepared = await materializeVisionDescriptions(
+        const prepared = await prepare('vision',()=>materializeVisionDescriptions(
             [...uniqueMessages.values()],
             input.visionApiConfig,
-        );
+        ));
         const preparedById = new Map(prepared.map(message => [message.id, message]));
         historyMsgsForPrompt = selectedHistory.map(message => preparedById.get(message.id) || message);
         recentMsgsHint = rawRecentMsgsHint.map(message => preparedById.get(message.id) || message);
@@ -312,13 +321,13 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
 
     input.signal?.throwIfAborted();
     // ── 1. Memory Palace 向量召回 ─────────────────────────
-    const recallTrace = await injectMemoryPalace(
+    const recallTrace = await prepare('memory',()=>injectMemoryPalace(
         char,
         recentMsgsHint,
         input.recallQueryHint,
         userProfile?.name,
         { entryPoint: input.recallEntryPoint ?? 'chat_payload' },
-    );
+    ));
 
     input.signal?.throwIfAborted();
     // ── 2. 解析音乐共听（如果 caller 没显式给，就从 snapshot 推） ──
@@ -359,7 +368,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     // ── 8. 剥离历史里旧的双语标签（stripImages 时先压平 image_url → 纯文本占位） ──
     const cleanedApiMessages = cleanApiMessages(input.stripImages ? flattenImageContentParts(apiMessages) : apiMessages);
 
-    const parts = await ChatPrompts.buildSystemPromptParts(
+    const parts = await prepare('prompt',()=>ChatPrompts.buildSystemPromptParts(
         char, userProfile, groups, emojis, categories, recentMsgsHint,
         realtimeConfig, innerState,
         userListeningContext ?? null,
@@ -372,7 +381,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
             returningFromMode: returningFromMode || undefined,
             appRules: input.appPrompt?.rules,
         },
-    );
+    ));
     input.signal?.throwIfAborted();
     let systemPrompt = parts.stable;
     let volatileTail = parts.volatileState;
@@ -492,11 +501,11 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
             );
         }
         if (char.chatCollaborationEnabled) {
-            volatileTail += await loadCollaborationFileCabinetBlock(
+            volatileTail += await prepare('collaboration',()=>loadCollaborationFileCabinetBlock(
                 char.id,
                 chronologicalHistory,
                 userProfile?.name || '用户',
-            );
+            ));
         }
     }
 
@@ -546,6 +555,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     let amsg2ExpiredNoticeIds: string[] | undefined;
     let volatileTailIndex = 1 + messagesWithWorldbookDepth.length;
     if (input.recallEntryPoint === 'home_3d' && char.activeMsg2Config?.enabled) {
+        await prepare('tasks',async()=>{
         const { isAmsg2GlobalReady } = await import('./amsg2ToolBridge');
         if (await isAmsg2GlobalReady()) {
             const { collectAmsg2TaskContext, buildAmsg2TaskContextText, insertAmsg2TaskContextBlock } = await import('./amsg2TaskContext');
@@ -564,6 +574,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
             fullMessages = insertAmsg2TaskContextBlock(fullMessages, { role: 'system', content: text }, volatileTailIndex);
             volatileTailIndex++;
         }
+        });
     }
     input.signal?.throwIfAborted();
 

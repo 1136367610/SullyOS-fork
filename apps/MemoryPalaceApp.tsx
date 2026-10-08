@@ -4178,7 +4178,7 @@ create table if not exists memory_vectors (
                                         const isPending = m.id === rangePendingId;
                                         const inRange = lo != null && hi != null && m.id >= lo && m.id <= hi;
                                         const isEndpoint = !!endpointLabel;
-                                        const who = m.role === 'user' ? '我' : m.role === 'system' ? '系统' : char.name;
+                                        const who = m.type === 'secret_note' ? '✉ 秘密小纸条' : m.role === 'user' ? '我' : m.role === 'system' ? '系统' : char.name;
                                         const isDate = (m.metadata as any)?.source === 'date';
                                         const preview = (m.content || '').replace(/\s+/g, ' ').trim().slice(0, 48);
                                         return (

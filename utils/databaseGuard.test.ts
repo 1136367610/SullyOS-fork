@@ -45,6 +45,7 @@ it('shows actionable index-conflict diagnostics instead of an empty desktop and 
   expect(mounted).not.toHaveBeenCalled();
   expect(host.textContent).toContain('读取失败不代表数据已被清空');
   expect(host.textContent).toContain('内部索引冲突');
+  expect(host.textContent).not.toContain('如果其他页面');
   expect(host.querySelector('textarea')!.value).toContain('UnknownError');
   expect(host.querySelector('textarea')!.value).not.toContain('secret-preserve');
   expect(localStorage.getItem('os_api_config')).toBe('secret-preserve');
