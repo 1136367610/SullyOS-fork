@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { openDB } from '../utils/db';
 import { checkDatabaseReadable, databaseFailure, subscribeDatabaseFailure, type DatabaseFailure } from '../utils/databaseHealth';
 import { BUILD_LABEL } from '../utils/buildInfo';
+import { databaseOpenDiagnostic } from '../utils/databaseOpenDiagnostics';
 import './DatabaseGuard.css';
 
 export default function DatabaseGuard({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default function DatabaseGuard({ children }: { children: React.ReactNode 
     'SullyOS 本地数据库诊断', `构建：${BUILD_LABEL}`,
     `页面：${location.origin}${location.pathname}`, `浏览器：${navigator.userAgent}`,
     `错误：${failure.name}: ${failure.message}`,
+    databaseOpenDiagnostic(),
   ].join('\n') : '';
   return <main className="database-guard" aria-busy={!failure}>
     <section aria-labelledby="database-guard-title">
@@ -39,8 +41,7 @@ export default function DatabaseGuard({ children }: { children: React.ReactNode 
         {duplicateIndex && <p>浏览器报告数据库内部索引冲突。目前无法确认存档是否完整；清理网站数据无法保留原存档。</p>}
         <ul>
           <li>不要清除网站数据、卸载浏览器或用空备份覆盖已有备份。</li>
-          <li>如果其他页面仍能看到原记录，先在那个页面导出备份，不要刷新它。</li>
-          <li>否则可关闭同站点的其他标签页与桌面入口，再重试；持续失败请保留现场并反馈诊断。</li>
+          <li>可关闭同站点的其他标签页与桌面入口，再重试；持续失败请保留现场并反馈诊断。</li>
         </ul>
         <div className="database-guard-actions">
           <button type="button" onClick={() => location.reload()}>重新读取</button>

@@ -1363,6 +1363,9 @@ const MessageItem = React.memo(({
         );
     };
 
+    // Secrets are revealed on entering the home, or inspected in history management.
+    if (m.type === 'secret_note') return null;
+
     // --- SYSTEM MESSAGE RENDERING ---
     if (isSystem) {
         const isCallSummary = m.metadata?.source === 'call-end-popup';
