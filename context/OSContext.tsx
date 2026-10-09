@@ -1,3 +1,4 @@
+import { handleLocalBack } from '../utils/localBackHandlers';
 import {isHomeAssetDisposal} from '../utils/homeAssetCancellation';
 import { processHomeMemoryAfterSave } from '../utils/homeMemoryPostHook';
 import { retireCloudCharacter } from '../utils/amsgCloudRetirement';
@@ -5498,6 +5499,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   }, []);
 
   const handleBack = useCallback(() => {
+      if (handleLocalBack()) return;
       if (backHandlerRef.current) {
           const handled = backHandlerRef.current();
           if (handled) return;

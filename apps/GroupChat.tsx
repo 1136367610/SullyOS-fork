@@ -487,6 +487,13 @@ const GroupChat: React.FC = () => {
     const { closeApp, groups, createGroup, updateGroup, deleteGroup, characters, apiConfig, addToast, userProfile, virtualTime, characterGroups, theme: osTheme, customThemes, realtimeConfig } = useOS();
     const [view, setView] = useState<'list' | 'chat'>('list');
     const [activeGroup, setActiveGroup] = useState<GroupProfile | null>(null);
+    useAppShortcut(ShortcutAppID.GroupChat, intent => {
+        const target = groups.find(group => group.id === intent.resourceId);
+        setActiveGroup(target || null); setView(target ? 'chat' : 'list');
+        setModalType('none'); setShowPanel('none'); setReplyTarget(null);
+        if (activeGroup?.id !== target?.id) setMessages([]);
+        if (intent.resourceId && !target) addToast('这个群聊已不存在，请重新设置槽位', 'error');
+    });
     const [messages, setMessages] = useState<Message[]>([]);
     const [totalMsgCount, setTotalMsgCount] = useState(0);
     const MESSAGE_PAGE_SIZE = 50;
@@ -2529,3 +2536,5 @@ ${memberTimeline || '(暂无互动记录)'}
 };
 
 export default GroupChat;
+import { useAppShortcut } from '../utils/appShortcutLaunch';
+import { AppID as ShortcutAppID } from '../types';
