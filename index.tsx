@@ -4,6 +4,7 @@ import App from './App';
 import DatabaseGuard from './components/DatabaseGuard';
 import { openDB } from './utils/db';
 import { checkDatabaseReadable } from './utils/databaseHealth';
+import { startDatabaseOpenDiagnostics, releaseDatabaseDiagnosticPersistence, recordDatabaseOpen } from './utils/databaseOpenDiagnostics';
 import { installTranslateCrashGuard } from './utils/translateCrashGuard';
 import { ActiveMsgRuntime } from './utils/activeMsgRuntime';
 import { KeepAlive } from './utils/keepAlive';
@@ -23,10 +24,14 @@ if (import.meta.env.VITE_AMSG_NATIVE_PUSH === 'true' && Capacitor.isNativePlatfo
   }
 }
 
-// Finish opening/upgrading the archive before our SW registration starts update
-// inspection, offline-shell preparation or cache cleanup. DatabaseGuard gates AI callers too.
-checkDatabaseReadable(openDB).then(async () => {
-  await KeepAlive.init();
+// Prepare storage and the SW in parallel. Only background writers wait for both;
+// DatabaseGuard shares this read check and never waits for the SW/offline downloads.
+startDatabaseOpenDiagnostics();
+const databaseReady = checkDatabaseReadable(openDB);
+void databaseReady.then(releaseDatabaseDiagnosticPersistence, releaseDatabaseDiagnosticPersistence);
+const keepAliveReady = KeepAlive.init();
+Promise.all([databaseReady, keepAliveReady]).then(() => {
+  recordDatabaseOpen('background-ready');
   // Resume any active proactive schedule after SW is ready
   ProactiveChat.resume();
   // Resume 「彼方」 autonomous-login schedules
@@ -54,6 +59,6 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <DatabaseGuard><App /></DatabaseGuard>
+    <DatabaseGuard readiness={databaseReady}><App /></DatabaseGuard>
   </React.StrictMode>
 );

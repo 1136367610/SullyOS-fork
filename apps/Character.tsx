@@ -157,8 +157,17 @@ const Character: React.FC = () => {
           .catch(() => {});
   }, []);
   useEffect(() => {
-      characterLaunch.consume();
-  }, []);
+      const apply = () => {
+          const intent = characterLaunch.consume();
+          if (!intent) return;
+          if (!characters.some(character => character.id === intent.charId)) { setView('list'); return; }
+          setEditingId(intent.charId); setView('detail');
+          setDetailTab(intent.detailTab || (intent.openChibiStudio ? 'chibi' : 'identity'));
+          setShowChibiStudio(!!intent.openChibiStudio);
+      };
+      apply();
+      return characterLaunch.subscribe(apply);
+  }, [characters]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardImportRef = useRef<HTMLInputElement>(null);
   

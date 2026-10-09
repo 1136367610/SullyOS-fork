@@ -515,6 +515,12 @@ const CallApp: React.FC = () => {
   const { closeApp, openApp, characters, activeCharacterId, addToast, apiConfig, userProfile, customThemes, suspendCall, suspendedCall, clearSuspendedCall, updateCharacter, characterGroups, groups, realtimeConfig, memoryPalaceConfig } = useOS();
 
   const [viewMode, setViewMode] = useState<ViewMode>('role-select');
+  useAppShortcut(ShortcutAppID.Call, intent => {
+    if (callState !== 'idle') { addToast('请先结束当前通话，再切换快捷入口', 'info'); return; }
+    const index = characters.findIndex(c => c.id === intent.characterId);
+    if (index >= 0) { setSelectedCharId(characters[index].id); setRoleGroupId(GROUP_FILTER_ALL); setRolePage(Math.floor(index / ROLES_PER_PAGE)); }
+    setViewMode(intent.entryId === 'history' ? 'history' : 'role-select');
+  });
   const [selectedCharId, setSelectedCharId] = useState<string>(activeCharacterId || characters[0]?.id || '');
   const ROLES_PER_PAGE = 6;
   const [roleGroupId, setRoleGroupId] = useState<string>(GROUP_FILTER_ALL); // 选人页的分组筛选
@@ -4071,3 +4077,5 @@ ${sentencePlan}`;
   );
 };
 export default CallApp;
+import { useAppShortcut } from '../utils/appShortcutLaunch';
+import { AppID as ShortcutAppID } from '../types';
